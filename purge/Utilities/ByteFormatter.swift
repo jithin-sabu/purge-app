@@ -1,36 +1,23 @@
 import Foundation
 
-nonisolated func formatBytes(_ bytes: Int64) -> String {
-    guard bytes > 0 else { return String(localized: "0 bytes") }
-
+/// Made once: `formatBytes` runs per row per render. Foundation's formatters are
+/// safe to share across threads once configured.
+nonisolated(unsafe) private let byteCountFormatter: ByteCountFormatter = {
     let formatter = ByteCountFormatter()
     formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB, .useTB]
     formatter.countStyle = .file
     formatter.includesUnit = true
+    return formatter
+}()
 
-    return formatter.string(fromByteCount: bytes)
+nonisolated func formatBytes(_ bytes: Int64) -> String {
+    guard bytes > 0 else { return String(localized: "0 bytes") }
+    return byteCountFormatter.string(fromByteCount: bytes)
 }
 
 /// Formats volume figures for the storage sidebar — one decimal at most (e.g. "313.4 GB").
 func formatStorageBytes(_ bytes: Int64) -> String {
-    guard bytes > 0 else { return String(localized: "0 bytes") }
-
-    let units: [(threshold: Int64, suffix: String)] = [
-        (1_000_000_000_000, "TB"),
-        (1_000_000_000, "GB"),
-        (1_000_000, "MB"),
-        (1_000, "KB")
-    ]
-
-    for unit in units where bytes >= unit.threshold {
-        let tenths = (bytes * 10 + unit.threshold / 2) / unit.threshold
-        let whole = tenths / 10
-        let fraction = tenths % 10
-        guard fraction > 0 else { return "\(whole) \(unit.suffix)" }
-        return "\(whole).\(fraction) \(unit.suffix)"
-    }
-
-    return String(localized: "\(bytes) bytes")
+    formatOneDecimal(bytes, roundingDown: false)
 }
 
 /// Formats a ceiling, rounding **down** so the figure can never overstate.
@@ -39,22 +26,34 @@ func formatStorageBytes(_ bytes: Int64) -> String {
 /// promise more than exists. An "up to" figure has to under-promise by construction: the
 /// measured outcome must always be able to meet or beat it.
 nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
+    formatOneDecimal(bytes, roundingDown: true)
+}
+
+/// Decimal units with one decimal at most, rounded to nearest or truncated.
+/// `decimalSeparator` is injected so the tests can check both ways of writing a
+/// fraction without touching the process-wide locale.
+nonisolated func formatOneDecimal(
+    _ bytes: Int64,
+    roundingDown: Bool,
+    decimalSeparator: String = Locale.current.decimalSeparator ?? "."
+) -> String {
     guard bytes > 0 else { return String(localized: "0 bytes") }
 
+    // Units come from the string tables, so a Mac set to Russian reads "217,5 ГБ"
+    // and not "217.5 GB", the way `formatBytes` already writes its own figures.
     let units: [(threshold: Int64, suffix: String)] = [
-        (1_000_000_000_000, "TB"),
-        (1_000_000_000, "GB"),
-        (1_000_000, "MB"),
-        (1_000, "KB")
+        (1_000_000_000_000, String(localized: "TB")),
+        (1_000_000_000, String(localized: "GB")),
+        (1_000_000, String(localized: "MB")),
+        (1_000, String(localized: "KB"))
     ]
 
     for unit in units where bytes >= unit.threshold {
-        // Truncate at one decimal place rather than rounding it.
-        let tenths = (bytes * 10) / unit.threshold
+        let tenths = (bytes * 10 + (roundingDown ? 0 : unit.threshold / 2)) / unit.threshold
         let whole = tenths / 10
         let fraction = tenths % 10
         guard fraction > 0 else { return "\(whole) \(unit.suffix)" }
-        return "\(whole).\(fraction) \(unit.suffix)"
+        return "\(whole)\(decimalSeparator)\(fraction) \(unit.suffix)"
     }
 
     return String(localized: "\(bytes) bytes")

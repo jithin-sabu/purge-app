@@ -73,12 +73,19 @@ struct LockedFeatureView: View {
 /// Sits beside Scan on App Caches and Dev Tools, where the list is real but partial.
 struct LookDeeperHeaderButton: View {
     @EnvironmentObject private var store: PurgeStore
+    /// False shows the lock alone, when the header is short of room.
+    var showsTitle = true
 
     var body: some View {
         Button {
             store.isLookDeeperPresented = true
         } label: {
-            Label("Look deeper", systemImage: "lock.open")
+            if showsTitle {
+                Label("Look deeper", systemImage: "lock.open")
+            } else {
+                Label("Look deeper", systemImage: "lock.open")
+                    .labelStyle(.iconOnly)
+            }
         }
         .buttonStyle(.purge(.secondary))
         .help("Some places are still locked. Let Purge look deeper.")
@@ -102,7 +109,7 @@ struct LimitedScanNotice: View {
                     .frame(width: 20)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                     Text("Limited scan")
                         .font(AppStyle.Typography.callout.weight(.semibold))
                         .foregroundStyle(AppColors.textPrimary)
@@ -119,7 +126,7 @@ struct LimitedScanNotice: View {
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+            .padding(.vertical, AppStyle.Spacing.small)
             .background(
                 RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .fill(AppColors.fillSecondary)

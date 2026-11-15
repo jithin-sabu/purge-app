@@ -14,11 +14,10 @@ struct ContentView: View {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @AppStorage(PurgeStore.pendingOnboardingCelebrationKey) private var pendingOnboardingCelebration = false
     // Same defaults as the tabs, so the subtitle counts what the list shows.
-    @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage(LargeFileFilterDefaults.categoryKey) private var largeFilesCategoryFilterRaw = LargeFileCategoryFilter.all
+    @AppStorage(SafetyFilter.appCachesKey) private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SafetyFilter.devToolsKey) private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
     /// page header subtitle can be filtered by it too, and deliberately `@State`
@@ -87,21 +86,25 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(item: $store.pendingUnknownDeletion) { payload in
-            UnknownDeleteConfirmSheet(
-                candidates: payload.candidates,
-                onCancel: { store.dismissUnknownDeletionRequest() },
-                onConfirm: {
-                    Task { await store.userConfirmedUnknownDeletionFlow() }
-                }
-            )
-        }
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
-                files: store.selectedLargeFiles,
+                files: store.selectedTrashableLargeFiles,
                 fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySelection,
                 onCancel: { store.dismissLargeFileDeletionSheet() },
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
+            )
+        }
+        .sheet(item: $store.pendingRemoveDownload) { request in
+            RemoveDownloadConfirmSheet(
+                request: request,
+                onCancel: { store.dismissRemoveDownloads() },
+                onConfirm: { Task { await store.confirmRemoveDownloads() } }
+            )
+        }
+        .sheet(item: $store.removeDownloadResult) { result in
+            RemoveDownloadResultSheet(
+                result: result,
+                onDone: { store.dismissRemoveDownloadResult() }
             )
         }
         .sheet(item: $store.pendingDuplicateCleanup) { request in
@@ -115,7 +118,8 @@ struct ContentView: View {
             UninstallReviewSheet(
                 plan: plan,
                 onCancel: { store.dismissUninstallPlan() },
-                onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } }
+                onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } },
+                onOpenUninstaller: { store.openSuiteUninstaller(at: $0) }
             )
         }
         .sheet(item: $store.orphanCleanupPlan) { plan in
@@ -125,12 +129,22 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmOrphanCleanup(edited) } }
             )
         }
+        .sheet(item: $store.commandLineToolRemovalPlan) { plan in
+            CommandLineToolReviewSheet(
+                plan: plan,
+                onClose: { store.closeCommandLineToolRemoval() },
+                onConfirm: { Task { await store.confirmCommandLineToolRemoval() } }
+            )
+        }
         .sheet(item: $store.removedAppLeftoverPlan) { plan in
             RemovedAppLeftoverSheet(
                 plan: plan,
                 onCancel: { store.cancelRemovedAppLeftovers() },
                 onConfirm: { edited in Task { await store.confirmRemovedAppLeftovers(edited) } }
             )
+        }
+        .sheet(item: $store.selfUninstall) { model in
+            SelfUninstallSheet(store: store, model: model, hadFullDiskAccess: store.hasFullDiskAccess)
         }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
@@ -276,9 +290,7 @@ struct ContentView: View {
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
-            withAnimation(.easeInOut(duration: 0.6)) {
-                diskStore.refresh()
-            }
+            diskStore.refresh(animation: .easeInOut(duration: 0.6))
         }
     }
 
@@ -297,9 +309,7 @@ struct ContentView: View {
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
-            withAnimation(.easeInOut(duration: 0.6)) {
-                diskStore.refresh()
-            }
+            diskStore.refresh(animation: .easeInOut(duration: 0.6))
         }
     }
 
@@ -316,7 +326,7 @@ struct ContentView: View {
                     .padding(.top, SidebarLayout.topContentInset)
                     .padding(.bottom, AppStyle.Spacing.large)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                     navRow(.overview)
                     sidebarSectionLabel("Clean")
                     ForEach(PurgeStore.Tab.cleanTabs) { navRow($0) }
@@ -329,7 +339,7 @@ struct ContentView: View {
 
             Spacer(minLength: AppStyle.Spacing.medium)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 ForEach(PurgeStore.Tab.utilityTabs) { navRow($0) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -365,7 +375,7 @@ struct ContentView: View {
             .foregroundStyle(AppColors.textTertiary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.top, AppStyle.Spacing.small)
-            .padding(.bottom, 2)
+            .padding(.bottom, AppStyle.Spacing.xxxSmall)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -477,52 +487,30 @@ struct ContentView: View {
         .background(AppColors.surfaceBase)
     }
 
-    @ViewBuilder
+    /// On macOS 26 the scan tabs scroll under the page header's soft edge, so they
+    /// hand their scrolling to it.
+    private var tabsUseExternalScrollContainer: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
     private var appCachesTabBody: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false,
-                    usesExternalScrollContainer: true
-                )
-            } else {
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false
-                )
-            }
-        }
+        AppCachesView(
+            items: $store.cacheItems,
+            isLoading: store.isScanningGeneral || store.isScanningAll,
+            scanPhase: store.scanPhase,
+            usesExternalScrollContainer: tabsUseExternalScrollContainer
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
 
-    @ViewBuilder
     private var devToolsTabBody: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false,
-                    usesExternalScrollContainer: true
-                )
-            } else {
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false
-                )
-            }
-        }
+        DevToolsView(
+            isLoading: store.isScanningDeveloper || store.isScanningAll,
+            scanPhase: store.scanPhase,
+            usesExternalScrollContainer: tabsUseExternalScrollContainer
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
@@ -532,20 +520,11 @@ struct ContentView: View {
         Group {
             if !store.hasFullDiskAccess {
                 LockedFeatureView(feature: .largeFiles)
-            } else if #available(macOS 26.0, *) {
-                LargeFilesView(
-                    isLoading: store.isScanningLargeFiles,
-                    onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    showsPageHeader: false,
-                    usesExternalScrollContainer: true
-                )
             } else {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    showsPageHeader: false
+                    searchQuery: $largeFilesSearchQuery
                 )
             }
         }
@@ -635,35 +614,33 @@ struct ContentView: View {
     }
 
     private func sectionPageHeader(now: Date) -> some View {
-        AppSectionPageHeader(
+        // With the folders link, the line reads "31 apps from 3 folders · 53.4 GB":
+        // the link follows the count and the part that changes comes last.
+        let folders = appFoldersHeaderLink
+        let parts = folders == nil ? nil : installedAppsSubtitleParts
+        return AppSectionPageHeader(
             title: store.selectedTab.displayName,
-            subtitle: selectedPageSubtitle(now: now)
+            subtitle: parts?.lead ?? selectedPageSubtitle(now: now),
+            subtitleAccessory: parts == nil ? nil : folders,
+            subtitleTail: parts.map { String(localized: "· \($0.tail)") }
         ) {
-            if store.selectedTab == .overview {
-                HStack(spacing: AppStyle.Spacing.xSmall) {
-                    if !store.hasFullDiskAccess {
-                        LookDeeperHeaderButton()
-                    }
-                    OverviewScanButton()
-                    OverviewCleanSafeButton()
-                }
-            } else if store.selectedTab == .appCaches || store.selectedTab == .devTools {
-                HStack(spacing: AppStyle.Spacing.xSmall) {
-                    if !store.hasFullDiskAccess {
-                        LookDeeperHeaderButton()
-                    }
-                    AppScanCleanActions(
-                        onScan: { store.requestScan(.cachesAndDevTools) },
-                        scanPhase: store.scanPhase,
-                        isQueued: store.isScanQueued(.cachesAndDevTools)
-                    )
-                }
-            } else if store.selectedTab == .largeFiles, store.hasFullDiskAccess {
-                LargeFilesHeaderActions()
-            } else if store.selectedTab == .uninstaller, store.hasFullDiskAccess {
-                UninstallHeaderActions()
-            }
+            PageHeaderActionBar(
+                tab: store.selectedTab,
+                scanSelection: store.scanSelection,
+                largeFileSelection: store.largeFileSelection
+            )
         }
+    }
+
+    /// Only on the apps list, and only when an app comes from a drive or an
+    /// added folder (#99). Everyone else sees the subtitle as it always was.
+    private var appFoldersHeaderLink: AnyView? {
+        guard store.selectedTab == .uninstaller,
+              store.uninstallSection == .installedApps,
+              !store.installedApps.isEmpty else { return nil }
+        let summary = store.appFolderSummary
+        guard summary.isWorthShowing else { return nil }
+        return AnyView(AppFoldersHeaderLink(summary: summary))
     }
 
     private func selectedPageSubtitle(now: Date) -> String? {
@@ -671,13 +648,50 @@ struct ContentView: View {
         case .overview:
             return overviewPageSubtitle(now: now)
         case .appCaches:
+            if let saved = lastScanSubtitle(
+                showing: [.appCaches],
+                step: .cachesAndDevTools,
+                isScanning: store.isScanningGeneral || store.isScanningAll,
+                now: now
+            ) {
+                return saved
+            }
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
+            if let saved = lastScanSubtitle(
+                showing: [.devTools, .simulators, .runtimes, .xcodeComponents, .projects],
+                step: .cachesAndDevTools,
+                isScanning: store.isScanningDeveloper || store.isScanningProjects || store.isScanningAll,
+                now: now
+            ) {
+                return saved
+            }
+            if store.isAwaitingFirstDevToolsScan {
+                let isScanning = store.isScanningDeveloper || store.isScanningAll
+                return ScanStatusPlaceholder.subtitle(
+                    for: store.scanWaitStatus(for: .cachesAndDevTools, isScanning: isScanning),
+                    copy: .devTools
+                )
+            }
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .largeFiles:
-            return store.hasFullDiskAccess ? largeFilesPageSubtitle : nil
+            guard store.hasFullDiskAccess else { return nil }
+            if let lastScan = store.largeFilesLastScan {
+                return lastScanSubtitle(savedAt: lastScan.scannedAt, step: .largeFiles, isScanning: store.isScanningLargeFiles, now: now)
+            }
+            return largeFilesPageSubtitle
         case .uninstaller:
-            return store.hasFullDiskAccess ? uninstallerPageSubtitle : nil
+            guard store.hasFullDiskAccess else { return nil }
+            let saved: String?
+            switch store.uninstallSection {
+            case .installedApps:
+                saved = lastScanSubtitle(showing: [.apps], step: .apps, isScanning: store.isScanningInstalledApps, now: now)
+            case .leftovers:
+                saved = lastScanSubtitle(showing: [.leftovers], step: .leftovers, isScanning: store.isScanningOrphans, now: now)
+            case .commandLineTools:
+                saved = nil
+            }
+            return saved ?? uninstallerPageSubtitle
         case .settings:
             return nil
         case .about:
@@ -685,23 +699,44 @@ struct ContentView: View {
         }
     }
 
+    /// While a tab still shows rows from the last scan (#283), its subtitle dates them
+    /// in place of a count of what this scan has found so far.
+    private func lastScanSubtitle(
+        showing sections: [LastScanSection],
+        step: ScanStep,
+        isScanning: Bool,
+        now: Date
+    ) -> String? {
+        guard let savedAt = store.lastScanRows.oldestSavedAt(showing: sections) else { return nil }
+        return lastScanSubtitle(savedAt: savedAt, step: step, isScanning: isScanning, now: now)
+    }
+
+    private func lastScanSubtitle(savedAt: Date, step: ScanStep, isScanning: Bool, now: Date) -> String {
+        let age = compactAgoText(from: savedAt, to: now)
+        switch store.scanWaitStatus(for: step, isScanning: isScanning) {
+        case .scanning, .waiting:
+            return String(localized: "From the last scan, \(age) · Checking again…")
+        case .notScanned:
+            return String(localized: "From the last scan, \(age)")
+        }
+    }
+
     /// What the scan queue is doing, or when the Overview's figures were last scanned.
+    /// Kept to the active step so it stays one line: each row already says whether
+    /// it is up next, and a saved figure's tooltip says when it was measured.
     private func overviewPageSubtitle(now: Date) -> String? {
         if let active = store.scanQueue.active {
-            let waiting = store.scanQueue.pending.count
-            let name = OverviewScanButton.name(for: active)
-            return waiting > 0 ? String(localized: "Scanning \(name), then \(waiting) more…") : String(localized: "Scanning \(name)…")
+            return String(localized: "Scanning \(active.displayName)…")
         }
         if store.isScanningAll {
-            return String(localized: "Scanning \(OverviewScanButton.name(for: .cachesAndDevTools))…")
+            return String(localized: "Scanning \(ScanStep.cachesAndDevTools.displayName)…")
         }
         guard let latest = store.scanRecords.values.map(\.completedAt).max() else { return nil }
         return String(localized: "Scanned \(compactAgoText(from: latest, to: now))")
     }
 
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
-        let itemLabel = count == 1 ? String(localized: "item") : String(localized: "items")
-        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable")
+        String(localized: "\(count) items · \(formatBytes(bytes)) recoverable")
     }
 
     /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
@@ -713,13 +748,19 @@ struct ContentView: View {
         let files = store.largeFiles
         return LargeFileCategoryFilter.visibleIndices(
             in: files,
-            rawValue: largeFilesCategoryFilterRaw,
+            rawValue: store.largeFileCategoryFilter,
             query: largeFilesSearchQuery,
             duplicates: largeFilesDuplicateIndex
         ).map { files[$0] }
     }
 
     private var largeFilesPageSubtitle: String {
+        if store.isAwaitingFirstLargeFileScan {
+            return ScanStatusPlaceholder.subtitle(
+                for: store.scanWaitStatus(for: .largeFiles, isScanning: store.isScanningLargeFiles),
+                copy: .largeFiles
+            )
+        }
         // An empty result after a finished scan is a statement, not a count of
         // zero: the empty state under it says what the scan found instead (#230).
         if store.largeFiles.isEmpty, !store.isScanningLargeFiles, let summary = store.largeFileScanSummary {
@@ -729,8 +770,7 @@ struct ContentView: View {
         }
         let files = largeFilesVisibleForSubtitle
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let fileLabel = files.count == 1 ? String(localized: "file") : String(localized: "files")
-        return String(localized: "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review")
+        return String(localized: "\(files.count) files · \(formatBytes(bytes)) to review")
     }
 
     /// Follows the active segment, with one shared shape so the two read the same:
@@ -742,18 +782,82 @@ struct ContentView: View {
             guard !items.isEmpty else { return nil }
             return uninstallSubtitle(
                 count: items.count,
-                unit: (String(localized: "item"), String(localized: "items")),
+                counted: { String(localized: "\($0) items") },
                 totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes,
                 measuring: false
             )
         }
+        if store.uninstallSection == .commandLineTools {
+            let tools = store.commandLineTools
+            guard !tools.isEmpty else { return nil }
+            return uninstallSubtitle(
+                count: tools.standalone.count + tools.managed.count,
+                counted: { String(localized: "\($0) tools") },
+                totalBytes: tools.totalBytes,
+                selectedCount: store.selectedCommandLineToolCount,
+                selectedBytes: store.selectedCommandLineToolBytes,
+                measuring: false
+            )
+        }
 
+        if store.installedApps.isEmpty, !store.hasCompletedInstalledAppsScan {
+            return ScanStatusPlaceholder.subtitle(
+                for: store.scanWaitStatus(for: .apps, isScanning: store.isScanningInstalledApps),
+                copy: .apps
+            )
+        }
+        guard let parts = installedAppsSubtitleParts else { return nil }
+        return String(localized: "\(parts.lead) · \(parts.tail)")
+    }
+
+    private func uninstallSubtitle(
+        count: Int,
+        counted: (Int) -> String,
+        totalBytes: Int64,
+        selectedCount: Int,
+        selectedBytes: Int64,
+        measuring: Bool
+    ) -> String {
+        let parts = uninstallSubtitleParts(
+            count: count,
+            counted: counted,
+            totalBytes: totalBytes,
+            selectedCount: selectedCount,
+            selectedBytes: selectedBytes,
+            measuring: measuring
+        )
+        return String(localized: "\(parts.lead) · \(parts.tail)")
+    }
+
+    /// The count, and what follows it, kept apart so the App Uninstaller can
+    /// put "from 3 folders" between them (#99).
+    private func uninstallSubtitleParts(
+        count: Int,
+        counted: (Int) -> String,
+        totalBytes: Int64,
+        selectedCount: Int,
+        selectedBytes: Int64,
+        measuring: Bool
+    ) -> (lead: String, tail: String) {
+        let lead = counted(count)
+        if selectedCount > 0 {
+            return (lead, String(localized: "\(selectedCount) selected · \(formatBytes(selectedBytes))"))
+        }
+        if measuring {
+            return (lead, String(localized: "Measuring space\u{2026}"))
+        }
+        return (lead, formatBytes(totalBytes))
+    }
+
+    /// The installed apps' subtitle in two parts, for when the folders link
+    /// sits between them.
+    private var installedAppsSubtitleParts: (lead: String, tail: String)? {
         guard !store.installedApps.isEmpty else { return nil }
-        return uninstallSubtitle(
+        return uninstallSubtitleParts(
             count: store.installedApps.count,
-            unit: (String(localized: "app"), String(localized: "apps")),
+            counted: { String(localized: "\($0) apps") },
             totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
             selectedCount: store.selectedAppIDs.count,
             selectedBytes: store.selectedAppsRemovableBytes,
@@ -763,32 +867,13 @@ struct ContentView: View {
         )
     }
 
-    private func uninstallSubtitle(
-        count: Int,
-        unit: (singular: String, plural: String),
-        totalBytes: Int64,
-        selectedCount: Int,
-        selectedBytes: Int64,
-        measuring: Bool
-    ) -> String {
-        let base = String(localized: "\(count) \(count == 1 ? unit.singular : unit.plural)")
-        if selectedCount > 0 {
-            return String(localized: "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))")
-        }
-        if measuring {
-            return String(localized: "\(base) · measuring space…")
-        }
-        return String(localized: "\(base) · \(formatBytes(totalBytes))")
-    }
-
     private var appCachesSafetyFilter: SafetyFilter {
         store.safetyFilter(for: .appCaches, saved: SafetyFilter(rawValue: appCachesFilterRaw) ?? .all)
     }
 
     private var appCachesVisibleItems: [CacheItem] {
-        store.cacheItems.filter {
-            appCachesSafetyFilter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
-        }
+        let filter = appCachesSafetyFilter
+        return store.cacheItems.filter { store.showsRow($0, under: filter) }
     }
 
     // With no filter the subtitle quotes the shared totals the sidebar and Overview use.
@@ -818,10 +903,11 @@ struct ContentView: View {
         let tools = store.devTools.filter(devToolVisible).count
         let sims = store.simulatorDevices.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
         let runtimes = store.simulatorRuntimes.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
+        let components = store.xcodeComponents.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
         let artifacts = store.projectGroups.reduce(0) { sum, group in
             sum + group.artifacts.filter(projectArtifactVisible).count
         }
-        return tools + sims + runtimes + artifacts
+        return tools + sims + runtimes + components + artifacts
     }
 
     private var devToolsVisibleByteSize: Int64 {
@@ -834,23 +920,23 @@ struct ContentView: View {
         let runtimes = store.simulatorRuntimes
             .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
             .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let components = store.xcodeComponents
+            .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
         let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
             sum + group.artifacts
                 .filter(projectArtifactVisible)
                 .reduce(Int64(0)) { $0 + $1.sizeBytes }
         }
-        return tools + sims + runtimes + artifacts
+        return tools + sims + runtimes + components + artifacts
     }
 
     private func devToolVisible(_ tool: DevTool) -> Bool {
-        tool.isDetected &&
-            devToolsSafetyFilter.matches(tool.safetyInfo) &&
-            !store.isVisuallyRemovedBySafeCleanup(tool)
+        store.showsRow(tool, under: devToolsSafetyFilter)
     }
 
     private func projectArtifactVisible(_ artifact: ProjectCacheArtifact) -> Bool {
-        devToolsSafetyFilter.matches(artifact.safetyInfo) &&
-            !store.isVisuallyRemovedBySafeCleanup(artifact)
+        store.showsRow(artifact, under: devToolsSafetyFilter)
     }
 
 }
@@ -876,14 +962,11 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             // so the app-level notifications are the only signal that actually fires.
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
                 diskStore.markBackgrounded()
-                trashStore.markBackgrounded()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 Task {
-                    // Size the trash first: the free-space note is only interpretable
-                    // alongside what the trash gave up.
                     await trashStore.refresh(trigger: "foreground-return")
-                    diskStore.refreshAfterForegroundReturn()
+                    await diskStore.refreshAfterForegroundReturn()
                 }
             }
             // The trash total moving is the signal that Purge (or Finder) just changed
@@ -951,7 +1034,7 @@ struct SidebarSummaryView: View {
         }
         .font(Self.font)
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+        .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
@@ -965,7 +1048,7 @@ struct SidebarSummaryView: View {
         switch trashStore.access {
         case .measuring:
             // The spinner holds the number's place, so the sentence does not jump.
-            HStack(spacing: 4) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
                 trashLoadingIndicator
                 Text("in Trash").foregroundStyle(AppColors.textSecondary)
             }
@@ -977,7 +1060,7 @@ struct SidebarSummaryView: View {
         case .readable where trashStore.trashBytes <= 0:
             Text("Trash is empty").foregroundStyle(AppColors.textSecondary)
         case .readable:
-            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(AppColors.textPrimary).fontWeight(.semibold)
+            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(AppColors.textPrimary).font(AppStyle.Typography.callout.weight(.semibold).numbers)
                 + Text(" in Trash").foregroundColor(AppColors.textSecondary))
                 .monospacedDigit()
                 .contentTransition(reduceMotion ? .identity : .numericText())

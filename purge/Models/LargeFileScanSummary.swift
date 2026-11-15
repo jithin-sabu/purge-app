@@ -115,7 +115,13 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
         let reason: String
 
         var id: String { path.path }
-        var name: String { path.lastPathComponent }
+        var name: String { LargeFileScanSummary.rootName(path) }
+    }
+
+    /// A root as Finder names it: iCloud Drive's own folder is called
+    /// `com~apple~CloudDocs` on disk.
+    static func rootName(_ root: URL) -> String {
+        root.lastPathComponent == "com~apple~CloudDocs" ? String(localized: "iCloud Drive") : root.lastPathComponent
     }
 
     /// The size filter the scan ran with.
@@ -133,11 +139,6 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
     var cloudOnlyCount: Int { cloudOnly.reduce(0) { $0 + $1.count } }
     var cloudOnlyBytes: Int64 { cloudOnly.reduce(0) { $0 + $1.bytes } }
     var libraryBytes: Int64 { skippedLibraries.reduce(0) { $0 + $1.bytes } }
-
-    /// Whether the summary has anything to show next to a list that has rows.
-    var hasSkippedSomething: Bool {
-        !cloudOnly.isEmpty || !skippedLibraries.isEmpty || !unreadableRoots.isEmpty
-    }
 
     mutating func addCloudOnly(_ provider: CloudProvider, bytes: Int64) {
         if let index = cloudOnly.firstIndex(where: { $0.provider == provider }) {

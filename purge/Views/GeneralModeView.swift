@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct AppCachesView<PageHeader: View>: View {
+struct AppCachesView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Only the leftover macOS update files row reads this. It changes when the user
@@ -10,33 +10,24 @@ struct AppCachesView<PageHeader: View>: View {
     @Binding var items: [CacheItem]
     let isLoading: Bool
     let scanPhase: PurgeStore.ScanPhase
-    let onScan: () -> Void
-    var showsPageHeader = true
     /// When true, the parent supplies the page header and this view renders only its
     /// controls and scrolling list.
     var usesExternalScrollContainer = false
-    private let pageHeader: () -> PageHeader
 
     init(
         items: Binding<[CacheItem]>,
         isLoading: Bool,
         scanPhase: PurgeStore.ScanPhase,
-        onScan: @escaping () -> Void,
-        showsPageHeader: Bool = true,
-        usesExternalScrollContainer: Bool = false,
-        @ViewBuilder pageHeader: @escaping () -> PageHeader
+        usesExternalScrollContainer: Bool = false
     ) {
         _items = items
         self.isLoading = isLoading
         self.scanPhase = scanPhase
-        self.onScan = onScan
-        self.showsPageHeader = showsPageHeader
         self.usesExternalScrollContainer = usesExternalScrollContainer
-        self.pageHeader = pageHeader
     }
 
-    @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
+    @AppStorage(SafetyFilter.appCachesKey) private var filterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SortOption.appCachesKey) private var sortRaw: String = SortOption.sizeDesc.rawValue
 
     /// Safe while the Overview has this tab open for a visit, the saved filter otherwise.
     private var currentSafetyFilter: SafetyFilter {
@@ -74,22 +65,31 @@ struct AppCachesView<PageHeader: View>: View {
     /// `ScanSelectionScope`, which re-renders on selection changes *without* re-rendering
     /// the container, and folding them in would defeat that.
     struct ListPlan {
+        /// Live rows only: what Select All, the selected count and Clean work on.
         var sortedVisibleIndices: [Int] = []
-        var visibleCount = 0
-        var visibleTotalBytes: Int64 = 0
-        var displayableCount = 0
-        var displayableTotalBytes: Int64 = 0
+        /// Live rows and rows from the last scan (#283) in one sorted list, for drawing.
+        var sortedEntries: [Entry] = []
+        /// The saved rows `sortedEntries` points into, captured with the plan.
+        var savedItems: [CacheItem] = []
         var chipCounts: [SafetyFilter: Int] = [:]
 
-        var isEmpty: Bool { sortedVisibleIndices.isEmpty }
+        var isEmpty: Bool { sortedEntries.isEmpty }
+    }
+
+    /// One drawn row. Keyed by the item's id, so a saved row the scan finds again
+    /// turns live in place instead of being replaced.
+    struct Entry: Hashable {
+        let id: String
+        let index: Int
+        let isFromLastScan: Bool
     }
 
     private func makeListPlan() -> ListPlan {
         var plan = ListPlan()
-        guard !items.isEmpty else { return plan }
+        let saved = store.lastScanRows.cacheItems
+        guard !items.isEmpty || !saved.isEmpty else { return plan }
 
         let filter = currentSafetyFilter
-        let hidesRemovedRows = !store.interactiveSafeCleanupTargetPaths.isEmpty
         var chips: [SafetyFilter: Int] = [:]
         var visible: [Int] = []
         visible.reserveCapacity(items.count)
@@ -102,33 +102,42 @@ struct AppCachesView<PageHeader: View>: View {
                 chips[candidate, default: 0] += 1
             }
 
-            if SafetyFilter.all.matches(info) {
-                plan.displayableCount += 1
-                plan.displayableTotalBytes += item.sizeBytes
-            }
-
-            guard filter.matches(info) else { continue }
-            if hidesRemovedRows, store.isVisuallyRemovedBySafeCleanup(item) { continue }
+            guard store.showsRow(item, under: filter) else { continue }
             visible.append(index)
-            plan.visibleTotalBytes += item.sizeBytes
         }
 
+        // Rows from the last scan the live list doesn't have yet. They count in the
+        // chips, so a filter never looks empty while they show, but not in the totals.
+        var entries = visible.map { Entry(id: items[$0].id, index: $0, isFromLastScan: false) }
+        if !saved.isEmpty {
+            let liveIDs = Set(items.map(\.id))
+            for index in saved.indices where !liveIDs.contains(saved[index].id) {
+                let info = saved[index].safetyInfo
+                for candidate in SafetyFilter.allCases where candidate.matches(info) {
+                    chips[candidate, default: 0] += 1
+                }
+                guard filter.matches(info) else { continue }
+                entries.append(Entry(id: saved[index].id, index: index, isFromLastScan: true))
+            }
+            plan.savedItems = saved
+        }
         plan.chipCounts = chips
-        plan.visibleCount = visible.count
 
+        let item: (Entry) -> CacheItem = { $0.isFromLastScan ? saved[$0.index] : items[$0.index] }
         switch SortOption(rawValue: sortRaw) ?? .sizeDesc {
         case .sizeDesc:
-            visible.sort { items[$0].sizeBytes > items[$1].sizeBytes }
+            entries.sort { item($0).sizeBytes > item($1).sizeBytes }
         case .sizeAsc:
-            visible.sort { items[$0].sizeBytes < items[$1].sizeBytes }
+            entries.sort { item($0).sizeBytes < item($1).sizeBytes }
         case .dateNewest:
-            visible.sort { items[$0].lastModified > items[$1].lastModified }
+            entries.sort { item($0).lastModified > item($1).lastModified }
         case .dateOldest:
-            visible.sort { items[$0].lastModified < items[$1].lastModified }
+            entries.sort { item($0).lastModified < item($1).lastModified }
         case .nameAZ:
-            visible.sort { items[$0].appName.localizedCaseInsensitiveCompare(items[$1].appName) == .orderedAscending }
+            entries.sort { item($0).appName.localizedCaseInsensitiveCompare(item($1).appName) == .orderedAscending }
         }
-        plan.sortedVisibleIndices = visible
+        plan.sortedEntries = entries
+        plan.sortedVisibleIndices = entries.filter { !$0.isFromLastScan }.map(\.index)
         return plan
     }
 
@@ -146,23 +155,6 @@ struct AppCachesView<PageHeader: View>: View {
         return SafeFirstSelectAll(entries: entries, filter: currentSafetyFilter)
     }
 
-    private func selectedInScope(plan: ListPlan) -> (count: Int, bytes: Int64) {
-        let selectedIDs = store.scanSelection.cacheIDs
-        var count = 0
-        var bytes: Int64 = 0
-        for index in plan.sortedVisibleIndices where selectedIDs.contains(items[index].id) {
-            count += 1
-            bytes += items[index].sizeBytes
-        }
-        return (count, bytes)
-    }
-
-    private func pageSubtitle(plan: ListPlan) -> String {
-        let count = currentSafetyFilter == .all ? plan.displayableCount : plan.visibleCount
-        let bytes = currentSafetyFilter == .all ? plan.displayableTotalBytes : plan.visibleTotalBytes
-        return String(localized: "\(count) \(count == 1 ? String(localized: "item") : String(localized: "items")) · \(formatBytes(bytes)) recoverable")
-    }
-
     var body: some View {
         let plan = makeListPlan()
         return Group {
@@ -177,12 +169,6 @@ struct AppCachesView<PageHeader: View>: View {
 
     private func standardBody(plan: ListPlan) -> some View {
         VStack(spacing: 0) {
-            if showsPageHeader {
-                AppSectionPageHeader(title: String(localized: "App Caches"), subtitle: pageSubtitle(plan: plan)) {
-                    AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
-                }
-            }
-
             scanControlsChrome(plan: plan)
             scanListStack(plan: plan)
         }
@@ -202,27 +188,8 @@ struct AppCachesView<PageHeader: View>: View {
 
     /// Filter chips — fixed above the scroll edge; page title lives in the parent column header.
     private func filterToolbarChrome(plan: ListPlan) -> some View {
-        // Scoped to scanSelection so the selected count/clean button update on a
-        // toggle without re-rendering GeneralModeView (which reverts list scroll).
-        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-            let scope = selectedInScope(plan: plan)
-            FilterSortToolbar(
-                safetyFilter: safetyFilterBinding,
-                sortOption: sortOptionBinding,
-                chipCounts: plan.chipCounts,
-                selectedInScopeCount: scope.count,
-                selectedInScopeBytes: scope.bytes,
-                isDeleting: store.isDeleting,
-                onCleanSelected: {
-                    Task {
-                        await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
-                    }
-                },
-                useStackedLayout: true,
-                showsControlsRow: false
-            )
-        }
-        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        SafetyFilterChipRow(safetyFilter: safetyFilterBinding, chipCounts: plan.chipCounts)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
@@ -264,7 +231,7 @@ struct AppCachesView<PageHeader: View>: View {
 
     @ViewBuilder
     private func scanListOrPlaceholder(plan: ListPlan) -> some View {
-        if items.isEmpty {
+        if items.isEmpty && store.lastScanRows.cacheItems.isEmpty {
             if isLoading {
                 scanningPlaceholder
             } else {
@@ -309,50 +276,12 @@ struct AppCachesView<PageHeader: View>: View {
 
     private func cacheResultsListContent(plan: ListPlan) -> some View {
         List {
-            ForEach(plan.sortedVisibleIndices, id: \.self) { index in
-                let item = items[index]
-                let itemID = item.id
-                // Scope observes scanSelection so a toggle re-renders only the row,
-                // not the list container (which would revert scroll).
-                ScanSelectionScope(
-                    selection: store.scanSelection,
-                    isSelected: { $0.cacheIDs.contains(itemID) }
-                ) { selected in
-                    ScanResultRow(
-                        isSelected: selected,
-                        onToggle: {
-                            store.setCacheSelected(
-                                id: itemID,
-                                isSelected: !store.scanSelection.cacheIDs.contains(itemID)
-                            )
-                        },
-                        primaryLabel: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent, appFolder: item.bundleID),
-                        formattedSize: item.formattedSize,
-                        safetyInfo: item.safetyInfo,
-                        brandIcon: .cacheItem(item),
-                        detailCaption: secureRemovalCaption(for: item),
-                        reinstallSafety: reinstallDisplay(for: item),
-                        showUncommittedRepoChanges: item.gitStatus == .dirty,
-                        onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
-                        onExcludeFromScans: { store.excludeFromScans(item) },
-                        revealLocations: {
-                            item.locations.map {
-                                ScanRowLocation(url: $0.path, sizeBytes: $0.sizeBytes)
-                            }
-                        },
-                        // `standardizedPaths` is precomputed on the item; deriving it here
-                        // meant a filesystem stat per location, per row, per render.
-                        isUserOverride: item.standardizedPaths.contains {
-                            store.userOverridePaths.contains($0)
-                        },
-                        isMetadataPending: store.cacheItemHasPendingSize(item)
-                    )
+            ForEach(plan.sortedEntries, id: \.id) { entry in
+                if entry.isFromLastScan {
+                    lastScanRow(plan.savedItems[entry.index])
+                } else {
+                    liveRow(items[entry.index])
                 }
-                .id(itemID)
-                .listRowInsets(ScanListRowInsets.standard)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .transition(rowInsertionTransition)
             }
 
             ScanListBottomSpacer()
@@ -365,6 +294,78 @@ struct AppCachesView<PageHeader: View>: View {
         // O(1) stand-in for "the row set changed". `items.map(\.id)` allocated and then
         // compared an array of every row's id string on every body evaluation.
         .animation(rowInsertionAnimation, value: store.cacheItemsRevision)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: plan.savedItems.count)
+    }
+
+    /// A row from the last scan (#283): the same row, read only, until the scan
+    /// finds it again. Show in Finder is the one thing it offers.
+    private func lastScanRow(_ item: CacheItem) -> some View {
+        ScanResultRow(
+            isSelected: false,
+            primaryLabel: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent, appFolder: item.bundleID),
+            formattedSize: item.formattedSize,
+            safetyInfo: item.safetyInfo,
+            brandIcon: .cacheItem(item),
+            reinstallSafety: reinstallDisplay(for: item),
+            showUncommittedRepoChanges: item.gitStatus == .dirty,
+            revealLocations: {
+                item.locations.map {
+                    ScanRowLocation(url: $0.path, sizeBytes: $0.sizeBytes)
+                }
+            },
+            isFromLastScan: true
+        )
+        .id(item.id)
+        .listRowInsets(ScanListRowInsets.standard)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .transition(rowInsertionTransition)
+    }
+
+    @ViewBuilder
+    private func liveRow(_ item: CacheItem) -> some View {
+        let itemID = item.id
+        // Scope observes scanSelection so a toggle re-renders only the row,
+        // not the list container (which would revert scroll).
+        ScanSelectionScope(
+            selection: store.scanSelection,
+            isSelected: { $0.cacheIDs.contains(itemID) }
+        ) { selected in
+            ScanResultRow(
+                isSelected: selected,
+                onToggle: {
+                    store.setCacheSelected(
+                        id: itemID,
+                        isSelected: !store.scanSelection.cacheIDs.contains(itemID)
+                    )
+                },
+                primaryLabel: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent, appFolder: item.bundleID),
+                formattedSize: item.formattedSize,
+                safetyInfo: item.safetyInfo,
+                brandIcon: .cacheItem(item),
+                detailCaption: secureRemovalCaption(for: item),
+                reinstallSafety: reinstallDisplay(for: item),
+                showUncommittedRepoChanges: item.gitStatus == .dirty,
+                onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
+                onExcludeFromScans: { store.excludeFromScans(item) },
+                revealLocations: {
+                    item.locations.map {
+                        ScanRowLocation(url: $0.path, sizeBytes: $0.sizeBytes)
+                    }
+                },
+                // `standardizedPaths` is precomputed on the item; deriving it here
+                // meant a filesystem stat per location, per row, per render.
+                isUserOverride: item.standardizedPaths.contains {
+                    store.userOverridePaths.contains($0)
+                },
+                isMetadataPending: store.cacheItemHasPendingSize(item)
+            )
+        }
+        .id(itemID)
+        .listRowInsets(ScanListRowInsets.standard)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .transition(rowInsertionTransition)
     }
 
     private var rowInsertionAnimation: Animation? {
@@ -390,7 +391,7 @@ struct AppCachesView<PageHeader: View>: View {
     }
 
     private var emptyFilterState: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
@@ -400,7 +401,7 @@ struct AppCachesView<PageHeader: View>: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: "externaldrive.badge.checkmark")
                 .font(.system(size: 38))
                 .foregroundStyle(AppColors.textSecondary)
@@ -421,33 +422,11 @@ struct AppCachesView<PageHeader: View>: View {
 
 }
 
-extension AppCachesView where PageHeader == EmptyView {
-    init(
-        items: Binding<[CacheItem]>,
-        isLoading: Bool,
-        scanPhase: PurgeStore.ScanPhase,
-        onScan: @escaping () -> Void,
-        showsPageHeader: Bool = true,
-        usesExternalScrollContainer: Bool = false
-    ) {
-        self.init(
-            items: items,
-            isLoading: isLoading,
-            scanPhase: scanPhase,
-            onScan: onScan,
-            showsPageHeader: showsPageHeader,
-            usesExternalScrollContainer: usesExternalScrollContainer,
-            pageHeader: { EmptyView() }
-        )
-    }
-}
-
 #Preview("App Caches — scanning") {
     AppCachesView(
         items: .constant([]),
         isLoading: true,
-        scanPhase: .scanning,
-        onScan: {}
+        scanPhase: .scanning
     )
     .environmentObject(PurgeStore())
     .frame(width: 720, height: 560)
@@ -467,7 +446,7 @@ extension AppCachesView where PageHeader == EmptyView {
                 appName: "Safari",
                 safetyInfo: SafetyInfo(
                     level: .safe,
-                    headline: String(localized: "Safari"),
+                    headline: "Safari",
                     explanation: String(localized: "Cache rebuilds on launch."),
                     recoverySteps: "",
                     reinstallCommand: nil
@@ -477,8 +456,7 @@ extension AppCachesView where PageHeader == EmptyView {
             )
         ]),
         isLoading: false,
-        scanPhase: .idle,
-        onScan: {}
+        scanPhase: .idle
     )
     .environmentObject(PurgeStore())
     .frame(width: 720, height: 560)

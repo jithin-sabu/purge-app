@@ -2,7 +2,7 @@
 
 /* adobe-media-cache-files */
 "Adobe Media Cache Files" = "Adobe 媒体缓存文件";
-"premiere pro and after effects store rendered previews and conformed audio here. safe to clean. the apps rebuild it on next launch, which can take a few minutes for large projects." = "Premiere Pro 和 After Effects 在这里保存已渲染的预览和已适配的音频，可以安全清理。应用下次启动时会重建这些文件，大型项目可能需要几分钟。";
+"Rendered previews and conformed audio from Premiere Pro and After Effects. The apps rebuild them on next launch, which can take minutes on large projects." = "Premiere Pro 和 After Effects 的已渲染预览和已适配音频。应用下次启动时会重建，大型项目可能需要几分钟。";
 
 /* adobe-media-cache */
 "Adobe Media Cache Database" = "Adobe 媒体缓存数据库";
@@ -14,7 +14,7 @@
 
 /* android-sdk */
 "Android Build Cache" = "Android 构建缓存";
-"Build caches that Android Studio and Gradle keep in ~/.android. Your emulators, the key your phones trust for debugging, and your debug signing key are left alone. Safe to delete; the next build recreates them." = "Android Studio 和 Gradle 保存在 ~/.android 中的构建缓存。不会动模拟器、手机信任的调试密钥或调试签名密钥，可以安全删除，下次构建时会重新生成。";
+"Build caches in ~/.android that the next build recreates. Emulators, the key your phones trust for debugging, and your debug signing key are left alone." = "~/.android 中的构建缓存，下次构建时会重新生成。不会动模拟器、手机信任的调试密钥或调试签名密钥。";
 
 /* perplexity-updater */
 "Perplexity App Updater" = "Perplexity 应用更新器";
@@ -22,7 +22,7 @@
 
 /* blender */
 "Blender 3D App" = "Blender 3D 应用";
-"These are temporary files saved by Blender, the 3D design application. Deleting them is safe but Blender may take a little longer to start up the next time you open it." = "Blender 这款 3D 设计应用保存的临时文件。可以安全删除，但下次打开 Blender 时，启动可能稍慢。";
+"Temporary files Blender saves while you work. Safe to delete; Blender may take a little longer to start the next time you open it." = "Blender 工作时保存的临时文件。可以安全删除，但下次打开 Blender 时启动可能稍慢。";
 
 /* checkpoint-nodejs */
 "Node.js Dev Tool" = "Node.js 开发工具";
@@ -30,7 +30,7 @@
 
 /* cloudkit */
 "iCloud Data Sync" = "iCloud 数据同步";
-"This holds the data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps will need to re-sync their data afterwards, which can take time on a slow connection." = "保存 Mac 与 iCloud 同步所需的数据。iCloud 中的数据不会丢失，但应用之后需要重新同步；网络较慢时可能耗时较长。";
+"Data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps must sync again afterwards, which can take time on a slow connection." = "Mac 与 iCloud 同步所需的数据。iCloud 中的数据不会丢失，但应用之后需要重新同步；网络较慢时可能耗时较长。";
 
 /* claude-updater */
 "Claude App Updater" = "Claude 应用更新器";
@@ -66,7 +66,7 @@
 
 /* apple-media-services */
 "Apple Media Services" = "Apple 媒体服务";
-"This stores temporary data for Apple's media services including the App Store, Apple TV, and Apple Music. Deleting it is safe and these services will rebuild it as needed." = "保存 App Store、Apple TV 和 Apple Music 等 Apple 媒体服务的临时数据。可以安全删除，这些服务会按需重建。";
+"Temporary data for the App Store, Apple TV and Apple Music. Safe to delete; these services rebuild it as needed." = "App Store、Apple TV 和 Apple Music 的临时数据。可以安全删除，这些服务会按需重建。";
 
 /* appstoreagent */
 "App Store Agent" = "App Store 后台代理";
@@ -86,7 +86,7 @@
 
 /* bird */
 "iCloud Drive Sync" = "iCloud 云盘同步";
-"This is used by the service that keeps iCloud Drive in sync with your Mac. Nothing is lost from iCloud, but your Mac will re-check and re-download file state afterwards." = "负责让 iCloud 云盘与 Mac 保持同步的服务使用的数据。iCloud 中的数据不会丢失，但 Mac 之后会重新检查并下载文件状态信息。";
+"Used by the service that keeps iCloud Drive in sync. Nothing is lost from iCloud, but your Mac re-checks and re-downloads file state afterwards." = "负责让 iCloud 云盘保持同步的服务使用的数据。iCloud 中的数据不会丢失，但 Mac 之后会重新检查并下载文件状态。";
 
 /* businessservicesd */
 "Apple Business Services" = "Apple 企业服务";
@@ -110,7 +110,7 @@
 
 /* dataaccessd */
 "Contacts & Calendar Sync" = "通讯录与日历同步";
-"This is used by the service that syncs your contacts and calendars. Nothing is lost from your accounts, but your Mac re-downloads them, and they may be briefly missing while it does." = "同步通讯录和日历的服务使用的数据。账户中的内容不会丢失，但 Mac 会重新下载，期间可能暂时无法显示。";
+"Used by the service that syncs your contacts and calendars. Nothing is lost, but your Mac downloads them again and they may be missing briefly." = "同步通讯录和日历的服务使用的数据。不会丢失内容，但 Mac 会重新下载，期间可能暂时无法显示。";
 
 /* donotdisturbd */
 "Focus Mode Service" = "专注模式服务";
@@ -122,7 +122,7 @@
 
 /* e5bundlecache */
 "Apple ML Model Cache" = "Apple 机器学习模型缓存";
-"Compiled copies of the machine learning models that macOS features such as Photos and Live Text use. Safe to delete; macOS compiles them again when they are next needed, which takes some processor time." = "照片、实况文本等 macOS 功能使用的机器学习模型编译副本。可以安全删除；下次需要时 macOS 会重新编译，会占用一些处理器时间。";
+"Compiled machine learning models that macOS features such as Photos and Live Text use. macOS compiles them again when needed, using some processor time." = "照片、实况文本等 macOS 功能使用的已编译机器学习模型。需要时 macOS 会重新编译，会占用一些处理器时间。";
 
 /* feature-access-agent */
 "Feature Permissions" = "功能权限";
@@ -174,11 +174,11 @@
 
 /* parsecd */
 "Siri Knowledge Engine" = "Siri 知识引擎";
-"This is used by a background Apple service that helps Siri and Spotlight understand natural language queries. It is safe to delete and will be rebuilt automatically." = "帮助 Siri 和“聚焦”理解自然语言查询的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
+"Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete; it is rebuilt automatically." = "帮助 Siri 和“聚焦”理解自然语言的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
 
 /* passd */
 "Apple Wallet Passes" = "Apple 钱包凭证";
-"This stores temporary data for passes in your Apple Wallet, such as boarding passes and loyalty cards. Deleting it is safe but your Wallet may need to re-sync pass data." = "Apple 钱包中登机牌、会员卡等凭证的临时数据。可以安全删除，但钱包可能需要重新同步凭证数据。";
+"Temporary data for passes in Apple Wallet, such as boarding passes and loyalty cards. Safe to delete, but Wallet may need to re-sync them." = "Apple 钱包中登机牌、会员卡等凭证的临时数据。可以安全删除，但钱包可能需要重新同步凭证。";
 
 /* proactive-eventtracker */
 "Siri Suggestions Data" = "Siri 建议数据";
@@ -190,7 +190,7 @@
 
 /* safari */
 "Safari Browser" = "Safari 浏览器";
-"This contains Safari's temporary browsing data, including website previews and recently visited page data. Deleting it is safe but websites may load slightly slower until the data rebuilds." = "Safari 的临时浏览数据，包括网站预览和最近访问的页面数据。可以安全删除，但数据重建前网站加载可能稍慢。";
+"Safari's temporary browsing data, such as website previews and recent page data. Websites may load a little slower until it rebuilds." = "Safari 的临时浏览数据，例如网站预览和最近访问的页面数据。数据重建前，网站加载可能稍慢。";
 
 /* shazam */
 "Shazam Music ID" = "Shazam 音乐识别";
@@ -202,7 +202,7 @@
 
 /* spotlight */
 "Spotlight Search" = "聚焦搜索";
-"This is the data Spotlight uses to search your Mac. Nothing is lost, but search results will be slow or incomplete until macOS finishes rebuilding the index, which can take a while." = "“聚焦”用于搜索 Mac 的数据。不会丢失内容，但 macOS 完成索引重建前，搜索结果可能较慢或不完整；重建可能需要一些时间。";
+"The index Spotlight uses to search your Mac. Nothing is lost, but search is slow or incomplete until macOS rebuilds the index, which can take a while." = "“聚焦”用于搜索 Mac 的索引。不会丢失内容，但在 macOS 重建索引前，搜索可能较慢或不完整，重建可能需要一些时间。";
 
 /* tipsd */
 "macOS Tips App" = "macOS 提示应用";
@@ -218,7 +218,7 @@
 
 /* google-updater */
 "Google App Updater" = "Google 应用更新器";
-"This stores temporary files used by Google's automatic updater to keep Google apps like Chrome up to date. It is safe to delete and will be recreated at the next update check." = "Google 自动更新器用于保持 Chrome 等 Google 应用最新的临时文件。可以安全删除，下次检查更新时会重新创建。";
+"Temporary files Google's updater uses to keep apps like Chrome up to date. They are created again at the next update check." = "Google 更新器用于保持 Chrome 等应用最新的临时文件。下次检查更新时会重新创建。";
 
 /* microsoft-autoupdate */
 "Microsoft Auto-Updater" = "Microsoft 自动更新器";
@@ -230,11 +230,11 @@
 
 /* nt-ware-smartclient */
 "NT-ware Print Client" = "NT-ware 打印客户端";
-"This is used by NT-ware's SmartClient, a print management tool commonly found in offices and universities. Deleting it is generally safe but the print client may need to re-configure itself." = "NT-ware 的 SmartClient 使用的数据，这是一款常见于办公室和大学的打印管理工具。通常可以安全删除，但打印客户端可能需要重新配置。";
+"Used by NT-ware's SmartClient, a print management tool common in offices and universities. Usually safe to delete, but the client may set itself up again." = "NT-ware SmartClient 使用的数据，这是一款常见于办公室和大学的打印管理工具。通常可以安全删除，但客户端可能需要重新配置。";
 
 /* openai-codex */
 "OpenAI Codex" = "OpenAI Codex";
-"Page and script caches of the Codex app and command line tool. Safe to delete; Codex rebuilds them as you use it. Your sessions and sign-in in ~/.codex are left alone." = "Codex 应用和命令行工具的网页与脚本缓存。可以安全删除，使用时 Codex 会重建。不会动 ~/.codex 中的会话和登录信息。";
+"Page and script caches of the Codex app and command line tool, rebuilt as you use it. Your sessions and sign-in in ~/.codex are left alone." = "Codex 应用和命令行工具的网页与脚本缓存，使用时会重建。不会动 ~/.codex 中的会话和登录信息。";
 
 /* todesktop-shipit */
 "ToDesktop App Updater" = "ToDesktop 应用更新器";
@@ -260,6 +260,10 @@
 "Playwright Browsers" = "Playwright 浏览器";
 "Browsers Playwright downloaded for automated website testing. Your tests fail until you run npx playwright install, which downloads them again." = "Playwright 为自动化网站测试下载的浏览器。删除后测试会失败，直到你运行 npx playwright install 重新下载。";
 
+/* playwright-unused-builds */
+"Unused Playwright Browsers" = "未使用的 Playwright 浏览器";
+"Browser builds no Playwright install still lists. A project that never ran npx playwright install may use one. That command downloads it again." = "已没有任何 Playwright 安装仍列出的浏览器版本。从未运行过 npx playwright install 的项目可能仍在使用，运行该命令会重新下载。";
+
 /* node-modules */
 "Node.js Packages" = "Node.js 软件包";
 "Code libraries installed for developer projects. Safe to remove for stale projects — run npm install to restore them anytime." = "开发项目安装的代码库。旧项目的代码库可以安全移除，随时运行 npm install 即可恢复。";
@@ -278,11 +282,11 @@
 
 /* macos-installer */
 "macOS Installer" = "macOS 安装器";
-"A full macOS installer downloaded from the App Store or Software Update, usually 12 to 15 GB. macOS does not need it once it is installed. Keep it if you use it to make a bootable USB installer; otherwise you can download it again from the App Store." = "从 App Store 或软件更新下载的完整 macOS 安装器，通常为 12 至 15 GB。安装完成后 macOS 不再需要它。如果要制作可启动的 USB 安装盘，请保留；否则可从 App Store 再次下载。";
+"A full macOS installer, usually 12 to 15 GB. macOS does not need it after installing, and the App Store has it. Keep it to make a bootable USB installer." = "完整的 macOS 安装器，通常为 12 至 15 GB。安装后 macOS 不再需要它，App Store 可再次下载。如需制作可启动 USB 安装盘，请保留。";
 
 /* macos-install-data */
 "Leftover macOS update files" = "残留的 macOS 更新文件";
-"Install files a finished macOS update left behind. macOS does not use them again, and Settings counts them as System Data. Listed only when they are older than the installed macOS, so a waiting update is never shown." = "macOS 更新完成后留下的安装文件。macOS 不会再使用它们，“设置”会把它们算作系统数据。只有当它们早于当前安装的 macOS 时才会列出，因此等待安装的更新绝不会显示。";
+"Install files a finished macOS update left behind, counted as System Data. Only shown when older than the installed macOS, so a waiting update never is." = "macOS 更新完成后留下的安装文件，计入系统数据。仅在早于当前安装的 macOS 时显示，因此等待安装的更新绝不会列出。";
 
 /* dart-tool */
 "Flutter Dev Tool" = "Flutter 开发工具";
@@ -302,7 +306,7 @@
 
 /* container-managerd */
 "App Sandbox Manager" = "应用沙盒管理器";
-"This is used by the macOS service that manages isolated storage areas for apps. Deleting it is generally safe but some apps may need to re-establish their storage areas." = "macOS 管理应用隔离存储区域的服务使用的数据。通常可以安全删除，但部分应用可能需要重新建立存储区域。";
+"Used by the macOS service that manages each app's private storage. Usually safe to delete, but some apps may need to set their storage up again." = "macOS 管理应用隔离存储的服务使用的数据。通常可以安全删除，但部分应用可能需要重新建立存储区域。";
 
 /* storekitagent */
 "In-App Purchase Service" = "应用内购买服务";
@@ -310,7 +314,7 @@
 
 /* docker */
 "Docker Desktop" = "Docker Desktop";
-"Every Docker image, container, and volume. A volume can hold the only copy of a database. To keep volumes, run docker --context desktop-linux system prune while Docker is open. To clean, quit Docker. The whole folder goes to the Trash." = "Docker 的所有镜像、容器和卷。卷里可能是数据库的唯一副本。若要保留卷，请在 Docker 打开时运行 docker --context desktop-linux system prune。若要清理，请先退出 Docker。整个文件夹会移到废纸篓。";
+"All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "所有镜像、容器和卷，其中部分卷保存着数据库。若要保留卷，请在 Docker 打开时运行 docker --context desktop-linux system prune，否则请先退出 Docker。";
 
 /* raycast */
 "Raycast Launcher" = "Raycast 启动器";
@@ -322,7 +326,7 @@
 
 /* swiftpm */
 "Swift Package Manager" = "Swift 软件包管理器";
-"This stores downloaded Swift code libraries used by developer projects. Deleting it is safe but your projects will need to re-download their dependencies next time they are built." = "开发项目使用的已下载 Swift 代码库。可以安全删除，但项目下次构建时需重新下载依赖。";
+"Swift packages downloaded for your projects. Each project downloads its dependencies again the next time you build it." = "为项目下载的 Swift 软件包。项目下次构建时会重新下载依赖。";
 
 /* zen */
 "Zen Browser" = "Zen 浏览器";
@@ -330,7 +334,7 @@
 
 /* xcode-itunes-service */
 "Xcode Device Support" = "Xcode 设备支持";
-"This stores temporary files used by Xcode when installing or testing apps on connected Apple devices. Deleting it is safe but Xcode may need to re-download device support files." = "Xcode 在连接的 Apple 设备上安装或测试应用时使用的临时文件。可以安全删除，但 Xcode 可能需要重新下载设备支持文件。";
+"Temporary files Xcode uses to install and test apps on connected Apple devices. Safe to delete, but Xcode may download device support files again." = "Xcode 在连接的 Apple 设备上安装或测试应用时使用的临时文件。可以安全删除，但 Xcode 可能需要重新下载设备支持文件。";
 
 /* gamed */
 "Game Center Service" = "Game Center 服务";
@@ -354,7 +358,7 @@
 
 /* image-cache */
 "Image Thumbnail Cache" = "图片缩略图缓存";
-"This stores saved image previews and thumbnails to speed up display in apps. It is safe to delete and the images will simply load a little slower until the previews rebuild." = "保存的图片预览与缩略图，用于加快应用显示。可以安全删除；预览重建完成前，图片加载会稍慢。";
+"Saved image previews and thumbnails that speed up display in apps. Safe to delete; images load a little slower until the previews rebuild." = "用于加快应用显示的图片预览与缩略图。可以安全删除；预览重建完成前，图片加载会稍慢。";
 
 /* revenuecat */
 "RevenueCat Purchases" = "RevenueCat 购买服务";
@@ -374,7 +378,7 @@
 
 /* jetbrains */
 "JetBrains IDE Cache" = "JetBrains IDE 缓存";
-"Indexes and caches that JetBrains IDEs such as IntelliJ, WebStorm and PyCharm rebuild on their own. Local History is left alone. The IDE re-indexes your projects the next time you open them, which takes a few minutes." = "IntelliJ、WebStorm、PyCharm 等 JetBrains IDE 可自行重建的索引与缓存，不会动本地历史记录。下次打开项目时 IDE 会重新建立索引，需要几分钟。";
+"Indexes and caches JetBrains IDEs rebuild on their own. Local History is left alone. Each project re-indexes when you next open it, which takes a few minutes." = "JetBrains IDE 可自行重建的索引与缓存，不会动本地历史记录。下次打开项目时会重新建立索引，需要几分钟。";
 
 /* zed */
 "Zed Editor Cache" = "Zed 编辑器缓存";
@@ -386,15 +390,15 @@
 
 /* maven */
 "Maven Package Cache" = "Maven 软件包缓存";
-"Java libraries downloaded by Maven, plus anything you built and installed locally with mvn install. Downloaded libraries come back on your next build, which can take a long time. Your own installed builds only come back if you build them again." = "Maven 下载的 Java 库，以及你通过 mvn install 在本机构建安装的内容。已下载的库会在下次构建时重新下载，可能耗时较长；你自行安装的构建只有重新构建后才能恢复。";
+"Maven's downloaded libraries and your own mvn install builds. Libraries download again on your next build; your own builds come back only if you rebuild them." = "Maven 下载的 Java 库，以及你用 mvn install 安装的构建。库会在下次构建时重新下载；你自己的构建只有重新构建后才能恢复。";
 
 /* sbt */
 "Ivy Dependency Cache" = "Ivy 依赖缓存";
-"Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but your next build downloads all of them again, which can take a long time and does not work offline." = "sbt 和 Ivy 下载的 Java 与 Scala 库。不会丢失内容，但下次构建需重新下载全部库，可能耗时较长，且无法离线完成。";
+"Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but the next build downloads them all again, which is slow and needs a connection." = "sbt 和 Ivy 下载的 Java 与 Scala 库。不会丢失内容，但下次构建需重新下载全部库，耗时较长且需要联网。";
 
 /* rubygems */
 "Ruby Gem Downloads" = "Ruby Gem 下载";
-"Downloaded .gem files and the gem spec index that RubyGems keeps after installing. Your installed gems and their commands stay. Safe to delete; RubyGems downloads them again when it needs them." = "RubyGems 安装后保留的已下载 .gem 文件和 Gem 规格索引。已安装的 Gem 及其命令会保留。可以安全删除，RubyGems 会在需要时重新下载。";
+"Downloaded .gem files and the spec index RubyGems keeps after installing. Your installed gems stay; RubyGems downloads these again when needed." = "RubyGems 安装后保留的 .gem 下载文件和规格索引。已安装的 Gem 会保留，需要时 RubyGems 会重新下载。";
 
 /* bundler */
 "Bundler Cache" = "Bundler 缓存";
@@ -436,13 +440,17 @@
 "Crash Reports" = "崩溃报告";
 "Records of app crashes saved by macOS. Safe to delete. These are only useful if you are reporting a bug to an app developer." = "macOS 保存的应用崩溃记录。可以安全删除，仅在向应用开发者报告问题时有用。";
 
+/* crashpad-pending */
+"Unsent Crash Reports" = "未发送的崩溃报告";
+"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first." = "应用已保存但尚未发送的崩溃报告。没有它们应用也能正常运行，但开发者将收不到这些报告。请先退出应用。";
+
 /* iossimulators */
 "iOS Simulators" = "iOS 模拟器";
-"Virtual iPhone and iPad devices that Xcode uses to test apps. Deleting one also deletes the apps and data installed on it. Xcode can create a new one whenever you need it." = "Xcode 用于测试应用的虚拟 iPhone 和 iPad 设备。删除模拟器也会删除其中安装的应用与数据。需要时，Xcode 可以创建新的模拟器。";
+"Virtual iPhone and iPad devices Xcode tests apps on. Deleting one also deletes its apps and data. Xcode can create a new one when you need it." = "Xcode 用于测试应用的虚拟 iPhone 和 iPad 设备。删除模拟器也会删除其中的应用与数据。需要时 Xcode 可以创建新的模拟器。";
 
 /* bun-cache */
 "Bun Package Cache" = "Bun 软件包缓存";
-"Cached packages downloaded by Bun, a fast JavaScript runtime and package manager. Safe to delete and will be re-downloaded the next time you run bun install." = "Bun 下载并缓存的软件包。Bun 是快速的 JavaScript 运行时与软件包管理器。可以安全删除，下次运行 bun install 时会重新下载。";
+"Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install." = "Bun（JavaScript 运行时与软件包管理器）下载的软件包。可以安全删除，下次运行 bun install 时会重新下载。";
 
 /* deno-cache */
 "Deno Module Cache" = "Deno 模块缓存";
@@ -453,8 +461,8 @@
 "Saved build outputs from Turborepo, a build tool for JavaScript monorepos. Safe to delete. Your next build will simply take a little longer as it rebuilds from scratch." = "JavaScript 单仓库构建工具 Turborepo 保存的构建输出。可以安全删除，但下次需从头构建，会稍慢。";
 
 /* mise-cache */
-"Mise Tool Version Cache" = "Mise 工具版本缓存";
-"Cached runtime versions managed by Mise (formerly rtx), a tool version manager. Safe to delete but Mise will need to re-download any tools you use next time." = "工具版本管理器 Mise（原名 rtx）管理的运行时版本缓存。可以安全删除，但下次使用工具时，Mise 需重新下载。";
+"Mise Cache" = "Mise 缓存";
+"Version lists and other data cached by Mise (formerly rtx), a tool version manager. Installed tools stay, and Mise fetches the rest again." = "工具版本管理器 Mise（原名 rtx）缓存的版本列表等数据。已安装的工具会保留，其余内容 Mise 会重新获取。";
 
 /* nextjs-cache */
 "Next.js Build Cache" = "Next.js 构建缓存";
@@ -482,7 +490,7 @@
 
 /* cypress-cache */
 "Cypress Test Binaries" = "Cypress 测试程序";
-"Downloaded browser binaries used by Cypress for end-to-end testing. Safe to delete but Cypress will need to re-download them before your next test run, which can take a few minutes." = "Cypress 为端到端测试下载的浏览器程序。可以安全删除，但下次运行测试前，Cypress 需重新下载，可能需要几分钟。";
+"The Cypress app that runs your end-to-end tests. Tests fail until you run npx cypress install, which downloads it again." = "运行端到端测试的 Cypress 应用。在运行 npx cypress install 重新下载之前，测试会失败。";
 
 /* python-cache */
 "Python Bytecode Cache" = "Python 字节码缓存";
@@ -490,7 +498,7 @@
 
 /* uv-cache */
 "uv Package Cache" = "uv 软件包缓存";
-"Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages." = "快速 Python 软件包管理器 uv 下载并缓存的软件包。可以安全删除，下次安装软件包时会重新下载。";
+"Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break." = "uv 下载并构建的 Python 软件包。需要时 uv 会重新获取，但正在通过 uvx 运行的工具可能会停止，使用符号链接模式的环境会失效。";
 
 /* ruff-cache */
 "Ruff Linter Cache" = "Ruff 检查缓存";
@@ -510,11 +518,11 @@
 
 /* gradle-cache */
 "Gradle Build Cache" = "Gradle 构建缓存";
-"Cached build files and downloaded dependencies used by Gradle, a build tool for Java and Android projects. Safe to delete and will be re-downloaded on your next build." = "Java 和 Android 构建工具 Gradle 使用的构建缓存与已下载依赖。可以安全删除，下次构建时会重新下载。";
+"A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle." = "项目自己的 Gradle 状态，例如文件哈希和构建历史。下次构建时会重新生成；已下载的代码库保存在 ~/.gradle 中。";
 
 /* gradle-global-cache */
 "Gradle Dependency Cache" = "Gradle 依赖缓存";
-"Libraries, build caches and the Gradle versions the wrapper downloaded, for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline." = "Gradle 为 Java、Kotlin 和 Android 项目下载的代码库、构建缓存和 wrapper 下载的 Gradle 版本。不会丢失内容，但下次构建需重新下载全部内容，可能耗时较长，且无法离线完成。";
+"Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow." = "Gradle 下载的代码库、构建缓存和 wrapper 版本。不会丢失内容，但下次构建需重新下载并重建，耗时较长。";
 
 /* cocoapods-cache */
 "CocoaPods Cache" = "CocoaPods 缓存";
@@ -522,7 +530,7 @@
 
 /* cocoapods-spec-repos */
 "CocoaPods Spec Repos" = "CocoaPods 规格仓库";
-"The spec repositories CocoaPods uses to look up libraries. The public one is set up again on your next pod install. Private spec repos you added with pod repo add have to be added again." = "CocoaPods 用于查找代码库的规格仓库。公共仓库会在下次 pod install 时重新设置；通过 pod repo add 添加的私有规格仓库，需要手动重新添加。";
+"Spec repos CocoaPods uses to look up libraries. The public one comes back on your next pod install; private ones from pod repo add must be added again." = "CocoaPods 用于查找代码库的规格仓库。公共仓库会在下次 pod install 时恢复；通过 pod repo add 添加的私有仓库需重新添加。";
 
 /* swift-build */
 "Swift Build Artifacts" = "Swift 构建产物";
@@ -538,7 +546,7 @@
 
 /* pub-cache */
 "Dart Pub Cache" = "Dart Pub 缓存";
-"Dart and Flutter packages downloaded by pub. Tools you installed with dart pub global activate are left alone. Safe to delete; packages download again on your next flutter pub get." = "pub 下载的 Dart 和 Flutter 软件包。不会动通过 dart pub global activate 安装的工具。可以安全删除，下次 flutter pub get 时会重新下载软件包。";
+"Dart and Flutter packages downloaded by pub; they download again on your next flutter pub get. Tools from dart pub global activate are left alone." = "pub 下载的 Dart 和 Flutter 软件包，下次 flutter pub get 时会重新下载。不会动通过 dart pub global activate 安装的工具。";
 
 /* xcode-archives */
 "Xcode App Archives" = "Xcode 应用归档";
@@ -546,7 +554,7 @@
 
 /* xcode-device-support */
 "Xcode iOS Device Support" = "Xcode iOS 设备支持";
-"Files Xcode copies from your iPhone, Apple Watch, Apple TV or Vision Pro to debug apps on it. Nothing is lost, but Xcode copies them again the next time you connect that device, which takes a few minutes." = "Xcode 从 iPhone、Apple Watch、Apple TV 或 Vision Pro 复制的文件，用于在设备上调试应用。不会丢失内容，但下次连接设备时 Xcode 需重新复制，耗时几分钟。";
+"Files Xcode copies from an iPhone, Apple Watch, Apple TV or Vision Pro to debug on it. Nothing is lost; Xcode copies them again when you next connect it." = "Xcode 从 iPhone、Apple Watch、Apple TV 或 Vision Pro 复制、用于调试的文件。不会丢失内容，下次连接设备时 Xcode 会重新复制。";
 
 /* homebrew-cache */
 "Homebrew Package Cache" = "Homebrew 软件包缓存";
@@ -602,7 +610,7 @@
 
 /* chrome */
 "Google Chrome" = "Google Chrome 浏览器";
-"Temporary browsing data stored by Google Chrome including website caches and previews. Deleting it is safe but websites may load a little slower until Chrome rebuilds the cache." = "Google Chrome 保存的临时浏览数据，包括网站缓存与预览。可以安全删除，但 Chrome 重建缓存前，网站加载可能稍慢。";
+"Google Chrome's temporary browsing data, such as website caches and previews. Websites may load a little slower until Chrome rebuilds it." = "Google Chrome 的临时浏览数据，例如网站缓存与预览。Chrome 重建缓存前，网站加载可能稍慢。";
 
 /* firefox */
 "Firefox Browser" = "Firefox 浏览器";
@@ -634,7 +642,7 @@
 
 /* spotify */
 "Spotify" = "Spotify 应用";
-"Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen." = "Spotify 在你聆听时保存的歌曲与封面。仅在没有离线下载内容时显示，因为 Spotify 的离线下载保存在附近位置。可以安全删除；继续聆听时，Spotify 会重新在线播放并保存。";
+"Songs and artwork Spotify saved while you listened. It saves them again as you play. Only shown when nothing is downloaded for offline listening." = "Spotify 在你聆听时保存的歌曲与封面，继续播放时会重新保存。仅在没有离线下载内容时显示。";
 
 /* whatsapp */
 "WhatsApp" = "WhatsApp 应用";
@@ -674,7 +682,7 @@
 
 /* dropbox */
 "Dropbox" = "Dropbox 应用";
-"Temporary sync data stored by Dropbox. Your files are safe, but Dropbox will re-verify your whole synced folder afterwards, which can take a long time on large accounts." = "Dropbox 保存的临时同步数据。文件会保留，但 Dropbox 之后需重新验证整个同步文件夹；大型账户可能耗时较长。";
+"Temporary sync data stored by Dropbox. Your files are safe, but Dropbox re-verifies your whole synced folder afterwards, which can take a while." = "Dropbox 保存的临时同步数据。文件会保留，但 Dropbox 之后需重新验证整个同步文件夹，可能需要一些时间。";
 
 /* google-drive */
 "Google Drive" = "Google Drive 云端硬盘";
@@ -798,11 +806,11 @@
 
 /* apple-maps */
 "Apple Maps" = "Apple 地图";
-"Downloaded map tiles and location data stored by Apple Maps. Nothing is lost, but Maps re-downloads tiles as you use it and any offline maps need downloading again." = "Apple 地图保存的已下载地图图块与位置数据。不会丢失内容，但使用时地图需重新下载图块，离线地图也需要重新下载。";
+"Map tiles and location data stored by Apple Maps. Nothing is lost, but tiles download again as you use Maps, and offline maps need downloading again." = "Apple 地图保存的地图图块与位置数据。不会丢失内容，但使用时地图需重新下载图块，离线地图也需要重新下载。";
 
 /* apple-photos */
 "Apple Photos" = "Apple 照片";
-"Thumbnail and preview data stored by Apple Photos. No photos are deleted, but Photos has to regenerate every thumbnail, which can take a long time on a large library." = "Apple 照片保存的缩略图与预览数据。不会删除照片，但照片应用需重新生成全部缩略图；大型图库可能耗时较长。";
+"Thumbnails and previews from Apple Photos. No photos are deleted, but Photos makes every thumbnail again, which takes a long time on a large library." = "Apple 照片的缩略图与预览数据。不会删除照片，但照片应用需重新生成全部缩略图，大型图库耗时较长。";
 
 /* apple-mail */
 "Apple Mail" = "Apple 邮件";
@@ -844,21 +852,13 @@
 "Orphaned Git Worktrees" = "孤立 Git 工作树";
 "Agent checkouts Git no longer tracks. Look inside first for uncommitted work." = "Git 已不再追踪的智能体检出目录。请先检查其中是否有未提交的工作。";
 
-/* obsolete-cursor-extension */
-"Obsolete Cursor Extension" = "旧版 Cursor 扩展";
-"An older version of a Cursor extension superseded by a newer install. Safe to delete." = "已被新安装版本替代的旧版 Cursor 扩展。可以安全删除。";
-
-/* obsolete-vscode-extension */
-"Obsolete VS Code Extension" = "旧版 VS Code 扩展";
-"An older version of a VS Code extension superseded by a newer install. Safe to delete." = "已被新安装版本替代的旧版 VS Code 扩展。可以安全删除。";
-
 /* orphaned-editor-workspace-storage */
 "Old Editor Workspace Data" = "旧编辑器工作区数据";
-"Saved state for projects that VS Code or Cursor opened from folders that no longer exist, including any AI chat history for those projects. If you moved or renamed a project instead of deleting it, its chats are in here." = "VS Code 或 Cursor 曾从已不存在的文件夹打开的项目所保存的状态，包括这些项目的 AI 聊天历史。如果你只是移动或重命名了项目，而非删除，聊天记录仍保存在这里。";
+"Saved state, including AI chats, for VS Code or Cursor projects whose folders no longer exist. If you moved or renamed a project, its chats are in here." = "VS Code 或 Cursor 中文件夹已不存在的项目所保存的状态，包括 AI 聊天记录。如果你只是移动或重命名了项目，其聊天记录在这里。";
 
 /* stale-browser-framework */
 "Old Browser Framework" = "旧浏览器框架";
-"A leftover Chromium framework that no running process is using. Quit and relaunch the browser before an older version it is still running from can be cleaned. The browser also deletes leftover versions itself on relaunch." = "没有运行中进程使用的遗留 Chromium 框架。如果浏览器仍从旧版本运行，请先退出并重新启动，才能清理该版本。浏览器重新启动时也会自行删除遗留版本。";
+"A leftover Chromium framework no running process uses. Quit and relaunch the browser to clean a version it still runs from; relaunching also removes old ones." = "没有运行中进程使用的遗留 Chromium 框架。若浏览器仍从旧版本运行，请退出并重新启动后再清理；重新启动时浏览器也会删除旧版本。";
 
 /* link-thumbnail-cache */
 "Link Thumbnail Cache" = "链接缩略图缓存";
@@ -878,7 +878,7 @@
 
 /* electron-updater-downloads */
 "App Update Downloads" = "应用更新下载";
-"Update packages that apps built on Electron downloaded to install a new version. Once the update is installed they are left behind. Safe to delete; each app downloads its next update when one comes out." = "Electron 应用为安装新版本而下载的更新包，安装完成后遗留在此。可以安全删除；下次有新版本时，各应用会下载下一次更新。";
+"Update packages Electron apps downloaded to install a new version, left behind once installed. Each app downloads its next update when one comes out." = "Electron 应用为安装新版本下载的更新包，安装完成后遗留在此。下次有新版本时，各应用会重新下载。";
 
 /* spotlight-profiles-cache */
 "Spotlight Profile Cache" = "聚焦配置缓存";
@@ -890,7 +890,7 @@
 
 /* elixir-deps */
 "Elixir Dependencies" = "Elixir 依赖";
-"Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete and re-downloaded on your next build, which needs an internet connection." = "Mix 为 Elixir 或 Erlang 项目下载的依赖源代码。可以安全删除，下次构建时会重新下载，需要互联网连接。";
+"Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete; it downloads again on the next build." = "Mix 为 Elixir 或 Erlang 项目下载的依赖源代码。可以安全删除，下次构建时会重新下载。";
 
 /* hex-packages */
 "Hex Package Cache" = "Hex 软件包缓存";
@@ -949,11 +949,11 @@
 "Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build." = "sbt 为 Scala 项目生成的已编译输出。可以安全删除，下次构建时会重建。";
 
 /* dotnet-bin */
-"NET Build Output" = ".NET 构建输出";
+".NET Build Output" = ".NET 构建输出";
 "Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build." = ".NET 构建生成的已编译程序与代码库。可以安全删除，下次 dotnet build 时会重建。";
 
 /* dotnet-obj */
-"NET Intermediate Files" = ".NET 中间文件";
+".NET Intermediate Files" = ".NET 中间文件";
 "Temporary files .NET creates while compiling. Safe to delete and recreated on your next build." = ".NET 编译时创建的临时文件。可以安全删除，下次构建时会重新创建。";
 
 /* composer-vendor */
@@ -1014,11 +1014,11 @@
 
 /* nuget-packages */
 "NuGet Package Cache" = "NuGet 软件包缓存";
-"Downloaded .NET packages that NuGet restores your projects from. Nothing is lost, but your next restore downloads them all again, which can take a while and does not work offline." = "NuGet 用于恢复项目的已下载 .NET 软件包。不会丢失内容，但下次恢复需重新下载全部软件包，可能需要一些时间，且无法离线完成。";
+"Downloaded .NET packages NuGet restores your projects from. Nothing is lost, but the next restore downloads them all again and needs a connection." = "NuGet 用于恢复项目的已下载 .NET 软件包。不会丢失内容，但下次恢复需重新下载全部软件包，并需要联网。";
 
 /* stack-global */
 "Stack Global Cache" = "Stack 全局缓存";
-"Package downloads and prebuilt libraries that Stack shares between Haskell projects. Your settings and installed compilers are left alone. Nothing is lost, but the next build downloads and rebuilds a lot and can be slow." = "Stack 在 Haskell 项目之间共享的软件包下载与预编译代码库。不会动设置或已安装的编译器。不会丢失内容，但下次构建需下载并重建大量内容，可能较慢。";
+"Packages and prebuilt libraries Stack shares between Haskell projects. Settings and installed compilers stay. The next build downloads and rebuilds a lot." = "Stack 在 Haskell 项目间共享的软件包与预编译库。不会动设置和已安装的编译器。下次构建需下载并重建大量内容。";
 
 /* cabal-packages */
 "Cabal Package Cache" = "Cabal 软件包缓存";
@@ -1034,7 +1034,7 @@
 
 /* venv */
 "Python Environment" = "Python 环境";
-"A self-contained Python environment holding packages installed for one project. Safe to delete and recreated by reinstalling from requirements.txt or pyproject.toml, which needs an internet connection." = "为单个项目保存已安装软件包的独立 Python 环境。可以安全删除，但需根据 requirements.txt 或 pyproject.toml 重新安装以重建，并需要互联网连接。";
+"A Python environment with one project's packages. Recreate it by reinstalling from requirements.txt or pyproject.toml, which needs a connection." = "保存单个项目软件包的 Python 环境。可根据 requirements.txt 或 pyproject.toml 重新安装来重建，需要联网。";
 
 /* node-gyp-headers */
 "node-gyp Headers" = "node-gyp 头文件";
@@ -1070,43 +1070,67 @@
 
 /* device-software-updates */
 "iPhone and iPad Software Updates" = "iPhone 与 iPad 软件更新";
-"Full software update files for iPhone, iPad or iPod that Finder downloaded to update or restore a device, often 5 to 8 GB each. Safe to delete; Finder downloads the current one again the next time you update a device." = "访达为更新或恢复设备而下载的 iPhone、iPad 或 iPod 完整软件更新文件，每个通常为 5 至 8 GB。可以安全删除，下次更新设备时，访达会重新下载当前版本。";
+"iPhone, iPad or iPod updates Finder downloaded to update or restore a device, often 5 to 8 GB each. Finder downloads the current one again when needed." = "访达为更新或恢复设备下载的 iPhone、iPad 或 iPod 软件更新，每个通常 5 至 8 GB。需要时访达会重新下载当前版本。";
 
 /* davinci-cacheclip */
 "DaVinci Resolve Render Cache" = "DaVinci Resolve 渲染缓存";
-"Render cache and optimized media that DaVinci Resolve keeps in your Movies folder. Safe to delete; Resolve renders it again as you work, which takes time on large projects." = "DaVinci Resolve 保存在“影片”文件夹中的渲染缓存与优化媒体。可以安全删除；继续工作时 Resolve 会重新渲染，大型项目需要一些时间。";
+"Render cache and optimized media DaVinci Resolve keeps in your Movies folder. Resolve renders it again as you work, which takes time on large projects." = "DaVinci Resolve 保存在“影片”文件夹中的渲染缓存与优化媒体。继续工作时 Resolve 会重新渲染，大型项目需要一些时间。";
 
 /* aerial-wallpaper-videos */
 "Aerial Wallpaper Videos" = "航拍壁纸视频";
-"Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the aerial you use downloads again, and macOS may download others again on its own." = "macOS 航拍壁纸与屏幕保护程序的视频，通常占用数 GB。不会丢失内容，但正在使用的航拍视频需重新下载，macOS 也可能自行重新下载其他视频。";
+"Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the ones you use, and maybe others, download again." = "macOS 航拍壁纸与屏幕保护程序的视频，通常占用数 GB。不会丢失内容，但正在使用的视频（可能还有其他视频）会重新下载。";
 
 /* messages-previews */
 "Messages Previews" = "信息预览";
-"Thumbnail previews of photos, videos and links in Messages. Your messages and attachments are not touched. Safe to delete; previews are made again when you scroll through a conversation." = "信息应用中照片、视频和链接的缩略图预览。不会动消息或附件。可以安全删除，滚动浏览会话时会重新生成预览。";
+"Previews of photos, videos and links in Messages, made again as you scroll a conversation. Your messages and attachments are not touched." = "信息应用中照片、视频和链接的预览，滚动浏览会话时会重新生成。不会动消息或附件。";
 
 /* mail-downloads */
 "Mail Attachment Copies" = "邮件附件副本";
-"Copies of attachments you opened from Apple Mail. The originals stay in your mail. If you edited an attachment after opening it and never saved it somewhere else, those edits are only here. Held back while Mail is open." = "从 Apple 邮件打开的附件副本。原件仍保留在邮件中。如果打开后编辑了附件，且从未另存到其他位置，这些修改只保存在这里。邮件应用打开时，暂不纳入清理。";
+"Attachments you opened from Mail; the originals stay in Mail. Edits you made to one and never saved elsewhere exist only here. Held back while Mail is open." = "从邮件打开的附件副本，原件仍在邮件中。未另存到其他位置的修改只保存在这里。邮件打开时暂不清理。";
 
 /* unfinished-downloads */
 "Unfinished Downloads" = "未完成的下载";
-"Downloads from Safari, Chrome, Firefox or Parallels that stopped before finishing and have not changed in over a week. The app that started one can sometimes still resume it, so check before deleting." = "Safari、Chrome、Firefox 或 Parallels 中未完成、且超过一周没有变化的下载。发起下载的应用有时仍可继续，因此删除前请检查。";
+"Safari, Chrome, Firefox or Parallels downloads that stopped and have not changed in over a week. The app may still resume one, so check before deleting." = "Safari、Chrome、Firefox 或 Parallels 中已中断且超过一周未变化的下载。发起下载的应用有时仍可继续，删除前请检查。";
 
 /* coresimulator-caches */
 "Simulator Caches" = "模拟器缓存";
-"Shared system caches the iOS Simulator builds for each runtime. Safe to delete; the Simulator builds them again the next time a device starts, which makes that first launch slower." = "iOS 模拟器为每个运行时构建的共享系统缓存。可以安全删除，下次设备启动时模拟器会重建，因此首次启动会更慢。";
+"Shared caches the iOS Simulator builds for each runtime. It builds them again the next time a device starts, which makes that launch slower." = "iOS 模拟器为每个运行时构建的共享缓存。下次设备启动时会重建，因此该次启动会更慢。";
 
 /* xctest-devices */
 "Xcode Test Devices" = "Xcode 测试设备";
-"Temporary copies of simulators that Xcode makes to run tests in parallel. Xcode deletes them itself but sometimes leaves them behind. Safe to delete when no tests are running." = "Xcode 为并行测试创建的临时模拟器副本。Xcode 会自行删除，但有时会留下。仅在没有测试运行时，才可安全删除。";
+"Temporary simulator copies Xcode makes to run tests in parallel and sometimes leaves behind. Safe to delete when no tests are running." = "Xcode 为并行测试创建、有时未删除的临时模拟器副本。没有测试运行时可以安全删除。";
 
 /* old-cli-versions */
 "Old AI Coding Tool Versions" = "旧版 AI 编程工具";
-"Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Claude Code 或 Cursor Agent 更新后遗留的旧版本。正在运行的版本与最新版本会保留。可以安全删除。";
+"Earlier versions of Claude Code, Cursor Agent or Grok that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Claude Code、Cursor Agent 或 Grok 更新后遗留的旧版本。正在运行的版本与最新版本会保留。可以安全删除。";
+
+/* cursor-agent-install-leftovers */
+"Cursor Agent Install Leftovers" = "Cursor Agent 安装残留";
+"Unfinished installs and a download left by Cursor's agent CLI updates. Only items untouched for a day are listed. The installed versions stay." = "Cursor 的 agent CLI 更新时留下的未完成安装和下载。只列出一天内未改动的项目。已安装的版本会保留。";
+
+/* claude-code-downloads */
+"Old Claude Code Downloads" = "旧版 Claude Code 下载";
+"Claude Code installers older than the version you run. Claude Code runs from its versions folder and doesn't open these again." = "比你正在运行的版本更旧的 Claude Code 安装文件。Claude Code 从其版本文件夹运行，不会再打开这些文件。";
+
+/* android-ndk-version */
+"Android NDK" = "Android NDK";
+"An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays." = "较旧的 Android NDK。项目需要时，Gradle 会重新下载它。不用 Gradle 的构建可能会失败，直到你重新安装它。最新的版本会保留。";
+
+/* android-system-images */
+"Unused Android System Images" = "未使用的 Android 系统映像";
+"Emulator images no emulator in ~/.android/avd uses. Android Studio downloads one again when you need it. If you keep emulators elsewhere, check them first." = "~/.android/avd 中没有模拟器使用的模拟器映像。需要时，Android Studio 会重新下载。如果你把模拟器放在其他位置，请先检查。";
+
+/* old-figma-profiles */
+"Old Figma Profiles" = "旧版 Figma 配置文件";
+"Earlier Figma profiles. Figma copied each one into the profile it uses now and doesn't read them again. They still hold old cookies and site data." = "较早的 Figma 配置文件。Figma 已将每个配置文件复制到当前使用的配置文件中，不会再读取它们。它们仍保存着旧的 Cookie 和网站数据。";
 
 /* pre-commit-cache */
 "pre-commit Environments" = "pre-commit 环境";
 "Tool environments that pre-commit sets up to run your git hooks. Safe to delete; they are set up again on your next commit, which makes that commit slow." = "pre-commit 为运行 Git 钩子而设置的工具环境。可以安全删除，下次提交时会重新设置，导致该次提交较慢。";
+
+/* prek-cache */
+"prek Cache" = "prek 缓存";
+"Cached hook repositories, environments and tools. Clean while prek is idle. The next run rebuilds them. Recovery patches stay." = "缓存的钩子仓库、运行环境和工具。请在 prek 空闲时清理。下次运行时会重新创建这些缓存。恢复补丁会保留。";
 
 /* expo-cache */
 "Expo Cache" = "Expo 缓存";
@@ -1126,11 +1150,11 @@
 
 /* puppeteer-browsers */
 "Puppeteer Browsers" = "Puppeteer 浏览器";
-"Browsers Puppeteer downloaded for automated testing. Your scripts fail until the browser is installed again, which happens on your next npm install or with npx puppeteer browsers install." = "Puppeteer 为自动化测试下载的浏览器。重新安装浏览器前，脚本会失败；下次运行 npm install 时会自动重新安装，也可以运行 npx puppeteer browsers install 手动安装。";
+"Browsers Puppeteer downloaded for automated tests. Scripts fail until it is installed again with npm install or npx puppeteer browsers install." = "Puppeteer 为自动化测试下载的浏览器。重新安装前脚本会失败，可运行 npm install 或 npx puppeteer browsers install 重新安装。";
 
 /* conda-packages */
 "Conda Package Cache" = "Conda 软件包缓存";
-"Packages conda downloaded and unpacked to build your environments. Your environments keep working because they link to these files, which also means deleting frees less space than shown until those environments are removed. Running conda clean --all does this more carefully." = "conda 为构建环境而下载并解包的软件包。环境通过链接使用这些文件，因此仍可继续运行；这也意味着，在移除这些环境前，删除所释放的空间会少于显示值。运行 conda clean --all 会更谨慎地处理清理。";
+"Packages conda unpacked to build your environments, which link to these files and keep working. Deleting frees less than shown; conda clean --all is safer." = "conda 为构建环境解包的软件包，环境链接这些文件，仍可继续运行。删除释放的空间少于显示值；conda clean --all 更稳妥。";
 
 /* effectcraft */
 "EffectCraft Render Cache" = "EffectCraft 渲染缓存";
@@ -1138,12 +1162,49 @@
 
 /* dart-analysis-cache */
 "Dart Analysis Cache" = "Dart 分析缓存";
-"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work." = "Dart 和 Flutter 语言服务器保存在 ~/.dartServer 中的分析结果，用于让编辑器更快打开项目。可以安全删除，分析器会在工作时重建。";
+"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "Dart 和 Flutter 语言服务器保存在 ~/.dartServer 中的分析结果，用于更快打开项目。可以安全删除，分析器会重建。";
 
 /* hermes-agent-cache */
 "Hermes Agent Cache" = "Hermes 代理缓存";
-"Downloads, catalogues and scratch space the Hermes agent keeps in ~/.hermes/cache. Nothing is lost, but a running Hermes task may be using the scratch space, so clean it while Hermes is idle. Settings, keys and sessions are left alone." = "Hermes 代理保存在 ~/.hermes/cache 中的下载、目录和临时工作空间。不会丢失内容，但正在运行的 Hermes 任务可能正在使用临时工作空间，请在 Hermes 空闲时清理。不会动设置、密钥和会话。";
+"Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay." = "Hermes 代理在 ~/.hermes/cache 中的下载与临时空间。运行中的任务可能正在使用，请在 Hermes 空闲时清理。不会动设置、密钥和会话。";
 
 /* antigravity-browser-cache */
 "Antigravity Browser Cache" = "Antigravity 浏览器缓存";
-"Page and script caches of the browser Antigravity uses for web tasks. Safe to delete; the browser fills them again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity 用于网页任务的浏览器的网页与脚本缓存。可以安全删除，浏览器加载页面时会重新填充。不会动登录信息、历史记录和扩展。";
+"Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity 网页任务浏览器的网页与脚本缓存，加载页面时会重新填充。不会动登录信息、历史记录和扩展。";
+
+/* nvm-download-cache */
+"nvm Download Cache" = "nvm 下载缓存";
+"Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it." = "nvm 安装某个版本后保留的 Node.js 下载文件。不会动已安装的版本。可以安全删除，重新安装某个版本时 nvm 会再次下载。";
+
+/* giget-cache */
+"giget Template Cache" = "giget 模板缓存";
+"Project templates giget downloaded for tools like nuxi init. Safe to delete; they download again the next time you create a project." = "giget 为 nuxi init 等工具下载的项目模板。可以安全删除，下次创建项目时会重新下载。";
+
+/* firebase-emulators */
+"Firebase Emulators" = "Firebase 模拟器";
+"Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators." = "Firebase CLI 下载的模拟器文件。可以安全删除，下次启动模拟器时 Firebase CLI 会重新下载。";
+
+/* gradle-leftovers */
+"Gradle Logs and Temp Files" = "Gradle 日志与临时文件";
+"Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete." = "已停止的 Gradle 守护进程留下的日志，以及在没有构建运行时、已超过一周的 Gradle 临时文件。Gradle 需要时会重新生成。可以安全删除。";
+
+/* clang-module-cache */
+"Clang Module Cache" = "Clang 模块缓存";
+"Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again." = "clang 和 Swift 编译器为命令行构建和脚本保留的已编译模块文件。Xcode 自身的构建使用另一个文件夹。可以安全删除，下次编译时会重新生成。";
+
+/* codexbar-cache */
+"CodexBar Cache" = "CodexBar 缓存";
+"Web downloads and update files the CodexBar menu bar app keeps. Safe to delete; CodexBar downloads them again when needed." = "CodexBar 菜单栏应用保留的网络下载与更新文件。可以安全删除，CodexBar 需要时会重新下载。";
+
+/* codexbar-usage-history */
+"CodexBar Usage History" = "CodexBar 用量记录";
+"Cost and usage totals CodexBar worked out from your Claude and Codex session logs. CodexBar works them out again, but days whose logs are gone stay missing." = "CodexBar 根据 Claude 和 Codex 会话日志算出的费用与用量统计。CodexBar 会重新计算，但日志已不在的日期将无法恢复。";
+
+/* intelligenceflowd-cache */
+"Apple Intelligence Service Cache" = "Apple 智能服务缓存";
+"Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them." = "一个 Apple 智能后台服务保留的网络下载与已编译模型文件。不会动 Apple 智能模型本身。可以安全删除，该服务下次需要时 macOS 会重新生成。";
+
+
+/* swift-frontend-cache */
+"Swift Compiler Cache" = "Swift 编译器缓存";
+"Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them." = "Swift 编译器保留的已编译模型文件。可以安全删除，编译器下次需要时会重新生成。";

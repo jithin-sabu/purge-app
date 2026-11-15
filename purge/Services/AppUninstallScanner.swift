@@ -18,12 +18,18 @@ nonisolated final class AppUninstallScanner {
     /// catalog in the app; tests hand in a small one.
     private let catalog: AppDotFolderCatalog
 
+    /// Where Homebrew's Caskrooms are looked for (#254). Tests hand in a
+    /// temporary prefix so the scan never reads this Mac's.
+    private let homebrewPrefixes: [URL]
+
     init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        catalog: AppDotFolderCatalog = .shared
+        catalog: AppDotFolderCatalog = .shared,
+        homebrewPrefixes: [URL] = HomebrewCaskCatalog.defaultPrefixes
     ) {
         self.home = home
         self.catalog = catalog
+        self.homebrewPrefixes = homebrewPrefixes
     }
 
     // MARK: Installed apps
@@ -31,17 +37,21 @@ nonisolated final class AppUninstallScanner {
     /// Streams the apps the uninstaller can act on. Bundles under `/System` and
     /// Purge itself are never emitted.
     func installedAppsStream() -> AsyncStream<InstalledApp> {
-        AsyncStream { continuation in
+        AsyncStream { [homebrewPrefixes] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runInstalledAppsScan(continuation: continuation)
+                Self.runInstalledAppsScan(homebrewPrefixes: homebrewPrefixes, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    private static func runInstalledAppsScan(continuation: AsyncStream<InstalledApp>.Continuation) {
+    private static func runInstalledAppsScan(
+        homebrewPrefixes: [URL],
+        continuation: AsyncStream<InstalledApp>.Continuation
+    ) {
         let apps = discoverInstalledApps()
         let runningIDs = runningBundleIDs()
+        let casks = HomebrewCaskCatalog.installedCasks(prefixes: homebrewPrefixes)
 
         // Yield as soon as the bundle is identified. Spotlight's indexed size is
         // a cheap first figure so the list can paint without waiting on `du`;
@@ -57,11 +67,19 @@ nonisolated final class AppUninstallScanner {
                     bundleID: app.bundleID,
                     bundleSizeBytes: size,
                     isRunning: isRunning,
-                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL)
+                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL),
+                    homebrewCask: casks[app.bundleURL.standardizedFileURL.path],
+                    volumeName: driveName(of: app.bundleURL)
                 )
             )
         }
         continuation.finish()
+    }
+
+    /// The name of the drive `bundleURL` is on, or nil on the home folder's volume.
+    static func driveName(of bundleURL: URL) -> String? {
+        guard !AppFolders.isOnHomeVolume(bundleURL) else { return nil }
+        return (try? bundleURL.resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName
     }
 
     /// An app the uninstaller can act on, found but not yet measured.
@@ -77,15 +95,42 @@ nonisolated final class AppUninstallScanner {
     /// Access.
     static func discoverInstalledApps() -> [DiscoveredApp] {
         discoverAppBundleURLs().compactMap { bundleURL in
-            let bundle = Bundle(url: bundleURL)
-            let bundleID = bundle?.bundleIdentifier
+            let bundleID = AppBundleReach.bundleID(at: bundleURL)
             guard !AppUninstallScanPolicy.isProtectedApp(bundleURL: bundleURL, bundleID: bundleID) else {
                 return nil
             }
             return DiscoveredApp(
-                name: displayName(for: bundleURL, bundle: bundle),
+                name: displayName(for: bundleURL, bundle: Bundle(url: bundleURL)),
                 bundleURL: bundleURL,
                 bundleID: bundleID
+            )
+        }
+    }
+
+    /// Where Apple's own apps live. Safari sits in the system cryptex, and
+    /// `/Applications/Safari.app` only links to it.
+    static let systemAppRoots = [
+        URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+        URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications", isDirectory: true)
+    ]
+
+    /// The apps the uninstaller never lists but that still use their files:
+    /// Apple's apps, and any app-root entry `isProtectedApp` holds back (#176).
+    /// A removal counts them with the installed apps when it holds back a
+    /// leftover another app still uses, so taking out a second copy that carries
+    /// an Apple bundle id never takes the system app's settings with it.
+    static func protectedApps(systemRoots: [URL] = systemAppRoots) -> [InstalledApp] {
+        let protectedInRoots = discoverAppBundleURLs().filter { url in
+            AppUninstallScanPolicy.isProtectedApp(bundleURL: url, bundleID: AppBundleReach.bundleID(at: url))
+        }
+        let system = systemRoots.flatMap { AppBundleReach.appBundleURLs(in: $0) ?? [] }
+        return (system + protectedInRoots).map { url in
+            InstalledApp(
+                name: displayName(for: url, bundle: Bundle(url: url)),
+                bundleURL: url,
+                bundleID: AppBundleReach.bundleID(at: url),
+                bundleSizeBytes: 0,
+                isRunning: false
             )
         }
     }
@@ -99,7 +144,7 @@ nonisolated final class AppUninstallScanner {
         var result: [URL] = []
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
-            for url in AppBundleReach.appBundleURLs(in: root) ?? [] {
+            for url in AppFolders.appBundleURLs(in: root) ?? [] {
                 let key = url.standardizedFileURL.path
                 guard !seen.contains(key) else { continue }
                 seen.insert(key)
@@ -112,6 +157,9 @@ nonisolated final class AppUninstallScanner {
     /// Also read by `OrphanLeftoverScanPolicy.makeInstalledAppIndex`, so the
     /// Leftovers scan knows installed apps by the same names the uninstaller
     /// matches with.
+    /// Names come through `Bundle`, which localizes them the way Finder shows
+    /// them. Bundle ids, which the gates read, come from `AppBundleReach` fresh
+    /// from disk, since `Bundle` caches per path for the life of the process.
     static func displayName(for bundleURL: URL, bundle: Bundle?) -> String {
         if let display = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
            !display.isEmpty {
@@ -134,26 +182,69 @@ nonisolated final class AppUninstallScanner {
 
     /// Streams the chosen app's bundle plus every leftover matched to it. Sizes
     /// are resolved in one pass before emitting, so the review list is complete
-    /// and sortable when it appears.
-    func leftoverStream(for app: InstalledApp) -> AsyncStream<UninstallItem> {
+    /// and sortable when it appears. `knownBundleBytes` is the bundle's size when
+    /// the caller has just measured it with `du`: the bundle is then not walked
+    /// again, which for a big app is most of the scan.
+    ///
+    /// `rootListings` is the leftover roots listed once for many apps' scans
+    /// (`listLeftoverRoots()`); without it each scan lists them itself.
+    func leftoverStream(
+        for app: InstalledApp,
+        knownBundleBytes: Int64? = nil,
+        rootListings: LeftoverRootListings? = nil
+    ) -> AsyncStream<UninstallItem> {
         AsyncStream { [home, catalog] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runLeftoverScan(for: app, home: home, catalog: catalog, continuation: continuation)
+                Self.runLeftoverScan(
+                    for: app,
+                    home: home,
+                    catalog: catalog,
+                    knownBundleBytes: knownBundleBytes,
+                    rootListings: rootListings,
+                    continuation: continuation
+                )
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// The entries of every leftover root, hidden ones included (#352), listed
+    /// once so a pass over many apps does not list the same Library folders for
+    /// each one. A root that could
+    /// not be listed is kept as nil, which a scan treats as it would its own
+    /// failed listing.
+    struct LeftoverRootListings: Sendable {
+        fileprivate let entriesByRoot: [String: [URL]?]
+    }
+
+    /// Lists the leftover roots now, off the main actor.
+    @concurrent func listLeftoverRoots() async -> LeftoverRootListings {
+        let fm = FileManager.default
+        var entries: [String: [URL]?] = [:]
+        for root in AppUninstallScanPolicy.leftoverSearchRoots(home: home) {
+            entries[root.url.path] = try? fm.contentsOfDirectory(
+                at: root.url,
+                includingPropertiesForKeys: nil,
+                options: []
+            )
+        }
+        return LeftoverRootListings(entriesByRoot: entries)
     }
 
     private struct Match {
         let url: URL
         let category: UninstallCategory
         let reason: MatchReason
+        /// An Application Scripts folder with files in it (#352).
+        var holdsAddedScripts = false
     }
 
     private static func runLeftoverScan(
         for app: InstalledApp,
         home: URL,
         catalog: AppDotFolderCatalog,
+        knownBundleBytes: Int64?,
+        rootListings: LeftoverRootListings?,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
@@ -170,11 +261,17 @@ nonisolated final class AppUninstallScanner {
                 continuation.finish()
                 return
             }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: root.url,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-            ) else { continue }
+            let listed: [URL]?
+            if let shared = rootListings?.entriesByRoot[root.url.path] {
+                listed = shared
+            } else {
+                listed = try? fm.contentsOfDirectory(
+                    at: root.url,
+                    includingPropertiesForKeys: nil,
+                    options: []
+                )
+            }
+            guard let entries = listed else { continue }
 
             for entry in entries {
                 let name = entry.lastPathComponent
@@ -183,12 +280,17 @@ nonisolated final class AppUninstallScanner {
                     category: root.category,
                     app: app
                 ) else { continue }
+                guard AppUninstallScanPolicy.offers(reason, in: root) else { continue }
                 let key = entry.standardizedFileURL.path
                 guard !seen.contains(key) else { continue }
                 // Defend in depth: only offer what the delete gate would accept.
                 guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry, home: home) else { continue }
                 seen.insert(key)
-                matches.append(Match(url: entry, category: root.category, reason: reason))
+                let holdsAddedScripts = root.category == .applicationScripts
+                    && AppUninstallScanPolicy.scriptsFolderHoldsFiles(entry)
+                matches.append(Match(
+                    url: entry, category: root.category, reason: reason, holdsAddedScripts: holdsAddedScripts
+                ))
             }
         }
 
@@ -206,16 +308,20 @@ nonisolated final class AppUninstallScanner {
             matches.append(Match(url: url, category: .homeFolderData, reason: .dotFolderCatalog))
         }
 
-        let sizes = FolderSizing.directorySizes(at: matches.map(\.url))
+        let measured = knownBundleBytes == nil ? matches : matches.filter { $0.category != .bundle }
+        let sizes = FolderSizing.directorySizes(at: measured.map(\.url), split: .spread)
 
         for match in matches {
             if Task.isCancelled { break }
-            let size = sizes[match.url.standardizedFileURL.path] ?? 0
+            let size = match.category == .bundle
+                ? knownBundleBytes ?? sizes[match.url.standardizedFileURL.path] ?? 0
+                : sizes[match.url.standardizedFileURL.path] ?? 0
             let safety = AppUninstallScanPolicy.safetyInfo(
                 for: match.reason,
                 category: match.category,
                 url: match.url,
-                appName: app.name
+                appName: app.name,
+                holdsAddedScripts: match.holdsAddedScripts
             )
             continuation.yield(
                 UninstallItem(
@@ -228,8 +334,11 @@ nonisolated final class AppUninstallScanner {
                     // matched item starts checked. The user unticks anything they
                     // want to keep. A catalog dot folder is the exception: it holds
                     // settings and extensions, not a cache, so it starts unticked
-                    // and the user opts in (#228).
-                    isSelected: match.category != .homeFolderData
+                    // and the user opts in (#228). So does an Application Scripts
+                    // folder with scripts in it, which the user may have written
+                    // (#352).
+                    isSelected: match.category != .homeFolderData && !match.holdsAddedScripts,
+                    holdsAddedScripts: match.holdsAddedScripts
                 )
             )
         }

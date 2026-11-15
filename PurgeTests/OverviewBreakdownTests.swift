@@ -110,6 +110,37 @@ struct OverviewBreakdownTests {
         #expect(breakdown.categoryBytes[.apps] == nil)
     }
 
+    /// A home folder linked to another drive lists its files by their
+    /// `/Volumes/…` path (#273). They are not on this disk, so the bar leaves
+    /// them out. The 500 GB example from the PR #276 review: counted, Large
+    /// Files filled the bar and Free was drawn short.
+    @Test func largeFilesOnAnotherDriveAreNotCountedOnThisDisk() {
+        let rows = [
+            LargeFile(path: URL(fileURLWithPath: "/Volumes/Data/Movies/archive.mov"), sizeBytes: 500 * gb, lastUsed: Date(), category: .video),
+            LargeFile(path: URL(fileURLWithPath: "/Users/me/Movies/trip.mov"), sizeBytes: 12 * gb, lastUsed: Date(), category: .video),
+        ]
+        let items = PurgeStore.overviewItems(forLargeFiles: rows)
+        #expect(items.map(\.path) == ["/Users/me/Movies/trip.mov"])
+
+        let breakdown = OverviewBreakdown(totalBytes: 500 * gb, freeBytes: 300 * gb, sources: [.largeFiles: .live(items)])
+        #expect(breakdown.bytes(for: .largeFiles) == 12 * gb)
+        #expect(breakdown.everythingElseBytes == 188 * gb)
+    }
+
+    /// An app on a drive (#99) counts the leftovers it keeps in `~/Library` on
+    /// this disk, and not its bundle, which is on the drive.
+    @Test func appsOnAnotherDriveCountOnlyTheirLeftovers() {
+        let items = PurgeStore.onThisDisk([
+            item("/Volumes/SSD/Applications/Luminar Neo.app", 4 * gb),
+            item("/Users/me/Library/Caches/com.skylum.luminarneo", 2 * gb),
+            item("/Applications/Tool.app", 1 * gb),
+        ])
+        #expect(items.map(\.path) == [
+            "/Users/me/Library/Caches/com.skylum.luminarneo",
+            "/Applications/Tool.app",
+        ])
+    }
+
     @Test func everythingElseNeverGoesNegative() {
         // Hard links counted by two scans can add up to more than the used space.
         let breakdown = OverviewBreakdown(
@@ -209,7 +240,7 @@ struct OverviewPresentationTests {
     }
 
     @MainActor
-    @Test func aCategoryQueuedForARescanShowsNoFigure() {
+    @Test func aQueuedCategoryWithNoSavedFigureShowsNone() {
         let fake = FakeScans()
         defer { fake.cleanUp() }
         let store = fake.makeStore()
@@ -218,6 +249,52 @@ struct OverviewPresentationTests {
         #expect(!store.isShowingRecordedFigure(for: .appCaches))
         let breakdown = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
         #expect(breakdown.bytes(for: .appCaches) == 0)
+    }
+
+    /// A reopen shows what the last scan found while the rescan waits its turn (#283).
+    @MainActor
+    @Test func aCategoryQueuedForARescanShowsItsSavedFigureDimmed() {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let saved = Date(timeIntervalSinceNow: -2 * 24 * 60 * 60)
+        ScanRecordStore(defaults: fake.defaults).save(
+            ScanRecord(completedAt: saved, bytes: 7_000_000_000, count: 40, safeBytes: 5_000_000_000),
+            for: .appCaches
+        )
+        let store = fake.makeStore()
+        store.scanQueue.enqueue([.cachesAndDevTools])
+        #expect(store.overviewPhase(for: .appCaches) == .waiting)
+        #expect(store.isShowingRecordedFigure(for: .appCaches))
+        #expect(store.applicableRecord(for: .appCaches)?.completedAt == saved)
+        let breakdown = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        #expect(breakdown.bytes(for: .appCaches) == 7_000_000_000)
+    }
+
+    /// The saved figure stays until the step is done, so the row never climbs from
+    /// zero over a figure the user already saw. Then the live one takes over.
+    @MainActor
+    @Test func aScanningCategoryKeepsItsSavedFigureUntilTheStepFinishes() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        ScanRecordStore(defaults: fake.defaults).save(
+            ScanRecord(completedAt: Date(timeIntervalSinceNow: -3600), bytes: 7_000_000_000, count: 40, safeBytes: 5_000_000_000),
+            for: .appCaches
+        )
+        let store = fake.makeStore()
+        fake.holdsGeneral = true
+        store.startLaunchScans()
+        #expect(await eventually { store.overviewPhase(for: .appCaches) == .scanning })
+        #expect(store.isShowingRecordedFigure(for: .appCaches))
+        let during = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        #expect(during.bytes(for: .appCaches) == 7_000_000_000)
+
+        fake.holdsGeneral = false
+        fake.finishHeldGeneral()
+        #expect(await eventually { store.overviewPhase(for: .appCaches) == .ready })
+        #expect(!store.isShowingRecordedFigure(for: .appCaches))
+        let after = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        // The fake scan finds nothing, so the live figure replaces the saved one.
+        #expect(after.bytes(for: .appCaches) == 0)
     }
 
     @MainActor
@@ -231,9 +308,20 @@ struct OverviewPresentationTests {
     }
 
     @Test func sharesUnderATenthOfAPercentSaySo() {
-        #expect(OverviewCategoryStyle.shareText(0) == "0%")
-        #expect(OverviewCategoryStyle.shareText(0.0004) == "<0.1%")
-        #expect(OverviewCategoryStyle.shareText(0.078) == "7.8%")
+        let english = Locale(identifier: "en_US")
+        #expect(OverviewCategoryStyle.shareText(0, locale: english) == "0%")
+        #expect(OverviewCategoryStyle.shareText(0.0004, locale: english) == "<0.1%")
+        #expect(OverviewCategoryStyle.shareText(0.078, locale: english) == "7.8%")
+        #expect(OverviewCategoryStyle.shareText(0.01, locale: english) == "1.0%")
+        #expect(OverviewCategoryStyle.shareText(1, locale: english) == "100.0%")
+    }
+
+    /// The Overview showed "1.0%" beside "5,04 ГБ" on a Mac set to Russian.
+    @Test func sharesUseTheLanguagesDecimalSeparator() {
+        let russian = Locale(identifier: "ru_RU")
+        #expect(OverviewCategoryStyle.shareText(0.078, locale: russian) == "7,8\u{00A0}%")
+        #expect(OverviewCategoryStyle.shareText(0.0004, locale: russian) == "<0,1\u{00A0}%")
+        #expect(OverviewCategoryStyle.shareText(0, locale: russian) == "0\u{00A0}%")
     }
 
     @MainActor

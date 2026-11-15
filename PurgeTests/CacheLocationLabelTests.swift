@@ -98,4 +98,23 @@ struct CacheLocationLabelTests {
         )
         #expect(label == "Claude")
     }
+
+    /// Unsent crash reports from every app share one row (#367), so each folder's
+    /// label starts with its app's folder.
+    @Test func unsentCrashReportsShowTheirApp() {
+        let item = CacheItem(
+            definitionKey: "crashpad-pending",
+            locations: [
+                location("Library/Application Support/Codex/Crashpad/pending", folderName: "Codex"),
+                location("Library/Application Support/com.openai.codex/web/Crashpad/pending",
+                         folderName: "com.openai.codex"),
+            ],
+            appName: "Unsent Crash Reports",
+            safetyInfo: safetyInfo("Unsent Crash Reports")
+        )
+
+        let candidates = PurgeStore.DeletionCandidate.deletionCandidates(forCache: item)
+
+        #expect(candidates.map(\.subtitle) == ["Codex/Crashpad/pending", "com.openai.codex/web/Crashpad/pending"])
+    }
 }

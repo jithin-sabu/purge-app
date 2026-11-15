@@ -1,11 +1,37 @@
 import SwiftUI
 
 struct OnboardingResultsCategory: Identifiable {
-  let title: String
-  let symbol: String
+  /// What the bytes are. "Show me" picks its tab by this, never by the title,
+  /// which is translated (#187).
+  enum Kind {
+    case appCaches
+    case devArtifacts
+    case browserCaches
+    case systemJunk
+  }
+
+  let kind: Kind
   let bytes: Int64
 
-  var id: String { title }
+  var id: Kind { kind }
+
+  var title: String {
+    switch kind {
+    case .appCaches: return String(localized: "App caches")
+    case .devArtifacts: return String(localized: "Dev tool artifacts")
+    case .browserCaches: return String(localized: "Browser caches")
+    case .systemJunk: return String(localized: "System junk")
+    }
+  }
+
+  var symbol: String {
+    switch kind {
+    case .appCaches: return "internaldrive"
+    case .devArtifacts: return "hammer"
+    case .browserCaches: return "globe"
+    case .systemJunk: return "doc.text"
+    }
+  }
 }
 
 struct OnboardingResultsSnapshot {
@@ -14,10 +40,18 @@ struct OnboardingResultsSnapshot {
 }
 
 extension PurgeStore {
-  static let devArtifactCategoryTitle = "Dev tool artifacts"
+  /// The big number, its rows and the Clean button all come from the list the
+  /// clean takes, so they show what it moves. The number used to be the sidebar
+  /// total, worked out by other rules (#183).
+  var onboardingResultsSnapshot: OnboardingResultsSnapshot {
+    onboardingResultsSnapshot(for: manualSafeCleanupCandidates())
+  }
 
-  var onboardingResultsCategories: [OnboardingResultsCategory] {
-    resultsCategories(for: manualSafeCleanupCandidates())
+  func onboardingResultsSnapshot(for candidates: [DeletionCandidate]) -> OnboardingResultsSnapshot {
+    OnboardingResultsSnapshot(
+      totalBytes: candidates.reduce(Int64(0)) { $0 + $1.sizeBytes },
+      categories: resultsCategories(for: candidates)
+    )
   }
 
   func resultsCategories(for candidates: [DeletionCandidate]) -> [OnboardingResultsCategory] {
@@ -26,10 +60,19 @@ extension PurgeStore {
     var systemJunkBytes: Int64 = 0
     var devArtifactBytes: Int64 = 0
 
+    // One pass over the cache rows, by the paths each row stored when it was
+    // made. Searching every row's folders for every candidate, standardizing both
+    // paths each time, took about 900 ms for 300 rows of two folders (#190). The
+    // first row that holds a path wins, as the search did.
+    var cacheItemByPath: [String: CacheItem] = [:]
+    for item in cacheItems {
+      for path in item.standardizedPaths where cacheItemByPath[path] == nil {
+        cacheItemByPath[path] = item
+      }
+    }
+
     for candidate in candidates {
-      if let item = cacheItems.first(where: { cacheItem in
-        cacheItem.locations.contains { $0.path.standardizedFileURL.path == candidate.path.standardizedFileURL.path }
-      }) {
+      if let item = cacheItemByPath[candidate.path.standardizedFileURL.path] {
         if Self.isBrowserCacheItem(item) {
           browserBytes += candidate.sizeBytes
         } else if Self.isSystemJunkCacheItem(item) {
@@ -43,10 +86,10 @@ extension PurgeStore {
     }
 
     let categories = [
-      OnboardingResultsCategory(title: String(localized: "App caches"), symbol: "internaldrive", bytes: appCacheBytes),
-      OnboardingResultsCategory(title: Self.devArtifactCategoryTitle, symbol: "hammer", bytes: devArtifactBytes),
-      OnboardingResultsCategory(title: String(localized: "Browser caches"), symbol: "globe", bytes: browserBytes),
-      OnboardingResultsCategory(title: String(localized: "System junk"), symbol: "doc.text", bytes: systemJunkBytes),
+      OnboardingResultsCategory(kind: .appCaches, bytes: appCacheBytes),
+      OnboardingResultsCategory(kind: .devArtifacts, bytes: devArtifactBytes),
+      OnboardingResultsCategory(kind: .browserCaches, bytes: browserBytes),
+      OnboardingResultsCategory(kind: .systemJunk, bytes: systemJunkBytes),
     ]
 
     return categories
@@ -123,18 +166,20 @@ extension PurgeStore {
     "com.apple.ATS",
   ]
 
+  /// By definition key and folder, never by row name, which is translated: in
+  /// Chinese no row name says "browser" (#183). Entries marked `kind: browser`
+  /// in explanations.json count, so a new browser entry needs no change here.
   private static func isBrowserCacheItem(_ item: CacheItem) -> Bool {
     if let key = item.definitionKey, browserDefinitionKeys.contains(key) {
       return true
     }
-
-    let folder = item.bundleID.lowercased()
-    if browserBundlePrefixes.contains(where: { folder.hasPrefix($0.lowercased()) }) {
+    if let key = item.definitionKey ?? ExplanationDatabase.definitionKey(forFolderName: item.bundleID),
+       ExplanationDatabase.kind(forKey: key) == .browser {
       return true
     }
 
-    let name = item.appName.lowercased()
-    return name.contains("browser")
+    let folder = item.bundleID.lowercased()
+    return browserBundlePrefixes.contains(where: { folder.hasPrefix($0.lowercased()) })
   }
 
   private static func isSystemJunkCacheItem(_ item: CacheItem) -> Bool {
@@ -153,20 +198,15 @@ struct OnboardingResultsStep: View {
     self.snapshot = snapshot
   }
 
-  private var totalBytes: Int64 {
-    snapshot?.totalBytes ?? store.safeRecoverableBytes
-  }
-
-  private var categories: [OnboardingResultsCategory] {
-    snapshot?.categories ?? store.onboardingResultsCategories
-  }
-
   var body: some View {
+    let shown = snapshot ?? store.onboardingResultsSnapshot
+    let totalBytes = shown.totalBytes
+    let categories = shown.categories
     VStack(alignment: .center, spacing: AppStyle.Spacing.large) {
-      VStack(alignment: .center, spacing: 32) {
+      VStack(alignment: .center, spacing: AppStyle.Spacing.xLarge) {
         VStack(alignment: .center, spacing: 0) {
           Text(formatBytes(totalBytes))
-            .font(AppStyle.Typography.display)
+            .font(AppStyle.Typography.display.numbers)
             .monospacedDigit()
             .multilineTextAlignment(.center)
             .accessibilityLabel("\(formatBytes(totalBytes)) ready to clean")

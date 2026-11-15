@@ -1,14 +1,18 @@
 import Foundation
 
 enum DeveloperScanEvent {
-    case status(String)
     case devToolFound(DevTool)
     case devToolSizeResolved(id: String, pathSizeBytesByPath: [String: Int64], sizeBytes: Int64, lastModified: Date)
     case projectGroupFound(ProjectGroup)
     case simulatorFound(SimulatorDevice)
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
+    /// Booted simulators, already sized. Shown so their space is accounted for, never
+    /// offered: `simctl delete` is not run on a device something may be using.
+    case runningSimulatorsFound([SimulatorDevice])
     /// Sized on arrival: `simctl` reports the image size, so there is no sizing pass.
     case simulatorRuntimeFound(SimulatorRuntime)
+    /// An optional Xcode component such as the Metal Toolchain, already sized (#132).
+    case xcodeComponentFound(XcodeComponent)
 }
 
 /// `nonisolated` for the same reason as `CacheScanner` — a probe confirmed
@@ -34,7 +38,6 @@ nonisolated final class DevScanner {
         "Yarn Cache": "yarn-cache",
         "CocoaPods": "cocoapods-spec-repos",
         "Android Build Cache": "android-sdk",
-        "Git Worktrees": "gitworktrees",
         "VS Code Cache": "vscode",
         "Cursor Cache": "cursor",
         "JetBrains Cache": "jetbrains",
@@ -51,13 +54,11 @@ nonisolated final class DevScanner {
         "Vagrant Cache": "vagrant",
         "Zsh Cache": "zsh",
         "Electron App Caches": "electron",
-        "Playwright Browsers": "ms-playwright",
+        PlaywrightBuildScanPolicy.label: PlaywrightBuildScanPolicy.explanationKey,
         "npm npx Cache": "npm-npx-cache",
         "npm Logs": "npm-logs",
         "Xcode Documentation Cache": "xcode-docs-cache",
         "Corepack Cache": "corepack-cache",
-        "Obsolete Cursor Extension": "obsolete-cursor-extension",
-        "Obsolete VS Code Extension": "obsolete-vscode-extension",
         "Cursor Agent Leftovers": "cursor-agent-leftover",
         "Orphaned Git Worktrees": "orphaned-git-worktree",
         "Deno Cache": "deno-cache",
@@ -65,8 +66,15 @@ nonisolated final class DevScanner {
         "Xcode Test Devices": "xctest-devices",
         "Old Claude Code Versions": "old-cli-versions",
         "Old Cursor Agent Versions": "old-cli-versions",
+        "Old Grok Versions": "old-cli-versions",
+        "Cursor Agent Install Leftovers": "cursor-agent-install-leftovers",
+        "Old Claude Code Downloads": "claude-code-downloads",
+        "Unused Android System Images": "android-system-images",
+        "Old Figma Profiles": "old-figma-profiles",
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
+        "prek Cache": "prek-cache",
+        "uv Package Cache": "uv-cache",
         "Prisma Engines": "prisma-nodejs",
         "Expo Cache": "expo-cache",
         "pyenv and rbenv Downloads": "version-manager-downloads",
@@ -78,6 +86,11 @@ nonisolated final class DevScanner {
         "Hermes Agent Cache": "hermes-agent-cache",
         "Antigravity Browser Cache": "antigravity-browser-cache",
         "Bun Cache": "bun-cache",
+        "nvm Download Cache": "nvm-download-cache",
+        "giget Template Cache": "giget-cache",
+        "Firebase Emulators": "firebase-emulators",
+        "Gradle Logs and Temp Files": "gradle-leftovers",
+        "Clang Module Cache": "clang-module-cache",
         "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
         "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
     ]
@@ -86,8 +99,24 @@ nonisolated final class DevScanner {
         Self.automaticSafetyInfo(forDevToolLabel: toolLabel, primaryPath: primaryPath)
     }
 
-    /// Shared automatic safety resolution for global dev tool rows (scan + reset/recategorize).
+    /// Shared automatic safety resolution for global dev tool rows (scan + reset).
     nonisolated static func automaticSafetyInfo(forDevToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
+        // One row per NDK version. Each label is its own definition key, so the
+        // rows stay apart, and the headline names the version (#324).
+        if let version = OldToolVersionScanPolicy.ndkVersion(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: OldToolVersionScanPolicy.ndkExplanationKey,
+                friendlyFallback: toolLabel,
+                path: primaryPath
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Android NDK \(version)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: base.reinstallCommand
+            )
+        }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -145,12 +174,11 @@ nonisolated final class DevScanner {
 
     func discoverProjectsStream(access: ScanAccess) -> AsyncStream<DeveloperScanEvent> {
         AsyncStream { continuation in
-            let task = Task.detached(priority: .background) { [weak self] in
+            let task = Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self else {
                     continuation.finish()
                     return
                 }
-                continuation.yield(.status(String(localized: "Scanning Developer Projects...")))
                 _ = await self.discoverProjects(access: access, continuation: continuation)
                 continuation.finish()
             }
@@ -162,7 +190,6 @@ nonisolated final class DevScanner {
         access: ScanAccess,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation
     ) async {
-        continuation.yield(.status(String(localized: "Scanning Dev Tools...")))
         let globalDiscoveryStart = Date()
         let (tools, toolSizeJobs) = scanGlobalCachePlaceholders(access: access)
         ScanPhaseTiming.finish(
@@ -178,9 +205,12 @@ nonisolated final class DevScanner {
             continuation.yield(.devToolFound(tool))
         }
 
+        // The device rows and the runtime rows' counts read the same device list,
+        // so `simctl` lists devices once per scan (#178).
+        let deviceListing = DeviceListingOnce.live()
+
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [toolSizeJobs] in
-                continuation.yield(.status(String(localized: "Calculating Dev Tool sizes...")))
                 let sizingStart = Date()
                 await self.runDevToolSizeJobs(toolSizeJobs, continuation: continuation)
                 let pathCount = toolSizeJobs.reduce(0) { $0 + $1.paths.count }
@@ -193,13 +223,13 @@ nonisolated final class DevScanner {
 
             group.addTask {
                 if Task.isCancelled { return }
-                continuation.yield(.status(String(localized: "Scanning iOS Simulators...")))
                 let simDiscoveryStart = Date()
-                let simulators = await self.discoverShutdownSimulatorsWithoutSizes(access: access)
+                let listing = await self.discoverSimulatorsWithoutSizes(access: access, deviceListing: deviceListing)
+                let simulators = listing.shutdown
                 ScanPhaseTiming.finish(
                     "simulator discovery",
                     since: simDiscoveryStart,
-                    detail: "\(simulators.count) shutdown simulators"
+                    detail: "\(simulators.count) shutdown simulators, \(listing.running.count) running"
                 )
                 for simulator in simulators {
                     if Task.isCancelled { return }
@@ -207,6 +237,9 @@ nonisolated final class DevScanner {
                 }
                 let simSizingStart = Date()
                 await self.runSimulatorSizeJobs(simulators, continuation: continuation)
+                if !listing.running.isEmpty, !Task.isCancelled {
+                    continuation.yield(.runningSimulatorsFound(Self.sized(listing.running)))
+                }
                 ScanPhaseTiming.finish(
                     "simulator sizing",
                     since: simSizingStart,
@@ -217,7 +250,7 @@ nonisolated final class DevScanner {
             group.addTask {
                 if Task.isCancelled { return }
                 let runtimeStart = Date()
-                let runtimes = await self.discoverSimulatorRuntimes()
+                let runtimes = await self.discoverSimulatorRuntimes(deviceListing: deviceListing)
                 ScanPhaseTiming.finish(
                     "simulator runtime discovery",
                     since: runtimeStart,
@@ -226,6 +259,21 @@ nonisolated final class DevScanner {
                 for runtime in runtimes {
                     if Task.isCancelled { return }
                     continuation.yield(.simulatorRuntimeFound(runtime))
+                }
+            }
+
+            group.addTask {
+                if Task.isCancelled { return }
+                let componentStart = Date()
+                let components = await self.discoverXcodeComponents()
+                ScanPhaseTiming.finish(
+                    "xcode component discovery",
+                    since: componentStart,
+                    detail: "\(components.count) components"
+                )
+                for component in components {
+                    if Task.isCancelled { return }
+                    continuation.yield(.xcodeComponentFound(component))
                 }
             }
         }
@@ -238,16 +286,23 @@ nonisolated final class DevScanner {
     /// Every deletable runtime image `simctl` knows about, sized by `simctl` itself.
     /// Needs no Full Disk Access: the images live outside the home folder and the
     /// listing comes from CoreSimulator, not a directory walk. Works without Xcode
-    /// too, through the framework's own `simctl` (see `Simctl`).
-    func discoverSimulatorRuntimes(now: Date = Date()) async -> [SimulatorRuntime] {
+    /// too, through the framework's own `simctl` (see `Simctl`). On a Mac with no
+    /// trace of CoreSimulator it launches nothing: the launch scan runs this on
+    /// every Mac, and a `/usr/bin` shim run there asks to install the developer
+    /// tools (#298).
+    func discoverSimulatorRuntimes(
+        now: Date = Date(),
+        coreSimulatorPresent: Bool = Simctl.coreSimulatorPresent(),
+        deviceListing: DeviceListingOnce = .live()
+    ) async -> [SimulatorRuntime] {
+        guard coreSimulatorPresent else { return [] }
         guard let listing = await Simctl.runAsync(["runtime", "list", "-j"], timeout: Self.simctlListTimeout),
               listing.succeeded else { return [] }
 
         // Device counts decide Safe versus Check First, so a failed device listing
         // is passed on as "unknown" rather than "none".
         var deviceCounts: [String: Int]?
-        if let devices = await Simctl.runAsync(["list", "devices", "-j"], timeout: Self.simctlListTimeout),
-           devices.succeeded {
+        if let devices = await deviceListing.output(), devices.succeeded {
             deviceCounts = SimulatorRuntime.deviceCounts(fromDevicesList: devices.stdout)
         }
 
@@ -266,35 +321,138 @@ nonisolated final class DevScanner {
             xcodeBuilds = []
         }
 
+        // Only adds a warning, so a failed lookup just leaves it out.
+        var deviceReach: [String: SimulatorRuntime.DeviceReach] = [:]
+        if let runtimes = await Simctl.runAsync(["list", "runtimes", "-j"], timeout: Self.simctlListTimeout),
+           runtimes.succeeded {
+            deviceReach = SimulatorRuntime.deviceReachByBuild(fromRuntimesList: runtimes.stdout)
+        }
+
+        // An older-format runtime that lives in Apple's download is left out, so a
+        // failed read is "unknown" and leaves every older-format one out (#165).
+        let downloadBuilds = SimulatorRuntime.downloads().map { Set($0.map(\.build)) }
+
         return SimulatorRuntime.parseRuntimeList(
             listing.stdout,
             deviceCountsByRuntimeIdentifier: deviceCounts,
             xcodeRuntimeBuilds: xcodeBuilds,
+            downloadBuilds: downloadBuilds,
+            deviceReachByBuild: deviceReach,
             now: now
         )
         .filter { $0.safetyInfo.level.canSurfaceInScanResults }
-        .filter { !ExcludedPathsStore.isExcluded($0.locationURL) }
+        .filter { !ExcludedSimulatorRuntimesStore.isExcluded($0) }
+    }
+
+    // MARK: - Xcode components
+
+    /// Optional Xcode components that `xcodebuild` lists as installed, sized from
+    /// their asset folder (#132). Launches nothing unless the component's AssetsV2
+    /// folder holds a download: `-showComponent` can mount the toolchain as a side
+    /// effect, and most Macs have nothing to find. `XcodeBuildTool` then runs only
+    /// a full Xcode's own `xcodebuild`, never the `/usr/bin` shim (#298).
+    func discoverXcodeComponents(
+        assetsRoot: URL = SimulatorRuntime.mobileAssetRoot,
+        run: @escaping XcodeBuildTool.Runner = XcodeBuildTool.run,
+        measure: @escaping @Sendable (URL) -> Int64? = { FolderSizing.directoryByteSizeIfMeasurable(at: $0) }
+    ) async -> [XcodeComponent] {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: Self.xcodeComponents(assetsRoot: assetsRoot, run: run, measure: measure))
+            }
+        }
+    }
+
+    /// The blocking part of `discoverXcodeComponents`, run off the main thread.
+    private static func xcodeComponents(
+        assetsRoot: URL,
+        run: XcodeBuildTool.Runner,
+        measure: (URL) -> Int64?
+    ) -> [XcodeComponent] {
+        var found: [XcodeComponent] = []
+        for kind in XcodeComponent.Kind.allCases {
+            guard XcodeComponent.mayBeInstalled(kind, in: assetsRoot),
+                  let status = XcodeBuildTool.status(of: kind, run: run, assetsRoot: assetsRoot),
+                  let asset = status.installedAsset,
+                  XcodeComponent.isOnlyDownload(asset, kind: kind, in: assetsRoot),
+                  let size = measure(asset), size > 0
+            else { continue }
+            found.append(XcodeComponent(kind: kind, build: status.build ?? "", assetURL: asset, sizeBytes: size))
+        }
+        return found
     }
 
     // MARK: - iOS Simulators
 
+    /// Shut-down simulators, which can be deleted, and every other one, which is
+    /// only shown. A booted device is skipped rather than offered, because something
+    /// (a test run, the Simulator app) may be using it; one booting, shutting down
+    /// or being created is skipped too, and so is a state Purge doesn't know (#178).
+    struct SimulatorListing: Equatable {
+        var shutdown: [SimulatorDevice] = []
+        var running: [SimulatorDevice] = []
+    }
+
     /// Metadata only (`sizeOnDisk` is `nil`). Requires a `simctl` that runs (see
     /// `Simctl`) and a CoreSimulator devices folder.
     func discoverShutdownSimulatorsWithoutSizes(access: ScanAccess = .full) async -> [SimulatorDevice] {
+        await discoverSimulatorsWithoutSizes(access: access).shutdown
+    }
+
+    func discoverSimulatorsWithoutSizes(
+        access: ScanAccess = .full,
+        deviceListing: DeviceListingOnce = .live()
+    ) async -> SimulatorListing {
         let devicesRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Developer/CoreSimulator/Devices", isDirectory: true)
         guard ProtectedLocations.isReadable(devicesRoot, access: access),
-              FileManager.default.fileExists(atPath: devicesRoot.path) else { return [] }
+              FileManager.default.fileExists(atPath: devicesRoot.path) else { return SimulatorListing() }
 
         // `nil` here also covers `Simctl.launcher()` finding no simctl at all.
-        let listing = await Simctl.runAsync(["list", "devices", "--json"], timeout: Self.simctlListTimeout)
-        return simulatorDevices(fromListing: listing, devicesRoot: devicesRoot)
-            .filter { !ExcludedPathsStore.isExcluded($0.folderURL) }
+        let listing = await deviceListing.output()
+        var result = simulatorListing(fromListing: listing, devicesRoot: devicesRoot)
+        result.shutdown.removeAll { ExcludedPathsStore.isExcluded($0.folderURL) }
+        result.running.removeAll { ExcludedPathsStore.isExcluded($0.folderURL) }
+        return result
+    }
+
+    private static func sized(_ devices: [SimulatorDevice]) -> [SimulatorDevice] {
+        let sizesByPath = FolderSizing.directorySizes(at: devices.map(\.folderURL), split: .spread)
+        return devices.map { device in
+            var sized = device
+            sized.sizeOnDisk = sizesByPath[device.folderURL.standardizedFileURL.path] ?? 0
+            return sized
+        }
     }
 
     /// CoreSimulator can take a while to answer on a cold first call; past this the plist
     /// fallback is a better answer than a stalled scan.
-    private static let simctlListTimeout: TimeInterval = 30
+    fileprivate static let simctlListTimeout: TimeInterval = 30
+
+    /// Runs `simctl list devices -j` the first time it is asked and hands every
+    /// later asker the same answer. Nothing runs until someone asks, so a part of
+    /// the scan that stops early (no CoreSimulator, no devices folder) launches
+    /// nothing (#298).
+    actor DeviceListingOnce {
+        private let run: @Sendable () async -> ProcessRunner.Output?
+        private var listing: Task<ProcessRunner.Output?, Never>?
+
+        init(run: @escaping @Sendable () async -> ProcessRunner.Output?) {
+            self.run = run
+        }
+
+        static func live() -> DeviceListingOnce {
+            DeviceListingOnce { await Simctl.runAsync(["list", "devices", "-j"], timeout: DevScanner.simctlListTimeout) }
+        }
+
+        func output() async -> ProcessRunner.Output? {
+            if let listing { return await listing.value }
+            let run = self.run
+            let started = Task { await run() }
+            listing = started
+            return await started.value
+        }
+    }
 
     /// Devices come only from a `simctl` that can also delete them, because the
     /// delete goes through the same `simctl`. The `device.plist` files stand in
@@ -302,78 +460,80 @@ nonisolated final class DevScanner {
     /// or failed (Xcode license, out-of-date CoreSimulator), every row offered
     /// would fail to delete (#161), so none are.
     func simulatorDevices(fromListing listing: ProcessRunner.Output?, devicesRoot: URL) -> [SimulatorDevice] {
-        guard let listing else { return [] }
-        if listing.timedOut { return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot) }
-        guard listing.succeeded else { return [] }
-        return parseSimulatorList(listing.stdout, devicesRoot: devicesRoot) ?? []
+        simulatorListing(fromListing: listing, devicesRoot: devicesRoot).shutdown
     }
 
-    private func parseSimulatorList(_ data: Data, devicesRoot: URL) -> [SimulatorDevice]? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let devicesMap = root["devices"] as? [String: Any] else {
-            return nil
-        }
+    func simulatorListing(fromListing listing: ProcessRunner.Output?, devicesRoot: URL) -> SimulatorListing {
+        guard let listing else { return SimulatorListing() }
+        if listing.timedOut { return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot) }
+        guard listing.succeeded else { return SimulatorListing() }
+        return parseSimulatorList(listing.stdout, devicesRoot: devicesRoot) ?? SimulatorListing()
+    }
+
+    private func parseSimulatorList(_ data: Data, devicesRoot: URL) -> SimulatorListing? {
+        guard let list = SimulatorDeviceList.parse(data) else { return nil }
 
         var built: [SimulatorDevice] = []
-        for (runtimeKey, rawList) in devicesMap {
-            guard let deviceDicts = rawList as? [[String: Any]] else { continue }
+        var running: [SimulatorDevice] = []
+        // Like before #178, a runtime whose list Purge can't read whole offers none
+        // of its devices.
+        for (runtimeKey, devices) in list.devicesByRuntime where !list.unreadableRuntimes.contains(runtimeKey) {
             let runtimeVersion = Self.runtimeVersionLabel(from: runtimeKey)
 
-            for dict in deviceDicts {
-                guard let udidString = dict["udid"] as? String,
+            for entry in devices {
+                guard let udidString = entry.udid,
                       let id = UUID(uuidString: udidString) else { continue }
 
-                let stateString = dict["state"] as? String ?? ""
-                if stateString == "Booted" { continue }
-
-                let name = dict["name"] as? String ?? String(localized: "Simulator")
-                let isAvailable = (dict["isAvailable"] as? Bool) ?? true
-
-                let lastBootedAt: Date?
-                if let iso = dict["lastBootedAt"] as? String {
-                    lastBootedAt = ISO8601DateFormatter().date(from: iso)
-                } else {
-                    lastBootedAt = nil
-                }
+                let isShutDown = entry.state == "Shutdown"
+                let name = entry.name ?? String(localized: "Simulator")
 
                 let folderURL: URL
-                if let dataPathStr = dict["dataPath"] as? String {
+                if let dataPathStr = entry.dataPath {
                     let dataURL = URL(fileURLWithPath: dataPathStr, isDirectory: true)
                     folderURL = dataURL.deletingLastPathComponent()
                 } else {
                     folderURL = devicesRoot.appendingPathComponent(udidString, isDirectory: true)
                 }
 
-                guard folderURL.standardizedFileURL.path.hasPrefix(devicesRoot.standardizedFileURL.path) else { continue }
+                guard PathContainment.isInside(folderURL.standardizedFileURL.path, devicesRoot.standardizedFileURL.path) else { continue }
                 guard FileManager.default.fileExists(atPath: folderURL.path) else { continue }
 
-                let safety = SimulatorDevice.safetyInfo(
-                    isAvailable: isAvailable,
-                    lastBootedAt: lastBootedAt,
-                    deviceName: name,
-                    runtimeVersion: runtimeVersion
-                )
-
-                built.append(
-                    SimulatorDevice(
-                        id: id,
+                let safety = !isShutDown
+                    ? SimulatorDevice.runningSafetyInfo(
                         deviceName: name,
                         runtimeVersion: runtimeVersion,
-                        isAvailable: isAvailable,
-                        lastBootedAt: lastBootedAt,
-                        sizeOnDisk: nil,
-                        folderURL: folderURL,
-                        isSelected: false,
-                        safetyInfo: safety
+                        isBooted: entry.state == "Booted"
                     )
+                    : SimulatorDevice.safetyInfo(
+                        isAvailable: entry.isAvailable,
+                        lastBootedAt: entry.lastBootedAt,
+                        deviceName: name,
+                        runtimeVersion: runtimeVersion
+                    )
+
+                let device = SimulatorDevice(
+                    id: id,
+                    deviceName: name,
+                    runtimeVersion: runtimeVersion,
+                    isAvailable: entry.isAvailable,
+                    lastBootedAt: entry.lastBootedAt,
+                    sizeOnDisk: nil,
+                    folderURL: folderURL,
+                    isSelected: false,
+                    safetyInfo: safety
                 )
+                if isShutDown {
+                    built.append(device)
+                } else {
+                    running.append(device)
+                }
             }
         }
 
-        return dedupeSimulators(built)
+        return SimulatorListing(shutdown: dedupeSimulators(built), running: dedupeSimulators(running))
     }
 
-    private func loadSimulatorsFromPlistFiles(devicesRoot: URL) -> [SimulatorDevice] {
+    private func loadSimulatorsFromPlistFiles(devicesRoot: URL) -> SimulatorListing {
         let fm = FileManager.default
         var candidates: [URL] = []
         if let top = try? fm.contentsOfDirectory(
@@ -401,13 +561,17 @@ nonisolated final class DevScanner {
         }
 
         var built: [SimulatorDevice] = []
+        var running: [SimulatorDevice] = []
         for folder in candidates {
             guard let id = UUID(uuidString: folder.lastPathComponent) else { continue }
             let plistURL = folder.appendingPathComponent("device.plist")
             guard let plist = NSDictionary(contentsOf: plistURL) as? [String: Any] else { continue }
 
-            if let stateNum = plist["state"] as? Int, stateNum == 3 { continue }
-            if let stateStr = plist["state"] as? String, stateStr == "Booted" { continue }
+            // CoreSimulator's numbers: 0 creating, 1 shut down, 2 booting, 3 booted,
+            // 4 shutting down. Only a shut-down device is offered, and a missing
+            // state is not taken for one (#178).
+            let isShutDown = (plist["state"] as? Int) == 1 || (plist["state"] as? String) == "Shutdown"
+            let isBooted = (plist["state"] as? Int) == 3 || (plist["state"] as? String) == "Booted"
 
             let name = plist["name"] as? String ?? String(localized: "Simulator")
             let runtimeKey = plist["runtime"] as? String ?? ""
@@ -418,29 +582,35 @@ nonisolated final class DevScanner {
 
             let isAvailable = !folder.path.contains("/Devices/unavailable/")
 
-            let safety = SimulatorDevice.safetyInfo(
-                isAvailable: isAvailable,
-                lastBootedAt: lastBootedAt,
-                deviceName: name,
-                runtimeVersion: runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion
-            )
-
-            built.append(
-                SimulatorDevice(
-                    id: id,
-                    deviceName: name,
-                    runtimeVersion: runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion,
+            let shownVersion = runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion
+            let safety = !isShutDown
+                ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: shownVersion, isBooted: isBooted)
+                : SimulatorDevice.safetyInfo(
                     isAvailable: isAvailable,
                     lastBootedAt: lastBootedAt,
-                    sizeOnDisk: nil,
-                    folderURL: folder,
-                    isSelected: false,
-                    safetyInfo: safety
+                    deviceName: name,
+                    runtimeVersion: shownVersion
                 )
+
+            let device = SimulatorDevice(
+                id: id,
+                deviceName: name,
+                runtimeVersion: shownVersion,
+                isAvailable: isAvailable,
+                lastBootedAt: lastBootedAt,
+                sizeOnDisk: nil,
+                folderURL: folder,
+                isSelected: false,
+                safetyInfo: safety
             )
+            if isShutDown {
+                built.append(device)
+            } else {
+                running.append(device)
+            }
         }
 
-        return dedupeSimulators(built)
+        return SimulatorListing(shutdown: dedupeSimulators(built), running: dedupeSimulators(running))
     }
 
     private func dedupeSimulators(_ items: [SimulatorDevice]) -> [SimulatorDevice] {
@@ -473,12 +643,18 @@ nonisolated final class DevScanner {
     /// Standardized paths owned by the Dev Tools scan. The general cache scan skips
     /// these up front so they don't surface under App Caches and then get removed
     /// once the dev scan claims them.
-    nonisolated static func claimedGlobalCachePaths() -> Set<String> {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        // The JetBrains row lists each IDE folder's children rather than the folder
-        // itself, so the folder is claimed by name here to keep App Caches off it.
-        let claimedRoots = [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
-        return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots).map { $0.standardizedFileURL.path })
+    nonisolated static func claimedGlobalCachePaths(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Set<String> {
+        return Set((globalCacheDefinitions(home: home).flatMap(\.paths) + claimedRoots(home: home)).map { $0.standardizedFileURL.path })
+    }
+
+    /// Folders claimed by name although no row lists them whole. The JetBrains and
+    /// Playwright rows list entries inside their folders, so each folder is
+    /// claimed here to keep App Caches off it. Reads nothing.
+    nonisolated static func claimedRoots(home: URL) -> [URL] {
+        [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
+            + PlaywrightBuildScanPolicy.roots.map { home.appendingPathComponent($0, isDirectory: true) }
     }
 
     /// `~/.gem/specs` plus each `~/.gem/ruby/<version>/cache`. Installed gems in
@@ -498,6 +674,24 @@ nonisolated final class DevScanner {
             paths.append(version.appendingPathComponent("cache", isDirectory: true))
         }
         return paths
+    }
+
+    /// Each `~/.gradle/daemon/<version>` folder and `~/.gradle/.tmp`. Which of them
+    /// may go is the policy's call, made again at delete time.
+    nonisolated static func gradleLeftoverPaths(home: URL) -> [URL] {
+        let gradle = home.appendingPathComponent(".gradle", isDirectory: true)
+        // Listing follows a link, so a `~/.gradle` linked into Documents is skipped.
+        guard ProtectedLocations.isReadable(gradle, access: .limited, home: home) else { return [] }
+        let daemonFolder = gradle.appendingPathComponent("daemon", isDirectory: true)
+        // The same for `daemon` itself, which is listed below.
+        let readable = ProtectedLocations.isReadable(daemonFolder, access: .limited, home: home)
+        // Built from the names, so each path keeps the spelling of `home`.
+        let versions = ((readable ? try? FileManager.default.contentsOfDirectory(atPath: daemonFolder.path) : nil) ?? [])
+            .filter { !$0.hasPrefix(".") }
+            .sorted()
+            .map { daemonFolder.appendingPathComponent($0, isDirectory: true) }
+        return (versions + [gradle.appendingPathComponent(".tmp", isDirectory: true)])
+            .filter { DeletionSafetyPolicy.gradleLeftover(at: $0.path, home: home.path) != nil }
     }
 
     /// Every child of each `~/Library/Caches/JetBrains/<IDE><version>` folder except
@@ -526,9 +720,9 @@ nonisolated final class DevScanner {
         return paths
     }
 
-    private nonisolated static func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-
+    private nonisolated static func globalCacheDefinitions(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [(label: String, paths: [URL])] {
         return [
             ("Xcode Derived Data", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
             ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
@@ -570,7 +764,15 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".pub-cache/git", isDirectory: true)
             ]),
             ("pre-commit Environments", [home.appendingPathComponent(".cache/pre-commit", isDirectory: true)]),
+            ("prek Cache", ["repos", "hooks", "tools", "cache"].map {
+                home.appendingPathComponent(".cache/prek/\($0)", isDirectory: true)
+            }),
             ("Prisma Engines", [home.appendingPathComponent(".cache/prisma", isDirectory: true)]),
+            // Check First: tools started with `uvx` run from environments in here, and
+            // an environment installed in symlink mode has its packages here (#345).
+            // Tools from `uv tool install` and uv's Python versions are in
+            // `~/.local/share/uv`, which is never listed.
+            ("uv Package Cache", [home.appendingPathComponent(".cache/uv", isDirectory: true)]),
             ("Expo Cache", [
                 "android-apk-cache", "ios-simulator-app-cache", "native-modules-cache",
                 "schema-cache", "template-cache", "versions-cache", "expo-go"
@@ -597,6 +799,15 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".gradle/caches", isDirectory: true),
                 home.appendingPathComponent(".gradle/wrapper/dists", isDirectory: true)
             ]),
+            // Stopped daemons' folders and a week-old temp folder; the policy keeps the rest.
+            ("Gradle Logs and Temp Files", gradleLeftoverPaths(home: home)),
+            ("nvm Download Cache", [home.appendingPathComponent(".nvm/.cache", isDirectory: true)]),
+            ("giget Template Cache", [home.appendingPathComponent(".cache/giget", isDirectory: true)]),
+            ("Firebase Emulators", [home.appendingPathComponent(".cache/firebase/emulators", isDirectory: true)]),
+            // In the per-user cache folder under /var/folders, not the home folder.
+            ("Clang Module Cache", DeletionSafetyPolicy.clangModuleCachePaths.prefix(1).map {
+                URL(fileURLWithPath: $0, isDirectory: true)
+            }),
             ("Hex Package Cache", [home.appendingPathComponent(".hex/packages", isDirectory: true)]),
             ("Rebar3 Cache", [home.appendingPathComponent(".cache/rebar3", isDirectory: true)]),
             ("NuGet Packages", [home.appendingPathComponent(".nuget/packages", isDirectory: true)]),
@@ -621,10 +832,6 @@ nonisolated final class DevScanner {
             ]),
             ("Docker Desktop", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
 
-            ("Git Worktrees", [
-                home.appendingPathComponent(".git/worktrees", isDirectory: true)
-            ]),
-
             ("VS Code Cache", [
                 home.appendingPathComponent("Library/Application Support/Code/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Code/CachedData", isDirectory: true),
@@ -644,8 +851,11 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
             ]),
 
+            // Go keeps its build cache in `~/Library/Caches/go-build` on macOS.
+            // `~/.cache/go-build` is only used when `GOCACHE` points there.
             ("Go Module Cache", [
                 home.appendingPathComponent("go/pkg/mod/cache", isDirectory: true),
+                home.appendingPathComponent("Library/Caches/go-build", isDirectory: true),
                 home.appendingPathComponent(".cache/go-build", isDirectory: true)
             ]),
 
@@ -696,12 +906,9 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Application Support/discord/Code Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Notion/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Figma/Cache", isDirectory: true)
-            ]),
-
-            ("Playwright Browsers", [
-                home.appendingPathComponent("Library/Caches/ms-playwright", isDirectory: true),
-                home.appendingPathComponent(".cache/ms-playwright", isDirectory: true)
             ])
+            // Playwright's browser folders are not a row as a whole: a project still
+            // runs some of the builds. `PlaywrightBuildScanPolicy` offers the rest (#328).
         ] + chromiumUserDataCacheDefinitions(home: home)
     }
 
@@ -722,9 +929,10 @@ nonisolated final class DevScanner {
     private func scanGlobalCachePlaceholders(access: ScanAccess) -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var staticDefinitions = Self.globalCacheDefinitions()
-            + discoverObsoleteEditorExtensionDefinitions(home: home, access: access)
             + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
             + Self.oldCLIVersionDefinitions(home: home)
+            + OldToolVersionScanPolicy.definitions(home: home)
+            + PlaywrightBuildScanPolicy.definitions(home: home, access: access)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
@@ -789,22 +997,22 @@ nonisolated final class DevScanner {
         return entries.filter { !$0.paths.isEmpty }
     }
 
-    /// Old Claude Code and Cursor Agent versions, keeping the one each command runs
-    /// and the newest. The policy re-checks this before anything is deleted.
+    /// Old Claude Code, Cursor Agent and Grok versions, keeping the one each command
+    /// runs and the newest. The policy re-checks this before anything is deleted.
     nonisolated static func oldCLIVersionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
-        let labels = ["Old Claude Code Versions", "Old Cursor Agent Versions"]
-        return zip(DeletionSafetyPolicy.cliVersionStores, labels).compactMap { pair in
-            let (store, label) = pair
+        return DeletionSafetyPolicy.cliVersionStores.compactMap { store in
+            let label = store.label
             let root = "\(homePath)/\(store.versions)"
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited),
                   let kept = DeletionSafetyPolicy.keptCLIVersions(
                     versionsRoot: root,
-                    command: "\(homePath)/\(store.command)"
+                    command: "\(homePath)/\(store.command)",
+                    entry: store.entry
                   ),
                   let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return nil }
             let old = names
-                .filter { !$0.hasPrefix(".") && !kept.contains($0) }
+                .filter { !$0.hasPrefix(".") && !kept.contains($0) && store.entry.accepts(name: $0, in: root) }
                 .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
                 .map { URL(fileURLWithPath: "\(root)/\($0)") }
             return old.isEmpty ? nil : (label, old)
@@ -826,88 +1034,6 @@ nonisolated final class DevScanner {
             )
             return entries.isEmpty ? nil : ("\(root.editor) Old Workspace Data", entries)
         }
-    }
-
-    private func discoverObsoleteEditorExtensionDefinitions(
-        home: URL,
-        access: ScanAccess
-    ) -> [(label: String, paths: [URL])] {
-        let cursor = obsoleteExtensionPaths(
-            in: home.appendingPathComponent(".cursor/extensions", isDirectory: true),
-            label: "Obsolete Cursor Extension",
-            access: access
-        )
-        let vscode = obsoleteExtensionPaths(
-            in: home.appendingPathComponent(".vscode/extensions", isDirectory: true),
-            label: "Obsolete VS Code Extension",
-            access: access
-        )
-        return cursor + vscode
-    }
-
-    private func obsoleteExtensionPaths(
-        in extensionsRoot: URL,
-        label: String,
-        access: ScanAccess
-    ) -> [(label: String, paths: [URL])] {
-        let fm = FileManager.default
-        // Listing would follow a `~/.cursor` linked into Documents.
-        guard ProtectedLocations.isReadable(extensionsRoot, access: access) else { return [] }
-        guard let entries = try? fm.contentsOfDirectory(
-            at: extensionsRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        var grouped: [String: [(version: String, url: URL)]] = [:]
-        for entry in entries {
-            // `standardizedFileURL` below would follow an entry that links out.
-            guard ProtectedLocations.isReadable(entry, access: access) else { continue }
-            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            let folderName = entry.lastPathComponent
-            if let parsed = Self.parseExtensionFolderName(folderName) {
-                grouped[parsed.base, default: []].append((parsed.version, entry.standardizedFileURL))
-            } else {
-                grouped[folderName, default: []].append(("0", entry.standardizedFileURL))
-            }
-        }
-
-        var results: [(label: String, paths: [URL])] = []
-        for (_, versions) in grouped {
-            guard versions.count > 1 else { continue }
-            let sorted = versions.sorted { Self.compareExtensionVersions($0.version, $1.version) == .orderedDescending }
-            for obsolete in sorted.dropFirst() {
-                let folderName = obsolete.url.lastPathComponent
-                results.append(("\(label): \(folderName)", [obsolete.url]))
-            }
-        }
-        return results
-    }
-
-    nonisolated static func parseExtensionFolderName(_ folderName: String) -> (base: String, version: String)? {
-        let pattern = #"^(.+)-(\d+\.\d+\.\d+(?:[-.][A-Za-z0-9]+)*)$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: folderName, range: NSRange(folderName.startIndex..., in: folderName)),
-              match.numberOfRanges == 3,
-              let baseRange = Range(match.range(at: 1), in: folderName),
-              let versionRange = Range(match.range(at: 2), in: folderName) else {
-            return nil
-        }
-        return (String(folderName[baseRange]), String(folderName[versionRange]))
-    }
-
-    nonisolated static func compareExtensionVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
-        let left = lhs.split(separator: "-").first.map(String.init) ?? lhs
-        let right = rhs.split(separator: "-").first.map(String.init) ?? rhs
-        let leftParts = left.split(separator: ".").compactMap { Int($0) }
-        let rightParts = right.split(separator: ".").compactMap { Int($0) }
-        let maxCount = max(leftParts.count, rightParts.count)
-        for index in 0..<maxCount {
-            let l = index < leftParts.count ? leftParts[index] : 0
-            let r = index < rightParts.count ? rightParts[index] : 0
-            if l != r { return l < r ? .orderedAscending : .orderedDescending }
-        }
-        return .orderedSame
     }
 
     private func groupDevToolsByDefinitionKey(_ tools: [DevTool]) -> [DevTool] {
@@ -967,7 +1093,7 @@ nonisolated final class DevScanner {
         guard !jobs.isEmpty else { return }
 
         let allPaths = jobs.flatMap(\.paths)
-        let sizesByPath = FolderSizing.directorySizes(at: allPaths)
+        let sizesByPath = FolderSizing.directorySizes(at: allPaths, split: .spread)
 
         for job in jobs {
             if Task.isCancelled { return }
@@ -998,7 +1124,7 @@ nonisolated final class DevScanner {
         guard !devices.isEmpty else { return }
 
         let folderURLs = devices.map(\.folderURL)
-        let sizesByPath = FolderSizing.directorySizes(at: folderURLs)
+        let sizesByPath = FolderSizing.directorySizes(at: folderURLs, split: .spread)
 
         for device in devices {
             if Task.isCancelled { return }
@@ -1020,13 +1146,92 @@ nonisolated final class DevScanner {
 
     private static let maxDirectoryEntriesBeforeSkip = 2000
 
-    private func discoverProjects(
+    /// Whether a root still needs walking to `depth`. `~/Developer` and `~/developer`
+    /// are one folder on the default case-insensitive volume, and a root can be a
+    /// link to another, so a folder already walked as deep is skipped, and the first
+    /// spelling listed is the one walked (#175). A root that links to home still gets
+    /// the deeper walk home itself never has. A root whose identity can't be read is
+    /// walked, as before.
+    nonisolated static func shouldWalk(
+        _ root: URL,
+        toDepth depth: Int,
+        walkedDepths: inout [FileIdentity: Int]
+    ) -> Bool {
+        guard let identity = FileIdentity(path: root.path) else { return true }
+        if let walked = walkedDepths[identity], walked >= depth { return false }
+        walkedDepths[identity] = depth
+        return true
+    }
+
+    /// Keeps the first of each project found more than once: by path, then by file
+    /// identity, since two spellings can name one folder. The home walk and a root
+    /// can reach a project as `~/developer/app` and `~/Developer/app`, and a root
+    /// that links into another reaches its projects twice (#175). A project whose
+    /// identity can't be read is kept, as before.
+    nonisolated static func firstOfEachProject(_ roots: [(URL, [ProjectType])]) -> [(URL, [ProjectType])] {
+        var seenPaths = Set<String>()
+        var seenFolders = Set<FileIdentity>()
+        return roots.filter { root in
+            guard seenPaths.insert(root.0.path).inserted else { return false }
+            guard let identity = FileIdentity(path: root.0.path) else { return true }
+            return seenFolders.insert(identity).inserted
+        }
+    }
+
+    /// Walks `roots` (the usual search roots under `home` when nil) for projects,
+    /// then sizes their artifacts. Tests pass a temporary tree, and `onDirectory`
+    /// is called with each folder as the walk enters it, so a test can cancel at
+    /// a known point of the walk.
+    func discoverProjects(
         access: ScanAccess,
         maxDepth: Int = 4,
-        continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
+        roots: [URL]? = nil,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil,
+        onDirectory: (@Sendable (URL) -> Void)? = nil
     ) async -> [ProjectGroup] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let roots = [
+        let walkStart = Date()
+        let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
+            in: roots ?? Self.projectSearchRoots(home: home),
+            home: home,
+            access: access,
+            maxDepth: maxDepth,
+            onDirectory: onDirectory
+        )
+        // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
+        guard !Task.isCancelled else { return [] }
+
+        ScanPhaseTiming.finish(
+            "discoverProjects walk",
+            since: walkStart,
+            detail: "walked \(directoriesWalked) directories, found \(discoveredRoots.count) project roots"
+        )
+
+        /// Build artifact list per root (expensive sizing runs concurrently).
+        let sizingStart = Date()
+        let filter = ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.currentThresholdDays(),
+            now: Date(),
+            live: .current()
+        )
+        let (groups, artifactsSized) = await buildProjectGroups(
+            for: discoveredRoots,
+            access: access,
+            filter: filter,
+            continuation: continuation
+        )
+        ScanPhaseTiming.finish(
+            "project artifact sizing",
+            since: sizingStart,
+            detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
+        )
+        return groups
+    }
+
+    /// The folders project discovery starts from. Home itself is walked one level
+    /// deep; the rest to `maxDepth`.
+    nonisolated static func projectSearchRoots(home: URL) -> [URL] {
+        [
             home,
             home.appendingPathComponent("Developer", isDirectory: true),
             home.appendingPathComponent("developer", isDirectory: true),
@@ -1060,8 +1265,18 @@ nonisolated final class DevScanner {
             home.appendingPathComponent("apps", isDirectory: true),
             home.appendingPathComponent("Apps", isDirectory: true),
         ]
+    }
 
-        let walkStart = Date()
+    /// Walks `roots` for project markers and returns each project root once,
+    /// shallowest first, with how many directories the walk visited.
+    /// `onDirectory` is called with each folder as the walk enters it.
+    nonisolated static func findProjectRoots(
+        in roots: [URL],
+        home: URL,
+        access: ScanAccess,
+        maxDepth: Int = 4,
+        onDirectory: (@Sendable (URL) -> Void)? = nil
+    ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
         var discoveredRoots: [(URL, [ProjectType])] = []
         var directoriesWalked = 0
@@ -1081,88 +1296,29 @@ nonisolated final class DevScanner {
             }
         }
 
-        /// Markers that identify a project type by plain file existence. Types needing
-        /// more than a filename check (Xcode bundles, Gradle's nested `android/`
-        /// folder, extension globs) are handled separately below.
-        func listTypes(at directory: URL) -> [ProjectType] {
-            var result: Set<ProjectType> = []
-
-            func anyExists(_ names: [String]) -> Bool {
-                names.contains { fm.fileExists(atPath: directory.appendingPathComponent($0).path) }
-            }
-
-            let simpleMarkers: [(ProjectType, [String])] = [
-                (.node, ["package.json"]),
-                (.rust, ["Cargo.toml"]),
-                (.flutter, ["pubspec.yaml"]),
-                (.python, ["requirements.txt", "pyproject.toml", "tox.ini"]),
-                (.elixir, ["mix.exs"]),
-                (.swiftPackage, ["Package.swift"]),
-                (.maven, ["pom.xml"]),
-                (.sbt, ["build.sbt"]),
-                (.composer, ["composer.json"]),
-                (.bundler, ["Gemfile"]),
-                (.haskellStack, ["stack.yaml"]),
-                (.zig, ["build.zig"]),
-                (.ocamlDune, ["dune-project"]),
-                (.cmake, ["CMakeLists.txt"]),
-                (.godot, ["project.godot"]),
-                (.unity, ["ProjectSettings/ProjectVersion.txt"]),
-            ]
-            for (type, markers) in simpleMarkers where anyExists(markers) {
-                result.insert(type)
-            }
-
-            if hasGradleMarker(in: directory) {
-                // Every Gradle project has a `.gradle` folder, which this type owns.
-                result.insert(.androidGradle)
-                // `.gradleJVM` additionally offers the root `build/` folder and suggests
-                // `./gradlew build`. Android projects are excluded: their build output is
-                // per-module rather than at the root, and the row would duplicate the
-                // Gradle entry above under a label and command that do not fit.
-                let isAndroid = anyExists(["android/build.gradle", "android/build.gradle.kts"])
-                    || fm.fileExists(atPath: directory.appendingPathComponent("app/src/main/AndroidManifest.xml").path)
-                if !isAndroid, anyExists(["build.gradle", "build.gradle.kts"]) {
-                    result.insert(.gradleJVM)
-                }
-            }
-
-            if containsXcodeBundle(in: directory) {
-                result.insert(.xcode)
-            }
-
-            for type in extensionMarkedTypes(in: directory) {
-                result.insert(type)
-            }
-
-            return Array(result).sorted { String(describing: $0) < String(describing: $1) }
-        }
-
         let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
 
         /// `realPath` is `directory` with its root's symlinks resolved, in a limited
         /// scan only; nil with full access, where nothing needs checking.
         func walk(directory: URL, realPath: String?, depth: Int, maxDepth: Int) {
-            guard depth <= maxDepth else { return }
+            // A newer scan replaced this one: stop rather than walk the rest of home.
+            guard depth <= maxDepth, !Task.isCancelled else { return }
             directoriesWalked += 1
+            onDirectory?(directory)
 
-            let types = listTypes(at: directory)
+            // One listing serves the project markers and the walk below (#190).
+            let listing = try? fm.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey, .nameKey],
+                options: [.skipsPackageDescendants]
+            )
+
+            let types = Self.projectTypes(at: directory, listing: listing)
             if !types.isEmpty {
                 discoveredRoots.append((directory, types))
             }
 
-            guard depth < maxDepth else { return }
-
-            let entries: [URL]
-            do {
-                entries = try fm.contentsOfDirectory(
-                    at: directory,
-                    includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .nameKey],
-                    options: [.skipsPackageDescendants]
-                )
-            } catch {
-                return
-            }
+            guard depth < maxDepth, let entries = listing else { return }
 
             guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return }
 
@@ -1192,7 +1348,8 @@ nonisolated final class DevScanner {
             }
         }
 
-        for root in roots {
+        var walkedDepths: [FileIdentity: Int] = [:]
+        for root in roots where !Task.isCancelled {
             // A limited scan resolves the root with `readlink` alone first, so a
             // root that is a link into a protected folder is never opened.
             let realRoot: String?
@@ -1207,102 +1364,114 @@ nonisolated final class DevScanner {
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
             let effectiveMaxDepth = (root.path == home.path) ? 1 : maxDepth
+            // After the checks above, since `stat` follows a link.
+            guard Self.shouldWalk(root, toDepth: effectiveMaxDepth, walkedDepths: &walkedDepths) else { continue }
             walk(directory: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth)
         }
 
-        // Deduplicate by project root path, keeping the first occurrence
-        var seen = Set<String>()
-        discoveredRoots = discoveredRoots.filter { root in
-            guard !seen.contains(root.0.path) else { return false }
-            seen.insert(root.0.path)
-            return true
-        }
-
+        discoveredRoots = Self.firstOfEachProject(discoveredRoots)
         discoveredRoots.sort { $0.0.path.count < $1.0.path.count }
-
-        ScanPhaseTiming.finish(
-            "discoverProjects walk",
-            since: walkStart,
-            detail: "walked \(directoriesWalked) directories, found \(discoveredRoots.count) project roots"
-        )
-
-        /// Build artifact list per root (expensive sizing runs concurrently).
-        let sizingStart = Date()
-        let filter = ProjectListingFilter(
-            staleDays: DevToolsStalenessOption.currentThresholdDays(),
-            now: Date(),
-            live: .current()
-        )
-        let (groups, artifactsSized) = await buildProjectGroups(
-            for: discoveredRoots,
-            access: access,
-            filter: filter,
-            continuation: continuation
-        )
-        ScanPhaseTiming.finish(
-            "project artifact sizing",
-            since: sizingStart,
-            detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
-        )
-        return groups
+        return (discoveredRoots, directoriesWalked)
     }
 
-    /// Project types identified by a file *extension* rather than an exact name.
-    /// One directory listing serves all of them, since listing is the expensive part.
-    private func extensionMarkedTypes(in directory: URL) -> [ProjectType] {
-        guard let children = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else {
-            return []
+    /// The project types a folder's markers name. `listing` is the folder's
+    /// entries, read once by the walk, or nil when it could not be listed.
+    ///
+    /// A marker is only checked on disk when the listing has an entry of that name,
+    /// compared without case as the volume compares it. `fileExists` then confirms
+    /// it, following a link, as it did when every marker was checked. A folder that
+    /// could not be listed is checked marker by marker, as before.
+    nonisolated static func projectTypes(at directory: URL, listing: [URL]?) -> [ProjectType] {
+        let fm = FileManager.default
+        let names = listing.map { Set($0.map { $0.lastPathComponent.lowercased() }) }
+
+        func exists(_ relative: String) -> Bool {
+            if let names {
+                let first = relative.prefix { $0 != "/" }.lowercased()
+                guard names.contains(first) else { return false }
+            }
+            return fm.fileExists(atPath: directory.appendingPathComponent(relative).path)
         }
 
-        var found: Set<ProjectType> = []
-        for child in children {
-            switch child.pathExtension.lowercased() {
-            case "csproj", "fsproj", "vbproj", "sln":
-                found.insert(.dotnet)
-            case "cabal":
-                found.insert(.haskellCabal)
-            case "tf":
-                found.insert(.terraform)
-            case "uproject":
-                found.insert(.unreal)
-            default:
-                continue
+        func anyExists(_ relatives: [String]) -> Bool {
+            relatives.contains(where: exists)
+        }
+
+        var result: Set<ProjectType> = []
+
+        // Markers that identify a project type by plain file existence.
+        let simpleMarkers: [(ProjectType, [String])] = [
+            (.node, ["package.json"]),
+            (.rust, ["Cargo.toml"]),
+            (.flutter, ["pubspec.yaml"]),
+            (.python, ["requirements.txt", "pyproject.toml", "tox.ini"]),
+            (.elixir, ["mix.exs"]),
+            (.swiftPackage, ["Package.swift"]),
+            (.maven, ["pom.xml"]),
+            (.sbt, ["build.sbt"]),
+            (.composer, ["composer.json"]),
+            (.bundler, ["Gemfile"]),
+            (.haskellStack, ["stack.yaml"]),
+            (.zig, ["build.zig"]),
+            (.ocamlDune, ["dune-project"]),
+            (.cmake, ["CMakeLists.txt"]),
+            (.godot, ["project.godot"]),
+            (.unity, ["ProjectSettings/ProjectVersion.txt"]),
+        ]
+        for (type, markers) in simpleMarkers where anyExists(markers) {
+            result.insert(type)
+        }
+
+        // React Native and Flutter keep their CocoaPods setup in `ios/`, which the
+        // walk never enters, so `ios/Podfile` is what unlocks the `ios/Pods` rule.
+        if anyExists(["ios/Podfile"]) {
+            result.insert(.xcode)
+        }
+
+        let hasGradleMarker = anyExists([
+            "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts",
+            "android/build.gradle", "android/build.gradle.kts",
+        ])
+        if hasGradleMarker {
+            // Every Gradle project has a `.gradle` folder, which this type owns.
+            result.insert(.androidGradle)
+            // `.gradleJVM` additionally offers the root `build/` folder and suggests
+            // `./gradlew build`. Android projects are excluded: their build output is
+            // per-module rather than at the root, and the row would duplicate the
+            // Gradle entry above under a label and command that do not fit.
+            let isAndroid = anyExists([
+                "android/build.gradle", "android/build.gradle.kts", "app/src/main/AndroidManifest.xml",
+            ])
+            if !isAndroid, anyExists(["build.gradle", "build.gradle.kts"]) {
+                result.insert(.gradleJVM)
             }
         }
-        return Array(found)
-    }
 
-    private func containsXcodeBundle(in directory: URL) -> Bool {
-        let fm = FileManager.default
-        guard let children = try? fm.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return false
+        // Xcode bundles and the types named by a file extension. These read names
+        // from the listing, leaving out hidden entries as the listings they
+        // replaced did.
+        if let listing {
+            for child in listing where (try? child.resourceValues(forKeys: [.isHiddenKey]).isHidden) != true {
+                let name = child.lastPathComponent
+                if name.hasSuffix(".xcodeproj") || name.hasSuffix(".xcworkspace") {
+                    result.insert(.xcode)
+                }
+                switch child.pathExtension.lowercased() {
+                case "csproj", "fsproj", "vbproj", "sln":
+                    result.insert(.dotnet)
+                case "cabal":
+                    result.insert(.haskellCabal)
+                case "tf":
+                    result.insert(.terraform)
+                case "uproject":
+                    result.insert(.unreal)
+                default:
+                    continue
+                }
+            }
         }
 
-        return children.contains { child in
-            let name = child.lastPathComponent
-            return name.hasSuffix(".xcodeproj") || name.hasSuffix(".xcworkspace")
-        }
-    }
-
-    private func hasGradleMarker(in directory: URL) -> Bool {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: directory.appendingPathComponent("build.gradle").path)
-            || fm.fileExists(atPath: directory.appendingPathComponent("build.gradle.kts").path)
-            || fm.fileExists(atPath: directory.appendingPathComponent("settings.gradle").path)
-            || fm.fileExists(atPath: directory.appendingPathComponent("settings.gradle.kts").path) {
-            return true
-        }
-        let android = directory.appendingPathComponent("android", isDirectory: true)
-        return fm.fileExists(atPath: android.appendingPathComponent("build.gradle").path)
-            || fm.fileExists(atPath: android.appendingPathComponent("build.gradle.kts").path)
+        return Array(result).sorted { String(describing: $0) < String(describing: $1) }
     }
 
     private func buildProjectGroups(
@@ -1399,7 +1568,7 @@ nonisolated final class DevScanner {
         }
 
         let artifactPaths = rows.map(\.path)
-        let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
+        let sizesByPath = FolderSizing.directorySizes(at: artifactPaths, split: .spread)
 
         var sized: [ProjectCacheArtifact] = []
         for row in rows {
@@ -1501,7 +1670,13 @@ nonisolated final class DevScanner {
         for a in artifacts {
             unique[a.path.path] = a
         }
-        return Array(unique.values)
+        // One rule's folder can sit inside another's (`node_modules/.vite` in
+        // `node_modules`, `vendor/bundle` in `vendor`). Both rows would size the
+        // inner folder, so it would be counted twice. The outer folder covers it.
+        let paths = Array(unique.keys)
+        return unique.values.filter { artifact in
+            !paths.contains { PathContainment.isInside(artifact.path.path, $0) }
+        }
     }
 
     private nonisolated static func reinstallCommand(rule: ProjectArtifactRule, root: URL) -> String? {

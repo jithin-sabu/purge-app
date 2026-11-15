@@ -3,12 +3,11 @@
     "key": "adobe-media-cache-files",
     "display_name": "Adobe Media Cache Files",
     "tag": "safe",
-    "explanation": "premiere pro and after effects store rendered previews and conformed audio here. safe to clean. the apps rebuild it on next launch, which can take a few minutes for large projects.",
+    "explanation": "Rendered previews and conformed audio from Premiere Pro and After Effects. The apps rebuild them on next launch, which can take minutes on large projects.",
     "bundle_ids": [],
     "aliases": [
       "Adobe Media Cache Files"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -20,7 +19,6 @@
     "aliases": [
       "Adobe Media Cache"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -33,17 +31,15 @@
       "Adobe Camera Raw",
       "Adobe Camera Raw 2"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
     "key": "android-sdk",
     "display_name": "Android Build Cache",
     "tag": "safe",
-    "explanation": "Build caches that Android Studio and Gradle keep in ~/.android. Your emulators, the key your phones trust for debugging, and your debug signing key are left alone. Safe to delete; the next build recreates them.",
+    "explanation": "Build caches in ~/.android that the next build recreates. Emulators, the key your phones trust for debugging, and your debug signing key are left alone.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -56,24 +52,21 @@
     ],
     "aliases": [
       "ai.perplexity.CometUpdater",
-      "Comet",
       "CometUpdater"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
     "key": "blender",
     "display_name": "Blender 3D App",
     "tag": "safe",
-    "explanation": "These are temporary files saved by Blender, the 3D design application. Deleting them is safe but Blender may take a little longer to start up the next time you open it.",
+    "explanation": "Temporary files Blender saves while you work. Safe to delete; Blender may take a little longer to start the next time you open it.",
     "bundle_ids": [
       "org.blenderfoundation.blender"
     ],
     "aliases": [
       "Blender"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -85,19 +78,17 @@
     "aliases": [
       "checkpoint-nodejs"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "cloudkit",
     "display_name": "iCloud Data Sync",
     "tag": "medium",
-    "explanation": "This holds the data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps will need to re-sync their data afterwards, which can take time on a slow connection.",
+    "explanation": "Data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps must sync again afterwards, which can take time on a slow connection.",
     "bundle_ids": [],
     "aliases": [
       "CloudKit"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -111,7 +102,6 @@
     "aliases": [
       "com.anthropic.claudefordesktop.ShipIt"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -125,7 +115,6 @@
     "aliases": [
       "com.apple.accountsd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -139,7 +128,6 @@
     "aliases": [
       "com.apple.akd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -153,7 +141,6 @@
     "aliases": [
       "com.apple.AMPLibraryAgent"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -167,7 +154,6 @@
     "aliases": [
       "com.apple.amsaccountsd"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -181,7 +167,6 @@
     "aliases": [
       "com.apple.amsengagementd"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -195,7 +180,6 @@
     "aliases": [
       "com.apple.ap.adprivacyd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -209,21 +193,19 @@
     "aliases": [
       "com.apple.appleaccountd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "apple-media-services",
     "display_name": "Apple Media Services",
     "tag": "safe",
-    "explanation": "This stores temporary data for Apple's media services including the App Store, Apple TV, and Apple Music. Deleting it is safe and these services will rebuild it as needed.",
+    "explanation": "Temporary data for the App Store, Apple TV and Apple Music. Safe to delete; these services rebuild it as needed.",
     "bundle_ids": [
       "com.apple.AppleMediaServices"
     ],
     "aliases": [
       "com.apple.AppleMediaServices"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -237,7 +219,6 @@
     "aliases": [
       "com.apple.appstoreagent"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -253,7 +234,6 @@
       "com.apple.assistantd",
       "com.apple.AssistantServices"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -267,7 +247,6 @@
     "aliases": [
       "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -281,21 +260,19 @@
     "aliases": [
       "com.apple.betaenrollmentagent"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "bird",
     "display_name": "iCloud Drive Sync",
     "tag": "medium",
-    "explanation": "This is used by the service that keeps iCloud Drive in sync with your Mac. Nothing is lost from iCloud, but your Mac will re-check and re-download file state afterwards.",
+    "explanation": "Used by the service that keeps iCloud Drive in sync. Nothing is lost from iCloud, but your Mac re-checks and re-downloads file state afterwards.",
     "bundle_ids": [
       "com.apple.bird"
     ],
     "aliases": [
       "com.apple.bird"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -309,7 +286,6 @@
     "aliases": [
       "com.apple.businessservicesd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -323,7 +299,6 @@
     "aliases": [
       "com.apple.cache_delete"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -337,7 +312,6 @@
     "aliases": [
       "com.apple.cloudd"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -351,7 +325,6 @@
     "aliases": [
       "com.apple.CloudTelemetry"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -365,21 +338,19 @@
     "aliases": [
       "com.apple.ctcategories.service"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "dataaccessd",
     "display_name": "Contacts & Calendar Sync",
     "tag": "medium",
-    "explanation": "This is used by the service that syncs your contacts and calendars. Nothing is lost from your accounts, but your Mac re-downloads them, and they may be briefly missing while it does.",
+    "explanation": "Used by the service that syncs your contacts and calendars. Nothing is lost, but your Mac downloads them again and they may be missing briefly.",
     "bundle_ids": [
       "com.apple.dataaccess.dataaccessd"
     ],
     "aliases": [
       "com.apple.dataaccess.dataaccessd"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -393,7 +364,6 @@
     "aliases": [
       "com.apple.donotdisturbd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -407,21 +377,19 @@
     "aliases": [
       "com.apple.duetexpertd"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
     "key": "e5bundlecache",
     "display_name": "Apple ML Model Cache",
     "tag": "safe",
-    "explanation": "Compiled copies of the machine learning models that macOS features such as Photos and Live Text use. Safe to delete; macOS compiles them again when they are next needed, which takes some processor time.",
+    "explanation": "Compiled machine learning models that macOS features such as Photos and Live Text use. macOS compiles them again when needed, using some processor time.",
     "bundle_ids": [
       "com.apple.e5rt.e5bundlecache"
     ],
     "aliases": [
       "com.apple.e5rt.e5bundlecache"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -435,7 +403,6 @@
     "aliases": [
       "com.apple.FeatureAccessAgent"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -449,7 +416,6 @@
     "aliases": [
       "com.apple.feedbacklogger"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -463,7 +429,6 @@
     "aliases": [
       "com.apple.FileProviderDaemon.AppStoreService"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -477,7 +442,6 @@
     "aliases": [
       "com.apple.findmy.fmipcore"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -491,7 +455,6 @@
     "aliases": [
       "com.apple.geoanalyticsd"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -503,7 +466,6 @@
     "aliases": [
       "GeoServices"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -517,7 +479,6 @@
     "aliases": [
       "com.apple.helpd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -533,7 +494,6 @@
       "com.apple.homed",
       "com.apple.HomeKit"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -547,7 +507,6 @@
     "aliases": [
       "com.apple.iCloudNotificationAgent"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -563,7 +522,6 @@
       "com.apple.iTunes",
       "com.apple.itunescloudd"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -577,7 +535,6 @@
     "aliases": [
       "com.apple.managedappdistributionagent"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -591,28 +548,26 @@
     "aliases": [
       "com.apple.nsurlsessiond"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "parsecd",
     "display_name": "Siri Knowledge Engine",
     "tag": "safe",
-    "explanation": "This is used by a background Apple service that helps Siri and Spotlight understand natural language queries. It is safe to delete and will be rebuilt automatically.",
+    "explanation": "Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete; it is rebuilt automatically.",
     "bundle_ids": [
       "com.apple.parsecd"
     ],
     "aliases": [
       "com.apple.parsecd"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
     "key": "passd",
     "display_name": "Apple Wallet Passes",
     "tag": "medium",
-    "explanation": "This stores temporary data for passes in your Apple Wallet, such as boarding passes and loyalty cards. Deleting it is safe but your Wallet may need to re-sync pass data.",
+    "explanation": "Temporary data for passes in Apple Wallet, such as boarding passes and loyalty cards. Safe to delete, but Wallet may need to re-sync them.",
     "bundle_ids": [
       "com.apple.passd"
     ],
@@ -620,7 +575,6 @@
       "com.apple.passd",
       "PassKit"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -634,7 +588,6 @@
     "aliases": [
       "com.apple.proactive.eventtracker"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -648,14 +601,13 @@
     "aliases": [
       "com.apple.remindd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
     "key": "safari",
     "display_name": "Safari Browser",
     "tag": "safe",
-    "explanation": "This contains Safari's temporary browsing data, including website previews and recently visited page data. Deleting it is safe but websites may load slightly slower until the data rebuilds.",
+    "explanation": "Safari's temporary browsing data, such as website previews and recent page data. Websites may load a little slower until it rebuilds.",
     "bundle_ids": [
       "com.apple.Safari",
       "com.apple.Safari.SafeBrowsing"
@@ -664,7 +616,6 @@
       "com.apple.Safari",
       "com.apple.Safari.SafeBrowsing"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -678,7 +629,6 @@
     "aliases": [
       "com.apple.shazamlibrary.cloud"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -693,21 +643,19 @@
       "com.apple.sirittsd",
       "SiriTTS"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
     "key": "spotlight",
     "display_name": "Spotlight Search",
     "tag": "medium",
-    "explanation": "This is the data Spotlight uses to search your Mac. Nothing is lost, but search results will be slow or incomplete until macOS finishes rebuilding the index, which can take a while.",
+    "explanation": "The index Spotlight uses to search your Mac. Nothing is lost, but search is slow or incomplete until macOS rebuilds the index, which can take a while.",
     "bundle_ids": [
       "com.apple.Spotlight"
     ],
     "aliases": [
       "com.apple.Spotlight"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -721,7 +669,6 @@
     "aliases": [
       "com.apple.tipsd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -735,7 +682,6 @@
     "aliases": [
       "com.apple.VideoConference"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -749,14 +695,13 @@
     "aliases": [
       "com.datadoghq"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
     "key": "google-updater",
     "display_name": "Google App Updater",
     "tag": "safe",
-    "explanation": "This stores temporary files used by Google's automatic updater to keep Google apps like Chrome up to date. It is safe to delete and will be recreated at the next update check.",
+    "explanation": "Temporary files Google's updater uses to keep apps like Chrome up to date. They are created again at the next update check.",
     "bundle_ids": [
       "com.google.antigravity.ShipIt",
       "com.google.GoogleUpdater"
@@ -766,7 +711,6 @@
       "com.google.GoogleUpdater",
       "google-sdks-events"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -780,7 +724,6 @@
     "aliases": [
       "com.microsoft.autoupdate.fba"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -794,28 +737,26 @@
     "aliases": [
       "com.microsoft.EdgeUpdater"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
     "key": "nt-ware-smartclient",
     "display_name": "NT-ware Print Client",
     "tag": "medium",
-    "explanation": "This is used by NT-ware's SmartClient, a print management tool commonly found in offices and universities. Deleting it is generally safe but the print client may need to re-configure itself.",
+    "explanation": "Used by NT-ware's SmartClient, a print management tool common in offices and universities. Usually safe to delete, but the client may set itself up again.",
     "bundle_ids": [
       "com.nt-ware.SmartClient"
     ],
     "aliases": [
       "com.nt-ware.SmartClient"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "openai-codex",
     "display_name": "OpenAI Codex",
     "tag": "safe",
-    "explanation": "Page and script caches of the Codex app and command line tool. Safe to delete; Codex rebuilds them as you use it. Your sessions and sign-in in ~/.codex are left alone.",
+    "explanation": "Page and script caches of the Codex app and command line tool, rebuilt as you use it. Your sessions and sign-in in ~/.codex are left alone.",
     "bundle_ids": [
       "com.openai.codex"
     ],
@@ -823,7 +764,6 @@
       "com.openai.codex",
       "Codex"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -837,7 +777,6 @@
     "aliases": [
       "com.todesktop.230313mzl4w4u92.ShipIt"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -855,7 +794,6 @@
       "Dia",
       "company.thebrowser.Browser"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -867,7 +805,6 @@
     "aliases": [
       "FamilyCircle"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -881,7 +818,6 @@
     "aliases": [
       "io.getpurge.app"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -896,7 +832,6 @@
       "io.sentry",
       "SentryCrash"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -908,7 +843,15 @@
     "aliases": [
       "ms-playwright-go"
     ],
-    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "playwright-unused-builds",
+    "display_name": "Unused Playwright Browsers",
+    "tag": "medium",
+    "explanation": "Browser builds no Playwright install still lists. A project that never ran npx playwright install may use one. That command downloads it again.",
+    "bundle_ids": [],
+    "aliases": [],
     "kind": "packages"
   },
   {
@@ -920,7 +863,6 @@
     "aliases": [
       "node_modules"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -932,7 +874,6 @@
     "aliases": [
       "prisma-nodejs"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -944,7 +885,6 @@
     "aliases": [
       "segment"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -956,31 +896,28 @@
     "aliases": [
       "ssu"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
     "key": "macos-installer",
     "display_name": "macOS Installer",
     "tag": "medium",
-    "explanation": "A full macOS installer downloaded from the App Store or Software Update, usually 12 to 15 GB. macOS does not need it once it is installed. Keep it if you use it to make a bootable USB installer; otherwise you can download it again from the App Store.",
+    "explanation": "A full macOS installer, usually 12 to 15 GB. macOS does not need it after installing, and the App Store has it. Keep it to make a bootable USB installer.",
     "bundle_ids": [],
     "aliases": [
       "macOS Installer"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "macos-install-data",
     "display_name": "Leftover macOS update files",
     "tag": "medium",
-    "explanation": "Install files a finished macOS update left behind. macOS does not use them again, and Settings counts them as System Data. Listed only when they are older than the installed macOS, so a waiting update is never shown.",
+    "explanation": "Install files a finished macOS update left behind, counted as System Data. Only shown when older than the installed macOS, so a waiting update never is.",
     "bundle_ids": [],
     "aliases": [
       "macOS Install Data"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -992,7 +929,6 @@
     "aliases": [
       ".dart_tool"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1004,7 +940,6 @@
     "aliases": [
       "AMSDataMigratorTool"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -1020,7 +955,6 @@
       "app.spokenly",
       "app.spokenly.revenuecat"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -1030,21 +964,19 @@
     "explanation": "Archived builds created by development tools. Check contents before deleting — may contain important project archives.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
     "key": "container-managerd",
     "display_name": "App Sandbox Manager",
     "tag": "safe",
-    "explanation": "This is used by the macOS service that manages isolated storage areas for apps. Deleting it is generally safe but some apps may need to re-establish their storage areas.",
+    "explanation": "Used by the macOS service that manages each app's private storage. Usually safe to delete, but some apps may need to set their storage up again.",
     "bundle_ids": [
       "com.apple.containermanagerd"
     ],
     "aliases": [
       "com.apple.containermanagerd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -1058,21 +990,19 @@
     "aliases": [
       "com.apple.storekitagent"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
     "key": "docker",
     "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "Every Docker image, container, and volume. A volume can hold the only copy of a database. To keep volumes, run docker --context desktop-linux system prune while Docker is open. To clean, quit Docker. The whole folder goes to the Trash.",
+    "explanation": "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker.",
     "bundle_ids": [
       "com.docker.docker"
     ],
     "aliases": [
       "com.docker.docker"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1086,7 +1016,6 @@
     "aliases": [
       "com.raycast.macos"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -1098,21 +1027,19 @@
       "deriveddata"
     ],
     "explanation": "Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer.",
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
     "key": "swiftpm",
     "display_name": "Swift Package Manager",
     "tag": "safe",
-    "explanation": "This stores downloaded Swift code libraries used by developer projects. Deleting it is safe but your projects will need to re-download their dependencies next time they are built.",
+    "explanation": "Swift packages downloaded for your projects. Each project downloads its dependencies again the next time you build it.",
     "bundle_ids": [
       "org.swift.swiftpm"
     ],
     "aliases": [
       "org.swift.swiftpm"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1124,21 +1051,19 @@
     "aliases": [
       "zen"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
     "key": "xcode-itunes-service",
     "display_name": "Xcode Device Support",
     "tag": "medium",
-    "explanation": "This stores temporary files used by Xcode when installing or testing apps on connected Apple devices. Deleting it is safe but Xcode may need to re-download device support files.",
+    "explanation": "Temporary files Xcode uses to install and test apps on connected Apple devices. Safe to delete, but Xcode may download device support files again.",
     "bundle_ids": [
       "com.apple.dt.Xcode.ITunesSoftwareService"
     ],
     "aliases": [
       "com.apple.dt.Xcode.ITunesSoftwareService"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -1152,7 +1077,6 @@
     "aliases": [
       "com.apple.gamed"
     ],
-    "scope": "app_caches",
     "kind": "games"
   },
   {
@@ -1166,7 +1090,6 @@
     "aliases": [
       "com.apple.chrono"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -1180,7 +1103,6 @@
     "aliases": [
       "com.apple.translationd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -1194,7 +1116,6 @@
     "aliases": [
       "com.figma.agent"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -1206,19 +1127,17 @@
     "aliases": [
       "GameKit"
     ],
-    "scope": "app_caches",
     "kind": "games"
   },
   {
     "key": "image-cache",
     "display_name": "Image Thumbnail Cache",
     "tag": "safe",
-    "explanation": "This stores saved image previews and thumbnails to speed up display in apps. It is safe to delete and the images will simply load a little slower until the previews rebuild.",
+    "explanation": "Saved image previews and thumbnails that speed up display in apps. Safe to delete; images load a little slower until the previews rebuild.",
     "bundle_ids": [],
     "aliases": [
       "ImageCache"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -1231,7 +1150,6 @@
       "RevenueCat",
       "RevenueCatFonts"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -1241,10 +1159,8 @@
     "explanation": "Forgotten branch checkouts created by Git. Safe to remove if you are no longer working on those branches, but check first that you have no unsaved work.",
     "bundle_ids": [],
     "aliases": [
-      "worktrees",
-      ".git/worktrees"
+      "worktrees"
     ],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -1258,7 +1174,6 @@
       "CachedData",
       "CachedExtensionVSIXs"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1270,20 +1185,18 @@
     "aliases": [
       "Cursor"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
     "key": "jetbrains",
     "display_name": "JetBrains IDE Cache",
     "tag": "safe",
-    "explanation": "Indexes and caches that JetBrains IDEs such as IntelliJ, WebStorm and PyCharm rebuild on their own. Local History is left alone. The IDE re-indexes your projects the next time you open them, which takes a few minutes.",
+    "explanation": "Indexes and caches JetBrains IDEs rebuild on their own. Local History is left alone. Each project re-indexes when you next open it, which takes a few minutes.",
     "bundle_ids": [],
     "aliases": [
       "JetBrains",
       "JetPackCache"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1296,7 +1209,6 @@
       "zed",
       "Zed"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1306,49 +1218,44 @@
     "explanation": "Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again.",
     "bundle_ids": [],
     "aliases": [
-      "go/pkg/mod",
       "go-build"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "maven",
     "display_name": "Maven Package Cache",
     "tag": "medium",
-    "explanation": "Java libraries downloaded by Maven, plus anything you built and installed locally with mvn install. Downloaded libraries come back on your next build, which can take a long time. Your own installed builds only come back if you build them again.",
+    "explanation": "Maven's downloaded libraries and your own mvn install builds. Libraries download again on your next build; your own builds come back only if you rebuild them.",
     "bundle_ids": [],
     "aliases": [
       "maven",
       ".m2"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "sbt",
     "display_name": "Ivy Dependency Cache",
     "tag": "medium",
-    "explanation": "Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but your next build downloads all of them again, which can take a long time and does not work offline.",
+    "explanation": "Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but the next build downloads them all again, which is slow and needs a connection.",
     "bundle_ids": [],
     "aliases": [
       "sbt",
       ".ivy2"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "rubygems",
     "display_name": "Ruby Gem Downloads",
     "tag": "safe",
-    "explanation": "Downloaded .gem files and the gem spec index that RubyGems keeps after installing. Your installed gems and their commands stay. Safe to delete; RubyGems downloads them again when it needs them.",
+    "explanation": "Downloaded .gem files and the spec index RubyGems keeps after installing. Your installed gems stay; RubyGems downloads these again when needed.",
     "bundle_ids": [],
     "aliases": [
       "rubygems",
       ".gem"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1361,7 +1268,6 @@
       "bundler",
       ".bundle"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1374,7 +1280,6 @@
       "composer",
       ".composer"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1387,7 +1292,6 @@
       "cargo",
       ".cargo"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1400,7 +1304,6 @@
       "terraform",
       ".terraform.d"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1413,7 +1316,6 @@
       "act",
       "github-actions"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1426,7 +1328,6 @@
       "vagrant",
       ".vagrant.d"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1440,7 +1341,6 @@
       ".zsh_sessions",
       "zcompdump"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -1453,7 +1353,6 @@
       "electron",
       "Code Cache"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1466,7 +1365,6 @@
       "Logs",
       "applogs"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -1479,7 +1377,17 @@
       "DiagnosticReports",
       "crashreports"
     ],
-    "scope": "app_caches",
+    "kind": "logs"
+  },
+  {
+    "key": "crashpad-pending",
+    "display_name": "Unsent Crash Reports",
+    "tag": "medium",
+    "explanation": "Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first.",
+    "bundle_ids": [],
+    "aliases": [
+      "Unsent Crash Reports"
+    ],
     "kind": "logs"
   },
   {
@@ -1490,21 +1398,19 @@
       "iossimulators"
     ],
     "tag": "medium",
-    "explanation": "Virtual iPhone and iPad devices that Xcode uses to test apps. Deleting one also deletes the apps and data installed on it. Xcode can create a new one whenever you need it.",
-    "scope": "dev_tools",
+    "explanation": "Virtual iPhone and iPad devices Xcode tests apps on. Deleting one also deletes its apps and data. Xcode can create a new one when you need it.",
     "kind": "devices"
   },
   {
     "key": "bun-cache",
     "display_name": "Bun Package Cache",
     "tag": "safe",
-    "explanation": "Cached packages downloaded by Bun, a fast JavaScript runtime and package manager. Safe to delete and will be re-downloaded the next time you run bun install.",
+    "explanation": "Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install.",
     "bundle_ids": [],
     "aliases": [
       ".bun",
       "bun-install"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1514,10 +1420,8 @@
     "explanation": "Cached modules downloaded by Deno, a JavaScript and TypeScript runtime. Safe to delete and will be re-downloaded when you next run a Deno project.",
     "bundle_ids": [],
     "aliases": [
-      "deno",
-      "deno/deps"
+      "deno"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1530,20 +1434,18 @@
       ".turbo",
       "turbo-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
     "key": "mise-cache",
-    "display_name": "Mise Tool Version Cache",
+    "display_name": "Mise Cache",
     "tag": "safe",
-    "explanation": "Cached runtime versions managed by Mise (formerly rtx), a tool version manager. Safe to delete but Mise will need to re-download any tools you use next time.",
+    "explanation": "Version lists and other data cached by Mise (formerly rtx), a tool version manager. Installed tools stay, and Mise fetches the rest again.",
     "bundle_ids": [],
     "aliases": [
       "mise",
       "rtx"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1553,7 +1455,6 @@
     "explanation": "Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1566,7 +1467,6 @@
       ".vite",
       "vite-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1579,7 +1479,6 @@
       ".parcel-cache",
       "parcel-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1591,7 +1490,6 @@
     "aliases": [
       ".eslintcache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1605,7 +1503,6 @@
       ".jest-cache",
       "jest_cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1618,21 +1515,19 @@
       ".vitest-cache",
       "vitest-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
     "key": "cypress-cache",
     "display_name": "Cypress Test Binaries",
     "tag": "medium",
-    "explanation": "Downloaded browser binaries used by Cypress for end-to-end testing. Safe to delete but Cypress will need to re-download them before your next test run, which can take a few minutes.",
+    "explanation": "The Cypress app that runs your end-to-end tests. Tests fail until you run npx cypress install, which downloads it again.",
     "bundle_ids": [],
     "aliases": [
       "Cypress",
       "cypress",
       "cypress-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1646,22 +1541,19 @@
       ".pyc",
       "pycache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "uv-cache",
     "display_name": "uv Package Cache",
-    "tag": "safe",
-    "explanation": "Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages.",
+    "tag": "medium",
+    "explanation": "Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break.",
     "bundle_ids": [],
     "aliases": [
       "uv",
       "uv-cache",
       ".uv"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1674,7 +1566,6 @@
       ".ruff_cache",
       "ruff-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1687,7 +1578,6 @@
       ".mypy_cache",
       "mypy-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1700,8 +1590,6 @@
       ".kotlin",
       "kotlin-build"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1710,40 +1598,30 @@
     "tag": "safe",
     "explanation": "Compiled Android app files. Safe to delete — your project will rebuild automatically next time.",
     "bundle_ids": [],
-    "aliases": [
-      "build/intermediates",
-      "build/outputs",
-      "app/build"
-    ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
+    "aliases": [],
     "kind": "build"
   },
   {
     "key": "gradle-cache",
     "display_name": "Gradle Build Cache",
     "tag": "safe",
-    "explanation": "Cached build files and downloaded dependencies used by Gradle, a build tool for Java and Android projects. Safe to delete and will be re-downloaded on your next build.",
+    "explanation": "A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle.",
     "bundle_ids": [],
     "aliases": [
       ".gradle",
-      "gradle-cache",
-      "caches/modules"
+      "gradle-cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "gradle-global-cache",
     "display_name": "Gradle Dependency Cache",
     "tag": "medium",
-    "explanation": "Libraries, build caches and the Gradle versions the wrapper downloaded, for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline.",
+    "explanation": "Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow.",
     "bundle_ids": [],
     "aliases": [
       "Gradle Dependency Cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1757,17 +1635,15 @@
       "Pods",
       "pod-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "cocoapods-spec-repos",
     "display_name": "CocoaPods Spec Repos",
     "tag": "medium",
-    "explanation": "The spec repositories CocoaPods uses to look up libraries. The public one is set up again on your next pod install. Private spec repos you added with pod repo add have to be added again.",
+    "explanation": "Spec repos CocoaPods uses to look up libraries. The public one comes back on your next pod install; private ones from pod repo add must be added again.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1777,11 +1653,8 @@
     "explanation": "Compiled Swift build files. Safe to delete and will be rebuilt the next time you build your Swift project.",
     "bundle_ids": [],
     "aliases": [
-      ".build",
       "swift-build"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1794,8 +1667,6 @@
       "target",
       "rust-target"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1809,21 +1680,18 @@
       ".flutter-plugins-dependencies",
       "flutter_cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "pub-cache",
     "display_name": "Dart Pub Cache",
     "tag": "safe",
-    "explanation": "Dart and Flutter packages downloaded by pub. Tools you installed with dart pub global activate are left alone. Safe to delete; packages download again on your next flutter pub get.",
+    "explanation": "Dart and Flutter packages downloaded by pub; they download again on your next flutter pub get. Tools from dart pub global activate are left alone.",
     "bundle_ids": [],
     "aliases": [
       "pub-cache",
       ".pub-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1835,14 +1703,13 @@
     "aliases": [
       "xcarchive"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
     "key": "xcode-device-support",
     "display_name": "Xcode iOS Device Support",
     "tag": "medium",
-    "explanation": "Files Xcode copies from your iPhone, Apple Watch, Apple TV or Vision Pro to debug apps on it. Nothing is lost, but Xcode copies them again the next time you connect that device, which takes a few minutes.",
+    "explanation": "Files Xcode copies from an iPhone, Apple Watch, Apple TV or Vision Pro to debug on it. Nothing is lost; Xcode copies them again when you next connect it.",
     "bundle_ids": [],
     "aliases": [
       "iOS DeviceSupport",
@@ -1850,7 +1717,6 @@
       "tvOS DeviceSupport",
       "xros DeviceSupport"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -1864,7 +1730,6 @@
       "homebrew",
       "homebrew-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1877,7 +1742,6 @@
       ".nvm",
       "nvm"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1889,7 +1753,6 @@
     "aliases": [
       "volta"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1900,10 +1763,8 @@
     "bundle_ids": [],
     "aliases": [
       "pnpm-store",
-      ".pnpm-store",
-      "pnpm/store"
+      ".pnpm-store"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1917,7 +1778,6 @@
       "yarn",
       "berry"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1930,7 +1790,6 @@
       "npm-cache",
       "npm"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1942,7 +1801,6 @@
     "aliases": [
       "_husky"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1955,7 +1813,6 @@
       ".storybook-cache",
       "storybook-static"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1965,10 +1822,8 @@
     "explanation": "Saved build and test results from Nx, a monorepo build tool. Safe to delete. Your next build will take a little longer as it rebuilds from scratch.",
     "bundle_ids": [],
     "aliases": [
-      ".nx",
       "nx-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1978,10 +1833,8 @@
     "explanation": "Saved build outputs from Moon, a build and task runner for monorepos. Safe to delete and will be regenerated on the next run.",
     "bundle_ids": [],
     "aliases": [
-      ".moon",
       "moon-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1996,7 +1849,6 @@
       "dev.warp.Warp-Stable",
       "Warp"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -2012,7 +1864,6 @@
       "iTerm2",
       "iTerm"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -2027,14 +1878,13 @@
       "com.mitchellh.ghostty",
       "Ghostty"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
     "key": "chrome",
     "display_name": "Google Chrome",
     "tag": "safe",
-    "explanation": "Temporary browsing data stored by Google Chrome including website caches and previews. Deleting it is safe but websites may load a little slower until Chrome rebuilds the cache.",
+    "explanation": "Google Chrome's temporary browsing data, such as website caches and previews. Websites may load a little slower until Chrome rebuilds it.",
     "bundle_ids": [
       "com.google.Chrome"
     ],
@@ -2043,7 +1893,6 @@
       "Google",
       "Chrome"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2058,7 +1907,6 @@
       "org.mozilla.firefox",
       "Firefox"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2073,7 +1921,6 @@
       "com.brave.Browser",
       "Brave"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2088,7 +1935,6 @@
       "com.operasoftware.Opera",
       "Opera"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2103,7 +1949,6 @@
       "com.tinyspeck.slackmacgap",
       "Slack"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2118,7 +1963,6 @@
       "com.hnc.Discord",
       "Discord"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2133,7 +1977,6 @@
       "us.zoom.xos",
       "Zoom"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -2148,14 +1991,13 @@
       "notion.id",
       "Notion"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
     "key": "spotify",
     "display_name": "Spotify",
     "tag": "safe",
-    "explanation": "Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen.",
+    "explanation": "Songs and artwork Spotify saved while you listened. It saves them again as you play. Only shown when nothing is downloaded for offline listening.",
     "bundle_ids": [
       "com.spotify.client"
     ],
@@ -2163,7 +2005,6 @@
       "com.spotify.client",
       "Spotify"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -2178,7 +2019,6 @@
       "net.whatsapp.WhatsApp",
       "WhatsApp"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2193,7 +2033,6 @@
       "ru.keepcoder.Telegram",
       "Telegram"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2205,7 +2044,6 @@
     "aliases": [
       "Telegram Media Cache"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2220,7 +2058,6 @@
       "com.linear",
       "Linear"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2235,7 +2072,6 @@
       "com.figma.Desktop",
       "Figma"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2250,7 +2086,6 @@
       "com.loom.desktop",
       "Loom"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -2265,7 +2100,6 @@
       "com.grammarly.ProjectLlama",
       "Grammarly"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2280,7 +2114,6 @@
       "com.runningwithcrayons.Alfred",
       "Alfred"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2296,14 +2129,13 @@
       "1Password 7",
       "1Password 8"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
     "key": "dropbox",
     "display_name": "Dropbox",
     "tag": "medium",
-    "explanation": "Temporary sync data stored by Dropbox. Your files are safe, but Dropbox will re-verify your whole synced folder afterwards, which can take a long time on large accounts.",
+    "explanation": "Temporary sync data stored by Dropbox. Your files are safe, but Dropbox re-verifies your whole synced folder afterwards, which can take a while.",
     "bundle_ids": [
       "com.dropbox.DropboxMacFileHelper"
     ],
@@ -2311,7 +2143,6 @@
       "com.dropbox.DropboxMacFileHelper",
       "Dropbox"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -2326,7 +2157,6 @@
       "com.google.GoogleDrive",
       "Google Drive"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -2341,7 +2171,6 @@
       "com.microsoft.OneDrive",
       "OneDrive"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -2357,7 +2186,6 @@
       "Teams",
       "Microsoft Teams"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -2372,7 +2200,6 @@
       "com.microsoft.Word",
       "Microsoft Word"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2387,7 +2214,6 @@
       "com.microsoft.Excel",
       "Microsoft Excel"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2402,7 +2228,6 @@
       "com.granola.app",
       "Granola"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2417,7 +2242,6 @@
       "com.anthropic.claudefordesktop",
       "Claude"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2432,7 +2256,6 @@
       "com.openai.chat",
       "ChatGPT"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2447,7 +2270,6 @@
       "com.ollama.Ollama",
       "Ollama"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2462,7 +2284,6 @@
       "com.bohemiancoding.sketch3",
       "Sketch"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2477,7 +2298,6 @@
       "com.seriflabs.affinitydesigner2",
       "Affinity Designer"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2492,7 +2312,6 @@
       "com.seriflabs.affinityphoto2",
       "Affinity Photo"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2507,7 +2326,6 @@
       "com.apple.dt.Xcode",
       "Xcode"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2522,7 +2340,6 @@
       "com.apple.iphonesimulator",
       "Simulator"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -2538,7 +2355,6 @@
       "Android Studio",
       "AndroidStudio"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2553,7 +2369,6 @@
       "com.proxyman.NSProxy",
       "Proxyman"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2568,7 +2383,6 @@
       "com.tinyapp.TablePlus",
       "TablePlus"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2583,7 +2397,6 @@
       "at.eggerapps.Postico",
       "Postico"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2598,7 +2411,6 @@
       "com.insomnia.app",
       "Insomnia"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2614,7 +2426,6 @@
       "Paw",
       "RapidAPI"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2629,7 +2440,6 @@
       "com.DanPristupov.Fork",
       "Fork"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2644,7 +2454,6 @@
       "com.torusknot.SourceTreeNotMAS",
       "SourceTree"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2659,7 +2468,6 @@
       "com.fournova.Tower3",
       "Tower"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2674,7 +2482,6 @@
       "net.telestream.screenflow",
       "ScreenFlow"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -2689,7 +2496,6 @@
       "com.macpaw.CleanMyMac4",
       "CleanMyMac"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2704,7 +2510,6 @@
       "com.sindresorhus.Lungo",
       "Lungo"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2719,7 +2524,6 @@
       "com.surteesstudios.Bartender",
       "Bartender"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2734,7 +2538,6 @@
       "pl.maketheweb.cleanshotx",
       "CleanShot"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2749,7 +2552,6 @@
       "com.apple.screencaptureui",
       "Screenshot"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2764,14 +2566,13 @@
       "com.xnapper.xnapper",
       "Xnapper"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
     "key": "apple-maps",
     "display_name": "Apple Maps",
     "tag": "medium",
-    "explanation": "Downloaded map tiles and location data stored by Apple Maps. Nothing is lost, but Maps re-downloads tiles as you use it and any offline maps need downloading again.",
+    "explanation": "Map tiles and location data stored by Apple Maps. Nothing is lost, but tiles download again as you use Maps, and offline maps need downloading again.",
     "bundle_ids": [
       "com.apple.Maps"
     ],
@@ -2779,14 +2580,13 @@
       "com.apple.Maps",
       "Maps"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
     "key": "apple-photos",
     "display_name": "Apple Photos",
     "tag": "medium",
-    "explanation": "Thumbnail and preview data stored by Apple Photos. No photos are deleted, but Photos has to regenerate every thumbnail, which can take a long time on a large library.",
+    "explanation": "Thumbnails and previews from Apple Photos. No photos are deleted, but Photos makes every thumbnail again, which takes a long time on a large library.",
     "bundle_ids": [
       "com.apple.Photos"
     ],
@@ -2794,7 +2594,6 @@
       "com.apple.Photos",
       "Photos"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2809,7 +2608,6 @@
       "com.apple.mail",
       "Mail"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2824,7 +2622,6 @@
       "com.apple.Music",
       "Music"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -2837,7 +2634,6 @@
       "NetworkCache",
       "com.apple.networkserviceproxy"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -2852,7 +2648,6 @@
       "com.apple.ScreenTimeAgent",
       "ScreenTime"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -2865,7 +2660,6 @@
       "npm-npx-cache",
       "_npx"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -2878,7 +2672,6 @@
       "npm-logs",
       "_logs"
     ],
-    "scope": "dev_tools",
     "kind": "logs"
   },
   {
@@ -2891,7 +2684,6 @@
       "xcode-docs-cache",
       "DocumentationCache"
     ],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2904,7 +2696,6 @@
       "corepack-cache",
       "corepack"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -2916,7 +2707,6 @@
     "aliases": [
       "cursor-agent-leftover"
     ],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2928,49 +2718,26 @@
     "aliases": [
       "orphaned-git-worktree"
     ],
-    "scope": "dev_tools",
-    "kind": "code"
-  },
-  {
-    "key": "obsolete-cursor-extension",
-    "display_name": "Obsolete Cursor Extension",
-    "tag": "safe",
-    "explanation": "An older version of a Cursor extension superseded by a newer install. Safe to delete.",
-    "bundle_ids": [],
-    "aliases": [],
-    "scope": "dev_tools",
-    "kind": "code"
-  },
-  {
-    "key": "obsolete-vscode-extension",
-    "display_name": "Obsolete VS Code Extension",
-    "tag": "safe",
-    "explanation": "An older version of a VS Code extension superseded by a newer install. Safe to delete.",
-    "bundle_ids": [],
-    "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
     "key": "orphaned-editor-workspace-storage",
     "display_name": "Old Editor Workspace Data",
     "tag": "medium",
-    "explanation": "Saved state for projects that VS Code or Cursor opened from folders that no longer exist, including any AI chat history for those projects. If you moved or renamed a project instead of deleting it, its chats are in here.",
+    "explanation": "Saved state, including AI chats, for VS Code or Cursor projects whose folders no longer exist. If you moved or renamed a project, its chats are in here.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
     "key": "stale-browser-framework",
     "display_name": "Old Browser Framework",
     "tag": "medium",
-    "explanation": "A leftover Chromium framework that no running process is using. Quit and relaunch the browser before an older version it is still running from can be cleaned. The browser also deletes leftover versions itself on relaunch.",
+    "explanation": "A leftover Chromium framework no running process uses. Quit and relaunch the browser to clean a version it still runs from; relaunching also removes old ones.",
     "bundle_ids": [],
     "aliases": [
       "stale-browser-framework"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2982,7 +2749,6 @@
     "aliases": [
       "LinkThumbnail"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2994,7 +2760,6 @@
     "aliases": [
       "ChatMedia"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -3006,7 +2771,6 @@
     "aliases": [
       "AppInstallationBinaryDeltas"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -3018,19 +2782,17 @@
     "aliases": [
       "ShipIt"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
     "key": "electron-updater-downloads",
     "display_name": "App Update Downloads",
     "tag": "safe",
-    "explanation": "Update packages that apps built on Electron downloaded to install a new version. Once the update is installed they are left behind. Safe to delete; each app downloads its next update when one comes out.",
+    "explanation": "Update packages Electron apps downloaded to install a new version, left behind once installed. Each app downloads its next update when one comes out.",
     "bundle_ids": [],
     "aliases": [
       "Electron Updater Downloads"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -3040,7 +2802,6 @@
     "explanation": "Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -3053,21 +2814,17 @@
       "_build",
       "elixir-build"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "elixir-deps",
     "display_name": "Elixir Dependencies",
     "tag": "safe",
-    "explanation": "Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete and re-downloaded on your next build, which needs an internet connection.",
+    "explanation": "Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete; it downloads again on the next build.",
     "bundle_ids": [],
     "aliases": [
       "elixir-deps"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3077,11 +2834,8 @@
     "explanation": "Downloaded Elixir and Erlang packages kept by Hex so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build.",
     "bundle_ids": [],
     "aliases": [
-      "Hex Package Cache",
-      ".hex"
+      "Hex Package Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3094,8 +2848,6 @@
       "Rebar3 Cache",
       "rebar3"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3107,8 +2859,6 @@
     "aliases": [
       ".next"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3120,8 +2870,6 @@
     "aliases": [
       ".nuxt"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3133,8 +2881,6 @@
     "aliases": [
       ".output"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3146,8 +2892,6 @@
     "aliases": [
       ".svelte-kit"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3159,8 +2903,6 @@
     "aliases": [
       ".astro"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3172,8 +2914,6 @@
     "aliases": [
       ".angular"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3185,8 +2925,6 @@
     "aliases": [
       ".pytest_cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3198,8 +2936,6 @@
     "aliases": [
       ".tox"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3209,8 +2945,6 @@
     "explanation": "Compiled output from Swift Package Manager. Safe to delete and rebuilt by your next swift build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3220,8 +2954,6 @@
     "explanation": "Compiled classes and packaged output produced by Maven. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3231,8 +2963,6 @@
     "explanation": "Compiled output produced by a Gradle build. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3242,30 +2972,24 @@
     "explanation": "Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "dotnet-bin",
-    "display_name": "NET Build Output",
+    "display_name": ".NET Build Output",
     "tag": "safe",
     "explanation": "Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "dotnet-obj",
-    "display_name": "NET Intermediate Files",
+    "display_name": ".NET Intermediate Files",
     "tag": "safe",
     "explanation": "Temporary files .NET creates while compiling. Safe to delete and recreated on your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3275,8 +2999,6 @@
     "explanation": "Third-party PHP packages downloaded by Composer. Safe to delete and re-downloaded by composer install, which needs an internet connection.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3286,8 +3008,6 @@
     "explanation": "Ruby gems installed into the project by Bundler. Safe to delete and reinstalled by bundle install, which needs an internet connection.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3299,8 +3019,6 @@
     "aliases": [
       ".stack-work"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3312,8 +3030,6 @@
     "aliases": [
       "dist-newstyle"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3325,8 +3041,6 @@
     "aliases": [
       ".zig-cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3336,8 +3050,6 @@
     "explanation": "Finished programs and libraries produced by a Zig build. Safe to delete and rebuilt on your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3347,8 +3059,6 @@
     "explanation": "Compiled output produced by Dune for an OCaml project. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3358,8 +3068,6 @@
     "explanation": "Compiled output and build configuration produced by CMake. Safe to delete, though you will need to configure and build the project again.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3371,8 +3079,6 @@
     "aliases": [
       ".terraform"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3384,8 +3090,6 @@
     "aliases": [
       ".godot"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3395,8 +3099,6 @@
     "explanation": "Unity's imported-asset database for this project. It rebuilds itself, but reimporting a large project can take a long time, so check before removing it.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3406,8 +3108,6 @@
     "explanation": "Scratch files Unity writes while the editor is running. Recreated automatically, but do not remove it while the project is open in Unity.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3417,8 +3117,6 @@
     "explanation": "Generated build files Unreal creates while compiling a project. They come back on the next build, which will take longer than usual.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3428,34 +3126,28 @@
     "explanation": "Cooked assets and compiled shaders Unreal caches for a project. Rebuilt automatically, but the first build afterwards can be very slow.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
     "key": "nuget-packages",
     "display_name": "NuGet Package Cache",
     "tag": "medium",
-    "explanation": "Downloaded .NET packages that NuGet restores your projects from. Nothing is lost, but your next restore downloads them all again, which can take a while and does not work offline.",
+    "explanation": "Downloaded .NET packages NuGet restores your projects from. Nothing is lost, but the next restore downloads them all again and needs a connection.",
     "bundle_ids": [],
     "aliases": [
       "NuGet Packages"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
     "key": "stack-global",
     "display_name": "Stack Global Cache",
     "tag": "medium",
-    "explanation": "Package downloads and prebuilt libraries that Stack shares between Haskell projects. Your settings and installed compilers are left alone. Nothing is lost, but the next build downloads and rebuilds a lot and can be slow.",
+    "explanation": "Packages and prebuilt libraries Stack shares between Haskell projects. Settings and installed compilers stay. The next build downloads and rebuilds a lot.",
     "bundle_ids": [],
     "aliases": [
       "Stack Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3467,8 +3159,6 @@
     "aliases": [
       "Cabal Packages"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3480,8 +3170,6 @@
     "aliases": [
       "Bazel Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3493,22 +3181,18 @@
     "aliases": [
       "Swift Package Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
     "key": "venv",
     "display_name": "Python Environment",
     "tag": "safe",
-    "explanation": "A self-contained Python environment holding packages installed for one project. Safe to delete and recreated by reinstalling from requirements.txt or pyproject.toml, which needs an internet connection.",
+    "explanation": "A Python environment with one project's packages. Recreate it by reinstalling from requirements.txt or pyproject.toml, which needs a connection.",
     "bundle_ids": [],
     "aliases": [
       "venv",
       ".venv"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3520,7 +3204,6 @@
     "aliases": [
       "node-gyp"
     ],
-    "scope": "app_caches",
     "kind": "packages"
   },
   {
@@ -3532,7 +3215,6 @@
     "aliases": [
       "typescript"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3544,7 +3226,6 @@
     "aliases": [
       "cursor-compile-cache"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3556,7 +3237,6 @@
     "aliases": [
       "claude-cli-nodejs"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -3568,7 +3248,6 @@
     "aliases": [
       "com.apple.python"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3580,7 +3259,6 @@
     "aliases": [
       "JNA"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3592,7 +3270,6 @@
     "aliases": [
       "com.apple.DictionaryServices"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -3604,114 +3281,149 @@
     "aliases": [
       "com.apple.ap.PromotedContentJetService"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
     "key": "device-software-updates",
     "display_name": "iPhone and iPad Software Updates",
     "tag": "safe",
-    "explanation": "Full software update files for iPhone, iPad or iPod that Finder downloaded to update or restore a device, often 5 to 8 GB each. Safe to delete; Finder downloads the current one again the next time you update a device.",
+    "explanation": "iPhone, iPad or iPod updates Finder downloaded to update or restore a device, often 5 to 8 GB each. Finder downloads the current one again when needed.",
     "bundle_ids": [],
     "aliases": [
       "Device Software Updates"
     ],
-    "scope": "app_caches",
     "kind": "devices"
   },
   {
     "key": "davinci-cacheclip",
     "display_name": "DaVinci Resolve Render Cache",
     "tag": "safe",
-    "explanation": "Render cache and optimized media that DaVinci Resolve keeps in your Movies folder. Safe to delete; Resolve renders it again as you work, which takes time on large projects.",
+    "explanation": "Render cache and optimized media DaVinci Resolve keeps in your Movies folder. Resolve renders it again as you work, which takes time on large projects.",
     "bundle_ids": [],
     "aliases": [
       "CacheClip"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
     "key": "aerial-wallpaper-videos",
     "display_name": "Aerial Wallpaper Videos",
     "tag": "medium",
-    "explanation": "Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the aerial you use downloads again, and macOS may download others again on its own.",
+    "explanation": "Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the ones you use, and maybe others, download again.",
     "bundle_ids": [],
     "aliases": [
       "Aerial Wallpaper Videos"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
     "key": "messages-previews",
     "display_name": "Messages Previews",
     "tag": "safe",
-    "explanation": "Thumbnail previews of photos, videos and links in Messages. Your messages and attachments are not touched. Safe to delete; previews are made again when you scroll through a conversation.",
+    "explanation": "Previews of photos, videos and links in Messages, made again as you scroll a conversation. Your messages and attachments are not touched.",
     "bundle_ids": [],
     "aliases": [
       "Messages Previews"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
     "key": "mail-downloads",
     "display_name": "Mail Attachment Copies",
     "tag": "medium",
-    "explanation": "Copies of attachments you opened from Apple Mail. The originals stay in your mail. If you edited an attachment after opening it and never saved it somewhere else, those edits are only here. Held back while Mail is open.",
+    "explanation": "Attachments you opened from Mail; the originals stay in Mail. Edits you made to one and never saved elsewhere exist only here. Held back while Mail is open.",
     "bundle_ids": [],
     "aliases": [
       "Mail Downloads"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
     "key": "unfinished-downloads",
     "display_name": "Unfinished Downloads",
     "tag": "medium",
-    "explanation": "Downloads from Safari, Chrome, Firefox or Parallels that stopped before finishing and have not changed in over a week. The app that started one can sometimes still resume it, so check before deleting.",
+    "explanation": "Safari, Chrome, Firefox or Parallels downloads that stopped and have not changed in over a week. The app may still resume one, so check before deleting.",
     "bundle_ids": [],
     "aliases": [
       "Unfinished Downloads"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
     "key": "coresimulator-caches",
     "display_name": "Simulator Caches",
     "tag": "safe",
-    "explanation": "Shared system caches the iOS Simulator builds for each runtime. Safe to delete; the Simulator builds them again the next time a device starts, which makes that first launch slower.",
+    "explanation": "Shared caches the iOS Simulator builds for each runtime. It builds them again the next time a device starts, which makes that launch slower.",
     "bundle_ids": [],
     "aliases": [
       "Simulator Caches"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
     "key": "xctest-devices",
     "display_name": "Xcode Test Devices",
     "tag": "safe",
-    "explanation": "Temporary copies of simulators that Xcode makes to run tests in parallel. Xcode deletes them itself but sometimes leaves them behind. Safe to delete when no tests are running.",
+    "explanation": "Temporary simulator copies Xcode makes to run tests in parallel and sometimes leaves behind. Safe to delete when no tests are running.",
     "bundle_ids": [],
     "aliases": [
       "Xcode Test Devices"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
     "key": "old-cli-versions",
     "display_name": "Old AI Coding Tool Versions",
     "tag": "safe",
-    "explanation": "Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete.",
+    "explanation": "Earlier versions of Claude Code, Cursor Agent or Grok that stayed behind after updates. The version you run and the newest one are kept. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "ai"
+  },
+  {
+    "key": "cursor-agent-install-leftovers",
+    "display_name": "Cursor Agent Install Leftovers",
+    "tag": "medium",
+    "explanation": "Unfinished installs and a download left by Cursor's agent CLI updates. Only items untouched for a day are listed. The installed versions stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "ai"
+  },
+  {
+    "key": "claude-code-downloads",
+    "display_name": "Old Claude Code Downloads",
+    "tag": "medium",
+    "explanation": "Claude Code installers older than the version you run. Claude Code runs from its versions folder and doesn't open these again.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "ai"
+  },
+  {
+    "key": "android-ndk-version",
+    "display_name": "Android NDK",
+    "tag": "medium",
+    "explanation": "An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "devices"
+  },
+  {
+    "key": "android-system-images",
+    "display_name": "Unused Android System Images",
+    "tag": "medium",
+    "explanation": "Emulator images no emulator in ~/.android/avd uses. Android Studio downloads one again when you need it. If you keep emulators elsewhere, check them first.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "devices"
+  },
+  {
+    "key": "old-figma-profiles",
+    "display_name": "Old Figma Profiles",
+    "tag": "medium",
+    "explanation": "Earlier Figma profiles. Figma copied each one into the profile it uses now and doesn't read them again. They still hold old cookies and site data.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "design"
   },
   {
     "key": "pre-commit-cache",
@@ -3722,7 +3434,15 @@
     "aliases": [
       "pre-commit"
     ],
-    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "prek-cache",
+    "display_name": "prek Cache",
+    "tag": "medium",
+    "explanation": "Cached hook repositories, environments and tools. Clean while prek is idle. The next run rebuilds them. Recovery patches stay.",
+    "bundle_ids": [],
+    "aliases": [],
     "kind": "packages"
   },
   {
@@ -3732,7 +3452,6 @@
     "explanation": "App builds, templates and SDK data the Expo tools downloaded. Your Expo login is left alone. Safe to delete; Expo downloads what it needs again.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3742,7 +3461,6 @@
     "explanation": "Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3752,7 +3470,6 @@
     "explanation": "Completion and update-check files that Oh My Zsh keeps. Safe to delete; they are recreated when you open a new terminal window.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "terminal"
   },
   {
@@ -3762,29 +3479,26 @@
     "explanation": "Package downloads opam keeps for OCaml. Installed packages are left alone. Safe to delete; opam downloads them again when needed.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "puppeteer-browsers",
     "display_name": "Puppeteer Browsers",
     "tag": "medium",
-    "explanation": "Browsers Puppeteer downloaded for automated testing. Your scripts fail until the browser is installed again, which happens on your next npm install or with npx puppeteer browsers install.",
+    "explanation": "Browsers Puppeteer downloaded for automated tests. Scripts fail until it is installed again with npm install or npx puppeteer browsers install.",
     "bundle_ids": [],
     "aliases": [
       "puppeteer"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
     "key": "conda-packages",
     "display_name": "Conda Package Cache",
     "tag": "medium",
-    "explanation": "Packages conda downloaded and unpacked to build your environments. Your environments keep working because they link to these files, which also means deleting frees less space than shown until those environments are removed. Running conda clean --all does this more carefully.",
+    "explanation": "Packages conda unpacked to build your environments, which link to these files and keep working. Deleting frees less than shown; conda clean --all is safer.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3799,37 +3513,124 @@
       "EffectCraft",
       "ai.storyteller.effectcraft"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
     "key": "dart-analysis-cache",
     "display_name": "Dart Analysis Cache",
     "tag": "safe",
-    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work.",
+    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
     "key": "hermes-agent-cache",
     "display_name": "Hermes Agent Cache",
     "tag": "medium",
-    "explanation": "Downloads, catalogues and scratch space the Hermes agent keeps in ~/.hermes/cache. Nothing is lost, but a running Hermes task may be using the scratch space, so clean it while Hermes is idle. Settings, keys and sessions are left alone.",
+    "explanation": "Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "ai"
   },
   {
     "key": "antigravity-browser-cache",
     "display_name": "Antigravity Browser Cache",
     "tag": "safe",
-    "explanation": "Page and script caches of the browser Antigravity uses for web tasks. Safe to delete; the browser fills them again as it loads pages. Sign-ins, history and extensions are left alone.",
+    "explanation": "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "browser"
+  },
+  {
+    "key": "nvm-download-cache",
+    "display_name": "nvm Download Cache",
+    "tag": "safe",
+    "explanation": "Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "giget-cache",
+    "display_name": "giget Template Cache",
+    "tag": "safe",
+    "explanation": "Project templates giget downloaded for tools like nuxi init. Safe to delete; they download again the next time you create a project.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "firebase-emulators",
+    "display_name": "Firebase Emulators",
+    "tag": "safe",
+    "explanation": "Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "gradle-leftovers",
+    "display_name": "Gradle Logs and Temp Files",
+    "tag": "safe",
+    "explanation": "Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "logs"
+  },
+  {
+    "key": "clang-module-cache",
+    "display_name": "Clang Module Cache",
+    "tag": "safe",
+    "explanation": "Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "build"
+  },
+  {
+    "key": "codexbar-cache",
+    "display_name": "CodexBar Cache",
+    "tag": "safe",
+    "explanation": "Web downloads and update files the CodexBar menu bar app keeps. Safe to delete; CodexBar downloads them again when needed.",
+    "bundle_ids": [
+      "com.steipete.codexbar"
+    ],
+    "aliases": [
+      "com.steipete.codexbar"
+    ],
+    "kind": "utilities"
+  },
+  {
+    "key": "codexbar-usage-history",
+    "display_name": "CodexBar Usage History",
+    "tag": "medium",
+    "explanation": "Cost and usage totals CodexBar worked out from your Claude and Codex session logs. CodexBar works them out again, but days whose logs are gone stay missing.",
+    "bundle_ids": [],
+    "aliases": [
+      "CodexBar"
+    ],
+    "kind": "utilities"
+  },
+  {
+    "key": "intelligenceflowd-cache",
+    "display_name": "Apple Intelligence Service Cache",
+    "tag": "safe",
+    "explanation": "Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them.",
+    "bundle_ids": [],
+    "aliases": [
+      "com.apple.intelligenceflow.intelligenceflowd"
+    ],
+    "kind": "system"
+  },
+  {
+    "key": "swift-frontend-cache",
+    "display_name": "Swift Compiler Cache",
+    "tag": "safe",
+    "explanation": "Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them.",
+    "bundle_ids": [],
+    "aliases": [
+      "swift-frontend"
+    ],
+    "kind": "build"
   }
 ]

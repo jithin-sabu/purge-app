@@ -1,3 +1,5 @@
+import AppKit
+import CoreText
 import SwiftUI
 
 enum AppStyle {
@@ -34,7 +36,11 @@ enum AppStyle {
     }
 
     enum Spacing {
+        /// A title over its subtitle, badge padding.
+        static let xxxSmall: CGFloat = 2
         static let xxSmall: CGFloat = 4
+        /// An icon beside its label, rows in a tight list.
+        static let xxSmallPlus: CGFloat = 6
         static let xSmall: CGFloat = 8
         static let small: CGFloat = 12
         static let medium: CGFloat = 16
@@ -53,36 +59,114 @@ enum AppStyle {
         /// Project group headers (node_modules, Flutter, etc.) — slightly smaller than scan rows (28pt).
         static let projectGroupIconSize: CGFloat = 16
         /// Aligns expanded artifact text with the project title (parent checkbox + spacing).
-        static let projectArtifactLeadingInset: CGFloat = 34
+        static let projectArtifactLeadingInset: CGFloat = 24 + Spacing.small
         /// Inner horizontal padding for scan result cards (matches `ScanResultRow` chrome).
         static let scanCardHorizontalPadding: CGFloat = 14
     }
 
+    /// One step of the type scale: family, size, weight, and the tracking
+    /// (letter spacing, in points) that goes with the size. Onest has no
+    /// optical sizes, so small text gets a little air and large text none.
+    /// SF Rounded spaces itself at every size, so it takes no tracking (#263).
+    struct TextStyle: Hashable {
+        enum Family: Hashable {
+            case onest
+            case rounded
+            case monospaced
+        }
+
+        let family: Family
+        let size: CGFloat
+        let weight: Font.Weight
+        let tracking: CGFloat
+
+        var font: Font {
+            switch family {
+            case .onest: AppFonts.onest(size: size, weight: weight)
+            case .rounded: .system(size: size, weight: weight, design: .rounded)
+            case .monospaced: .system(size: size, weight: weight, design: .monospaced)
+            }
+        }
+
+        /// The same style at another weight, for emphasis.
+        func weight(_ weight: Font.Weight) -> TextStyle {
+            TextStyle(family: family, size: size, weight: weight, tracking: tracking)
+        }
+
+        /// SF Rounded at this style's size and weight, for sizes, units and
+        /// percentages. System styles, such as `display`, come back unchanged.
+        var numbers: TextStyle {
+            TextStyle(family: .rounded, size: size, weight: weight, tracking: 0)
+        }
+
+        /// The system monospaced font at this style's size and weight, for
+        /// paths and commands. Fixed-width glyphs carry their own space.
+        func monospaced() -> TextStyle {
+            TextStyle(family: .monospaced, size: size, weight: weight, tracking: 0)
+        }
+    }
+
     /// The type scale. Every `.font(...)` on text picks one of these, adding
-    /// `.weight(...)` when it needs emphasis; no view sets a point size of its
-    /// own. SF Rounded is kept for result numbers and page titles.
+    /// `.weight(...)` when it needs emphasis; no view sets a point size or
+    /// tracking of its own. SF Rounded is kept for result numbers.
     enum Typography {
         /// Freed bytes on the cleanup celebration.
-        static let display = Font.system(size: 56, weight: .bold, design: .rounded)
+        static let display = TextStyle(family: .rounded, size: 56, weight: .bold, tracking: 0)
         /// Large totals: Overview, onboarding results.
-        static let displaySmall = Font.system(size: 36, weight: .bold, design: .rounded)
+        static let displaySmall = TextStyle(family: .rounded, size: 36, weight: .bold, tracking: 0)
         /// Onboarding and empty-state headings.
-        static let title = Font.system(size: 26, weight: .semibold, design: .rounded)
-        static let pageTitle = Font.system(size: 20, weight: .semibold, design: .rounded)
+        static let title = onest(26, .semibold, tracking: 0)
+        static let pageTitle = onest(20, .semibold, tracking: 0)
         /// Sheet titles, card headers, large buttons.
-        static let sectionTitle = Font.system(size: 15, weight: .semibold)
+        static let sectionTitle = onest(15, .semibold, tracking: 0.1)
         /// Group headers, emphasis, regular buttons.
-        static let headline = Font.system(size: 13, weight: .semibold)
-        static let body = Font.system(size: 13)
+        static let headline = onest(13, .semibold, tracking: 0.15)
+        static let body = onest(13, tracking: 0.15)
         /// List row titles, menu rows.
-        static let rowTitle = Font.system(size: 13, weight: .medium)
+        static let rowTitle = onest(13, .medium, tracking: 0.15)
         /// Helper text under controls, small buttons.
-        static let callout = Font.system(size: 12)
+        static let callout = onest(12, tracking: 0.25)
         /// Sizes, dates, paths.
-        static let metadata = Font.system(size: 11)
-        static let metadataEmphasis = Font.system(size: 11, weight: .medium)
+        static let metadata = onest(11, tracking: 0.3)
+        static let metadataEmphasis = onest(11, .medium, tracking: 0.3)
         /// Badges and count pills.
-        static let micro = Font.system(size: 10, weight: .semibold)
+        static let micro = onest(10, .semibold, tracking: 0.4)
+        /// File-type labels laid over a 28pt icon, where `micro` is too wide.
+        static let iconLabel = onest(8, .semibold, tracking: 0.45)
+
+        private static func onest(_ size: CGFloat, _ weight: Font.Weight = .regular, tracking: CGFloat) -> TextStyle {
+            TextStyle(family: .onest, size: size, weight: weight, tracking: tracking)
+        }
+    }
+}
+
+extension View {
+    /// Sets a type-scale style: its font and its tracking.
+    func font(_ style: AppStyle.TextStyle) -> some View {
+        self.font(style.font).tracking(style.tracking)
+    }
+}
+
+extension Text {
+    /// Sets a type-scale style: its font and its tracking.
+    func font(_ style: AppStyle.TextStyle) -> Text {
+        self.font(style.font).tracking(style.tracking)
+    }
+
+    /// `string` in `style`, with each figure and its unit, such as "4.71 GB",
+    /// "110" or "5 MB", in SF Rounded, so a sentence built around a number
+    /// shows it like the figures elsewhere on the page.
+    init(figures string: String, style: AppStyle.TextStyle) {
+        // A separator counts only between digits, so "Removed 3, but" keeps its comma in Onest.
+        let figure = #/[0-9](?:[.,]?[0-9])*(?:\s?(?:[KMGT]?B|%))?/#
+        var text = Text(verbatim: "")
+        var index = string.startIndex
+        for match in string.matches(of: figure) {
+            text = text + Text(verbatim: String(string[index..<match.range.lowerBound])).font(style)
+            text = text + Text(verbatim: String(match.output)).font(style.numbers)
+            index = match.range.upperBound
+        }
+        self = text + Text(verbatim: String(string[index...])).font(style)
     }
 }
 
@@ -96,6 +180,25 @@ extension View {
     }
 }
 
+/// The grouped card Settings, About and a History entry draw their rows on: a
+/// filled, outlined rounded rectangle, rows stacked edge to edge (#185).
+struct InsetCard<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) { content }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                AppColors.fillSecondary,
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
+            }
+    }
+}
+
 /// Hairline separator inset from card edges (matches card content horizontal padding).
 struct InsetCardDivider: View {
     var horizontalInset: CGFloat = AppStyle.Spacing.medium
@@ -105,5 +208,71 @@ struct InsetCardDivider: View {
             .fill(AppColors.borderSubtle)
             .frame(height: 0.5)
             .padding(.horizontal, horizontalInset)
+    }
+}
+
+/// Onest for text, SF Rounded for figures.
+///
+/// `Resources/Fonts/OnestText.ttf` is Onest (SIL Open Font License, see
+/// `Onest-OFL.txt`) with its ten digits removed, so a digit inside ordinary text
+/// falls back to the system font. It is registered for this process, which lets
+/// SwiftUI's own `.weight(_:)` drive the variable weight axis. Text that shows
+/// sizes, units or percentages uses `TextStyle.numbers` instead.
+///
+/// CoreText reads a registered font from its path again while the app runs,
+/// and the bundle's path can go away: Xcode cleans or replaces a debug build,
+/// and a user drags Purge from Downloads to Applications. On 2026-10-24 a
+/// running build lost its bundle and every label turned into the system font
+/// until a rebuild put the file back. So `register()` copies the font into
+/// Application Support, where nothing moves it, and registers the copy. It
+/// runs from `applicationWillFinishLaunching`, before the first paint.
+enum AppFonts {
+    private static let resourceName = "OnestText"
+    private static var registration: Bool?
+
+    /// Registers Onest for this process once; later calls return the same answer.
+    @discardableResult
+    static func register() -> Bool {
+        if let registration { return registration }
+        let result = registerOnce()
+        registration = result
+        return result
+    }
+
+    private static func registerOnce() -> Bool {
+        guard let bundled = Bundle.main.url(forResource: resourceName, withExtension: "ttf") else { return false }
+        // The test host shares the user's Application Support folder, so it
+        // registers the bundle's copy and writes nothing (#181).
+        let url = TestHost.isActive() ? bundled : (stableCopy(of: bundled, in: stableFolder) ?? bundled)
+        var error: Unmanaged<CFError>?
+        return CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
+    }
+
+    private static var stableFolder: URL {
+        AppSupportFolder.url().appendingPathComponent("Fonts", isDirectory: true)
+    }
+
+    /// The font at `bundled`, copied into `folder` when the copy there is
+    /// missing or differs. Returns nil when the copy cannot be made, and the
+    /// caller registers the bundled file instead.
+    static func stableCopy(of bundled: URL, in folder: URL) -> URL? {
+        let copy = folder.appendingPathComponent(bundled.lastPathComponent)
+        do {
+            let data = try Data(contentsOf: bundled)
+            if (try? Data(contentsOf: copy)) != data {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try data.write(to: copy, options: .atomic)
+            }
+            return copy
+        } catch {
+            return nil
+        }
+    }
+
+    static func onest(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        // Without the font file, fall back to the system font, not a missing face.
+        register()
+            ? Font.custom("Onest", size: size).weight(weight)
+            : Font.system(size: size, weight: weight)
     }
 }

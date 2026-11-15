@@ -8,6 +8,10 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
     case safe
     case checkFirst
 
+    /// The defaults keys the scan tabs save their filter under.
+    static let appCachesKey = "filter.appCaches"
+    static let devToolsKey = "filter.devTools"
+
     var id: String { rawValue }
 
     var displayName: String {
@@ -38,12 +42,11 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    func tooltipHint(extra: String = "") -> String {
-        let suffix = extra.isEmpty ? "" : String(localized: " \(extra)")
+    func tooltipHint() -> String {
         switch self {
-        case .all: return String(localized: "Show all items\(suffix) (⌥⌘1)")
-        case .safe: return String(localized: "Show safe items\(suffix) (⌥⌘2)")
-        case .checkFirst: return String(localized: "Show check-first items\(suffix) (⌥⌘3)")
+        case .all: return String(localized: "Show all items (⌥⌘1)")
+        case .safe: return String(localized: "Show safe items (⌥⌘2)")
+        case .checkFirst: return String(localized: "Show check-first items (⌥⌘3)")
         }
     }
 
@@ -61,6 +64,10 @@ enum SortOption: String, CaseIterable, Identifiable {
     case sizeAsc
     case dateNewest
     case dateOldest
+
+    /// The defaults keys the scan tabs save their sort under.
+    static let appCachesKey = "sort.appCaches"
+    static let devToolsKey = "sort.devTools"
     case nameAZ
 
     var id: String { rawValue }
@@ -171,107 +178,27 @@ struct SafeFirstSelectAllControl<Key: Hashable>: View {
     }
 }
 
-// MARK: - Toolbar row (chips + sort + bulk action)
+// MARK: - Chip row
 
-struct FilterSortToolbar: View {
+struct SafetyFilterChipRow: View {
     @Binding var safetyFilter: SafetyFilter
-    @Binding var sortOption: SortOption
 
     /// Precomputed counts per chip (updates live with scan).
     let chipCounts: [SafetyFilter: Int]
 
-    let selectedInScopeCount: Int
-    var selectedInScopeBytes: Int64 = 0
-    let isDeleting: Bool
-
-    let onCleanSelected: () -> Void
-
-    /// When true (App Caches), chips and sort/bulk sit on separate rows with a horizontally scrolling chip row.
-    var useStackedLayout: Bool = false
-    var showsControlsRow: Bool = true
-
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var bulkTitle: String? {
-        String(localized: "Clean Selected")
-    }
-
-    private var bulkDisabled: Bool {
-        selectedInScopeCount == 0 || isDeleting
-    }
-
     var body: some View {
-        Group {
-            if useStackedLayout {
-                stackedToolbarBody
-            } else {
-                compactToolbarBody
-            }
-        }
-    }
-
-    private var stackedToolbarBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(SafetyFilter.allCases) { filter in
-                        safetyChip(filter)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-            .disableScrollClippingWhenAvailable()
-            .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
-
-            if showsControlsRow {
-                HStack(alignment: .center, spacing: 10) {
-                    AppSortMenu(selection: $sortOption)
-
-                    Spacer(minLength: 8)
-
-                    if let title = bulkTitle {
-                        cleanSelectedBulkButton(title: title)
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
+                ForEach(SafetyFilter.allCases) { filter in
+                    safetyChip(filter)
                 }
             }
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
         }
-    }
-
-    private var compactToolbarBody: some View {
-        HStack(alignment: .center, spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(SafetyFilter.allCases) { filter in
-                        safetyChip(filter)
-                    }
-                }
-            }
-            .disableScrollClippingWhenAvailable()
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            AppSortMenu(selection: $sortOption)
-
-            if let title = bulkTitle {
-                cleanSelectedBulkButton(title: title)
-            }
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private func cleanSelectedBulkButton(title: String) -> some View {
-        Button {
-            onCleanSelected()
-        } label: {
-            AnimatedDeleteActionLabel(
-                inactiveTitle: title,
-                activeTitle: title,
-                selectedCount: selectedInScopeCount,
-                selectedBytes: selectedInScopeBytes
-            )
-        }
-        .buttonStyle(.purge(.primary))
-        .disabled(bulkDisabled)
-        .fixedSize()
+        .disableScrollClippingWhenAvailable()
+        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
     }
 
     private func safetyChip(_ filter: SafetyFilter) -> some View {

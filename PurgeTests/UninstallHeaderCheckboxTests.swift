@@ -52,6 +52,36 @@ struct UninstallHeaderCheckboxTests {
         ])
     }
 
+    /// A scripts folder with files in it (#352) is opt-in the same way: the
+    /// header never ticks it, reads "all" without it, and can still clear it.
+    @Test
+    func scriptsFolderWithFilesIsNotTickedByTheHeader() {
+        var scripts = item("/Users/x/Library/Application Scripts/com.trae.app", category: .applicationScripts, selected: false)
+        scripts.holdsAddedScripts = true
+        var plan = UninstallAppPlan(app: trae, items: [
+            item("/Applications/Trae.app", category: .bundle, selected: true),
+            item("/Users/x/Library/Application Scripts/TEAM123456.com.trae.app", category: .applicationScripts, selected: true),
+            scripts,
+        ])
+        #expect(!plan.items[2].isTickedByHeader)
+        // An empty scripts folder is an ordinary row.
+        #expect(plan.items[1].isTickedByHeader)
+        #expect(plan.headerSelection == .all)
+
+        plan.toggleAllFromHeader()
+        #expect(selectedPaths(plan).isEmpty)
+        plan.toggleAllFromHeader()
+        #expect(selectedPaths(plan) == ["Trae.app", "TEAM123456.com.trae.app"])
+
+        // Ticked on its own row, it survives ticking the rest and goes with clearing.
+        plan.items[0].isSelected = false
+        plan.items[2].isSelected = true
+        plan.toggleAllFromHeader()
+        #expect(plan.items[2].isSelected)
+        plan.toggleAllFromHeader()
+        #expect(selectedPaths(plan).isEmpty)
+    }
+
     private func selectedPaths(_ plan: UninstallAppPlan) -> [String] {
         plan.selectedItems.map(\.path.lastPathComponent)
     }

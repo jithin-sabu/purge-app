@@ -26,35 +26,25 @@ enum OrphanLeftoverScanPolicy {
     /// launch-item roots are also left out — they are tiny, noisy, and full of
     /// daemon/helper identifiers that never appear as apps, which is exactly
     /// where a wrong "orphaned" call is most likely.
-    nonisolated struct OrphanRoot {
-        let url: URL
-        let category: UninstallCategory
-    }
+    typealias OrphanRoot = AppUninstallScanPolicy.LeftoverRoot
 
+    /// The home Library folders, by name, whose entries the orphan scan inspects.
+    nonisolated static let orphanRootNames: Set<String> = [
+        "Application Support",
+        "Containers",
+        "Group Containers",
+        "HTTPStorages",
+        "Saved Application State"
+    ]
+
+    /// Picked from the uninstaller's own leftover roots rather than listed again,
+    /// so every orphan root is one the delete gate accepts (#185).
     nonisolated static func orphanRoots(home: URL) -> [OrphanRoot] {
-        let lib = home.appendingPathComponent("Library", isDirectory: true)
-        return [
-            OrphanRoot(
-                url: lib.appendingPathComponent("Application Support", isDirectory: true),
-                category: .applicationSupport
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("Containers", isDirectory: true),
-                category: .containers
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("Group Containers", isDirectory: true),
-                category: .groupContainers
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("HTTPStorages", isDirectory: true),
-                category: .caches
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("Saved Application State", isDirectory: true),
-                category: .savedState
-            )
-        ]
+        let lib = home.appendingPathComponent("Library", isDirectory: true).standardizedFileURL.path
+        return AppUninstallScanPolicy.leftoverSearchRoots(home: home).filter { root in
+            root.url.deletingLastPathComponent().standardizedFileURL.path == lib
+                && orphanRootNames.contains(root.url.lastPathComponent)
+        }
     }
 
     // MARK: Installed set
@@ -90,7 +80,12 @@ enum OrphanLeftoverScanPolicy {
         /// so every caller has to say what evidence it is judging with.
         var evidence: InstalledCodeEvidence
 
-        var appCount: Int { diskBundleIDs.count }
+        /// How many apps were found on disk, when that differs from
+        /// `diskBundleIDs`: remembered drive apps (#99) count as owners there,
+        /// but not toward `looksComplete`.
+        var onDiskAppCount: Int?
+
+        var appCount: Int { onDiskAppCount ?? diskBundleIDs.count }
 
         /// Guards against acting on a broken view of the world: an unmounted
         /// volume, an unreadable `/Applications`, or a sandbox with no Launch
@@ -169,14 +164,14 @@ enum OrphanLeftoverScanPolicy {
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
             guard fm.fileExists(atPath: root.path) else { continue }
-            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
+            guard let bundles = AppFolders.appBundleURLs(in: root) else {
                 rootsReadable = false
                 continue
             }
             for url in bundles {
                 appBundles.append(url)
                 let bundle = Bundle(url: url)
-                if let id = bundle?.bundleIdentifier, !id.isEmpty {
+                if let id = AppBundleReach.bundleID(at: url) {
                     ids.insert(id.lowercased())
                 }
                 names.insert(AppUninstallScanner.displayName(for: url, bundle: bundle).lowercased())
@@ -187,11 +182,26 @@ enum OrphanLeftoverScanPolicy {
                 }
             }
         }
+        // An app on a drive that is unplugged still owns its leftovers, and
+        // what its code claims, read while the drive was in (#99).
+        DriveAppMemory.record(bundles: appBundles)
+        var evidence = InstalledCodeEvidence.gather(userAppBundles: appBundles)
+        // Counted before the remembered apps join, so a sparse view of the
+        // disk still reads as one.
+        let onDiskAppCount = ids.count
+        for entry in DriveAppMemory.presentEntries() {
+            if let id = entry.bundleID { ids.insert(id.lowercased()) }
+            names.insert(entry.name.lowercased())
+            evidence.bundleIDs.formUnion(entry.codeIDs.map { $0.lowercased() })
+            evidence.teamIDs.formUnion(entry.teamIDs.map { $0.uppercased() })
+            evidence.appGroups.formUnion(entry.appGroups.map { $0.lowercased() })
+        }
         return InstalledAppIndex(
             diskBundleIDs: ids,
             diskAppNames: names,
             rootsReadable: rootsReadable,
-            evidence: InstalledCodeEvidence.gather(userAppBundles: appBundles)
+            evidence: evidence,
+            onDiskAppCount: onDiskAppCount
         )
     }
 
@@ -292,7 +302,8 @@ enum OrphanLeftoverScanPolicy {
             return httpStorageBundleID(from: name).map(LeftoverOwner.bundleID)
         case .savedState:
             return savedStateBundleID(from: name).map(LeftoverOwner.bundleID)
-        case .bundle, .preferences, .logs, .launchAgents, .launchDaemons, .homeFolderData, .other:
+        case .bundle, .preferences, .logs, .launchAgents, .launchDaemons, .applicationScripts, .webData,
+             .homeFolderData, .other:
             // Not orphan roots. Home folder data comes from the catalog
             // (`dotFolderCandidates`), never from an entry's name.
             return nil

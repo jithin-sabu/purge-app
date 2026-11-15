@@ -2,7 +2,6 @@ import AppKit
 import Foundation
 
 enum CacheScanEvent {
-    case status(String)
     case found(CacheItem)
     case sizeResolved(path: String, sizeBytes: Int64, lastModified: Date)
 }
@@ -38,10 +37,6 @@ nonisolated final class CacheScanner {
         }
     }
 
-    func calculateFolderSize(at url: URL) -> Int64 {
-        FolderSizing.directoryByteSize(at: url)
-    }
-
     private func runGeneralScan(
         access: ScanAccess,
         continuation: AsyncStream<CacheScanEvent>.Continuation
@@ -54,7 +49,6 @@ nonisolated final class CacheScanner {
         // appearing under App Caches and later being pulled out when the dev scan runs.
         var collectedPaths = DevScanner.claimedGlobalCachePaths()
 
-        continuation.yield(.status(String(localized: "Scanning App Caches...")))
         let contents: [URL]
         do {
             contents = try FileManager.default.contentsOfDirectory(
@@ -85,7 +79,6 @@ nonisolated final class CacheScanner {
         // Chromium browsers, Electron apps and Adobe keep their biggest caches, so
         // it belongs in the limited scan. The sensitive roots under it are already
         // skipped by `excludedApplicationSupportRoots`.
-        continuation.yield(.status(String(localized: "Scanning Application Support caches...")))
         let appSupportItems = applicationSupportCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
         for item in appSupportItems {
             if Task.isCancelled {
@@ -141,7 +134,6 @@ nonisolated final class CacheScanner {
                 sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
 
-            continuation.yield(.status(String(localized: "Scanning sandboxed app caches...")))
             let containerItems = allContainerCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
             for item in containerItems {
                 if Task.isCancelled {
@@ -153,7 +145,6 @@ nonisolated final class CacheScanner {
             }
         }
 
-        continuation.yield(.status(String(localized: "Scanning browser app bundles...")))
         let staleFrameworkItems = staleChromiumFrameworkItems(access: access, collectedPaths: &collectedPaths)
         for item in staleFrameworkItems {
             if Task.isCancelled {
@@ -164,7 +155,6 @@ nonisolated final class CacheScanner {
             sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
 
-        continuation.yield(.status(String(localized: "Scanning System Junk...")))
         for item in applicationLogItems(home: home, access: access, collectedPaths: &collectedPaths) {
             if Task.isCancelled {
                 continuation.finish()
@@ -229,7 +219,6 @@ nonisolated final class CacheScanner {
             detail: "\(sizeJobs.count) cache locations queued, \(collectedPaths.count) unique paths"
         )
 
-        continuation.yield(.status(String(localized: "Calculating sizes...")))
         let sizingStart = Date()
         await runSizeJobs(sizeJobs, access: access, continuation: continuation)
         ScanPhaseTiming.finish(
@@ -322,11 +311,13 @@ nonisolated final class CacheScanner {
                 ? CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolderName)
                 : nil
             for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
+                let row = Self.applicationSupportRow(for: cacheURL, appFolderName: appFolderName, groupKey: groupKey)
                 guard let item = cacheItemAtDiscoveredPath(
                     cacheURL,
-                    headline: applicationSupportHeadline(appFolderName: appFolderName),
+                    headline: row.headline,
                     folderName: appFolderName,
-                    groupKey: groupKey,
+                    classificationName: row.classificationName,
+                    groupKey: row.groupKey,
                     access: access,
                     collectedPaths: &collectedPaths
                 ) else { continue }
@@ -429,13 +420,7 @@ nonisolated final class CacheScanner {
         var items: [CacheItem] = []
         for frameworkVersionURL in CacheDiscoveryPaths.staleChromiumFrameworkVersionURLs()
         where ProtectedLocations.isReadable(frameworkVersionURL, access: access) {
-            let appName = frameworkVersionURL
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .lastPathComponent
-                .replacingOccurrences(of: ".app", with: "")
+            let appName = CacheDiscoveryPaths.chromiumBrowserAppName(forFrameworkVersion: frameworkVersionURL)
             let version = frameworkVersionURL.lastPathComponent
             let headline = "\(appName) Old Version \(version)"
             let pathKey = frameworkVersionURL.standardizedFileURL.path
@@ -447,7 +432,7 @@ nonisolated final class CacheScanner {
             let safety = SafetyInfo(
                 level: .medium,
                 headline: headline,
-                explanation: String(localized: "A leftover Chromium framework inside \(appName) that no running process is using. Quit and relaunch \(appName) before an older version still loaded by the running browser can be cleaned; those copies stay hidden until then. \(appName) also deletes leftover versions itself on relaunch."),
+                explanation: String(localized: "An unused leftover Chromium framework in \(appName). Relaunch the browser to clean versions still loaded; relaunching also removes old ones."),
                 recoverySteps: String(localized: "Quit and relaunch \(appName). If it still fails to open, reinstall it from the vendor."),
                 reinstallCommand: nil
             )
@@ -472,10 +457,14 @@ nonisolated final class CacheScanner {
         _ url: URL,
         headline: String,
         folderName: String,
+        classificationName: String? = nil,
         groupKey: String? = nil,
         access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
+        // The name the tier and row come from. The location keeps `folderName`,
+        // which its label in the confirm sheets is read from.
+        let classificationName = classificationName ?? folderName
         // Before `standardizedFileURL` and the modification date, both of which
         // follow a symlink to its target.
         guard ProtectedLocations.isReadable(url, access: access) else { return nil }
@@ -487,12 +476,12 @@ nonisolated final class CacheScanner {
 
         let modified = FolderSizing.contentModificationDate(at: url)
         let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: folderName,
+            folderName: classificationName,
             friendlyHeadline: headline,
             path: url
         )
         return CacheItem(
-            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: folderName),
+            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: classificationName),
             location: CacheLocation(
                 path: url,
                 sizeBytes: 0,
@@ -569,7 +558,33 @@ nonisolated final class CacheScanner {
     }
 
     /// One name for every cache folder of an app, since they share a row.
-    private func applicationSupportHeadline(appFolderName: String) -> String {
+    /// The row an Application Support cache folder is shown on.
+    struct ApplicationSupportRow: Equatable {
+        let headline: String
+        /// The name the tier and row come from, when it is not the app folder.
+        let classificationName: String?
+        let groupKey: String?
+    }
+
+    /// Unsent crash reports from every app share one Check First row (#367),
+    /// never the app's own row, whatever tier the app's entry has. Every other
+    /// folder goes on its app's row.
+    static func applicationSupportRow(for cacheURL: URL, appFolderName: String, groupKey: String?) -> ApplicationSupportRow {
+        if CacheDiscoveryPaths.isCrashpadPendingFolder(cacheURL) {
+            return ApplicationSupportRow(
+                headline: CacheDiscoveryPaths.crashpadPendingKey,
+                classificationName: CacheDiscoveryPaths.crashpadPendingKey,
+                groupKey: nil
+            )
+        }
+        return ApplicationSupportRow(
+            headline: applicationSupportHeadline(appFolderName: appFolderName),
+            classificationName: nil,
+            groupKey: groupKey
+        )
+    }
+
+    private static func applicationSupportHeadline(appFolderName: String) -> String {
         let displayApp = appFolderName
             .replacingOccurrences(of: "company.thebrowser.", with: "")
             .replacingOccurrences(of: "com.google.", with: "")
@@ -594,17 +609,13 @@ nonisolated final class CacheScanner {
         let jobs = jobs.filter { ProtectedLocations.isReadable($0.path, access: access) }
         guard !jobs.isEmpty else { return }
 
-        let chunkSize = FolderSizing.duChunkSize
         // Matches the process-wide `du` cap. Each task takes one limiter permit
         // inside `directorySizesForChunk`, so this is the fan-out, not a second
         // multiplier on top of `directorySizes` callers.
         let maxConcurrent = FolderSizing.maxConcurrentDuChunks
-        var chunks: [[SizeJob]] = []
-        var index = 0
-        while index < jobs.count {
-            chunks.append(Array(jobs[index..<min(index + chunkSize, jobs.count)]))
-            index += chunkSize
-        }
+        // Short chunks, so every permit is in use and one big cache folder holds
+        // up only the few beside it.
+        let chunks = FolderSizing.chunks(of: jobs, split: .spread)
 
         await withTaskGroup(of: ([SizeJob], [String: Int64])?.self) { group in
             var iterator = chunks.makeIterator()
@@ -665,10 +676,6 @@ nonisolated final class CacheScanner {
                     "Library/Logs/DiagnosticReports",
                     isDirectory: true
                 )
-            ),
-            (
-                String(localized: "Font Cache"),
-                home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
             )
         ]
     }

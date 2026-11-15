@@ -2,7 +2,7 @@ import Foundation
 
 /// Size anchors drawn from things that take up space on a Mac, phrased as
 /// what the freed space has room for ("room for 3 macOS updates", "room for
-/// Photoshop, four times over"). Everyone has met most of these as a disk
+/// Photoshop, 4 times over"). Everyone has met most of these as a disk
 /// hog: desktop screenshots, Electron apps, the "not enough space for this
 /// update" dialog.
 ///
@@ -13,7 +13,7 @@ enum SizeComparisonCatalog {
     /// "3 macOS updates" — for things you'd naturally count. `many` follows
     /// the number.
     case counted(one: String, many: String)
-    /// "Photoshop, four times over" — for one big thing, repeated.
+    /// "Photoshop, 4 times over" — for one big thing, repeated.
     case timesOver(one: String, name: String)
   }
 
@@ -105,11 +105,11 @@ enum SizeComparisonCatalog {
 
     return OnboardingSizeComparisonItem(
       symbol: pick.anchor.symbol,
-      label: label(for: pick.anchor, multiplier: pick.multiplier),
-      localizedLabel: displayLabel(for: pick.anchor, multiplier: pick.multiplier)
+      displayLabel: displayLabel(for: pick.anchor, multiplier: pick.multiplier)
     )
   }
 
+  /// The text every chip and line shows, in the app's language.
   private static func displayLabel(for anchor: Anchor, multiplier: Double) -> String {
     let count = max(1, Int(multiplier.rounded(.down)))
     switch anchor.phrasing {
@@ -125,24 +125,6 @@ enum SizeComparisonCatalog {
         ? String(localized: "\(named), twice over")
         : String(localized: "\(named), \(formatCount(count)) times over")
     }
-  }
-
-  private static func label(for anchor: Anchor, multiplier: Double) -> String {
-    let count = max(1, Int(multiplier.rounded(.down)))
-
-    switch anchor.phrasing {
-    case let .counted(one, many):
-      return count == 1 ? one : "\(formatCount(count)) \(many)"
-    case let .timesOver(one, name):
-      return count == 1 ? one : "\(name), \(timesOver(count))"
-    }
-  }
-
-  private static func timesOver(_ count: Int) -> String {
-    if count == 2 { return "twice over" }
-    guard count < 10 else { return "\(formatCount(count)) times over" }
-    let words = NumberFormatter.localizedString(from: NSNumber(value: count), number: .spellOut)
-    return "\(words) times over"
   }
 
   /// Swift's `Hasher` is seeded per process, so the same size would pick a

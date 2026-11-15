@@ -40,6 +40,29 @@ struct CleanupHistorySkippedItemDTO: Codable, Hashable, Identifiable {
     let isUserVisible: Bool
 }
 
+/// An item the clean tried and could not remove (#303). A record of that clean:
+/// a later Retry is not written to History, so the item may be gone since.
+struct CleanupHistoryFailedItemDTO: Codable, Hashable, Identifiable {
+    var id: String { path }
+
+    let path: String
+    /// Bytes recorded before the attempt.
+    let sizeBytes: Int64
+    /// A `CleanFailureReason` raw value.
+    let reason: String
+
+    init(path: String, sizeBytes: Int64, reason: CleanFailureReason) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.reason = reason.rawValue
+    }
+
+    /// A reason a newer version saved reads as unknown.
+    var failureReason: CleanFailureReason {
+        CleanFailureReason(rawValue: reason) ?? .unknown
+    }
+}
+
 /// What a history entry removed, when it was not an ordinary clean. Absent on
 /// every entry written before this existed, and on ordinary cleans since.
 nonisolated enum CleanupHistoryKind: String, Codable, Hashable {
@@ -47,6 +70,10 @@ nonisolated enum CleanupHistoryKind: String, Codable, Hashable {
     /// `deletedItems` holds one item per set with Apple's figure for it;
     /// `bytesReclaimedOnVolume` is what the volume gave back (#133).
     case appleIntelligenceModels
+    /// Downloads of iCloud files removed from this Mac (#106). Nothing went to
+    /// the Trash and every file is still in iCloud. `deletedItems` holds each
+    /// file with the space it freed here, measured.
+    case iCloudDownloadsRemoved
 }
 
 /// One persisted cleanup session (manual or scheduled).
@@ -63,6 +90,8 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     let bytesReclaimedOnVolume: Int64?
     let deletedItems: [CleanupHistoryDeletedItemDTO]
     let skippedItems: [CleanupHistorySkippedItemDTO]
+    /// Empty on entries written before #303, which did not keep them.
+    let failedItems: [CleanupHistoryFailedItemDTO]
 
     init(
         id: UUID = UUID(),
@@ -72,6 +101,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         bytesReclaimedOnVolume: Int64? = nil,
         deletedItems: [CleanupHistoryDeletedItemDTO],
         skippedItems: [CleanupHistorySkippedItemDTO] = [],
+        failedItems: [CleanupHistoryFailedItemDTO] = [],
         kind: CleanupHistoryKind? = nil
     ) {
         self.id = id
@@ -82,15 +112,27 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         self.bytesReclaimedOnVolume = bytesReclaimedOnVolume
         self.deletedItems = deletedItems
         self.skippedItems = skippedItems
+        self.failedItems = failedItems
     }
 
     /// An ordinary clean's items, split by where they went (#170).
+    /// Empty for removed iCloud downloads, which neither went to the Trash nor
+    /// were deleted.
     var trashedItems: [CleanupHistoryDeletedItemDTO] {
-        deletedItems.filter(\.wentToTrash)
+        guard kind != .iCloudDownloadsRemoved else { return [] }
+        return deletedItems.filter(\.wentToTrash)
     }
 
     var permanentlyDeletedItems: [CleanupHistoryDeletedItemDTO] {
-        deletedItems.filter { !$0.wentToTrash }
+        guard kind != .iCloudDownloadsRemoved else { return [] }
+        return deletedItems.filter { !$0.wentToTrash }
+    }
+
+    /// Space the removed iCloud downloads freed on this Mac, measured per file.
+    /// Zero for every other kind of entry.
+    var bytesFreedByRemovedDownloads: Int64 {
+        guard kind == .iCloudDownloadsRemoved else { return 0 }
+        return deletedItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
     /// The sizes the scan recorded for the items deleted permanently. Not in
@@ -100,7 +142,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, date, trigger, bytesMovedToTrash, bytesReclaimedOnVolume, deletedItems, skippedItems, kind
+        case id, date, trigger, bytesMovedToTrash, bytesReclaimedOnVolume, deletedItems, skippedItems, failedItems, kind
         /// Pre-measurement field. Held a sum of moved sizes that was labelled as freed
         /// space, so it decodes into `bytesMovedToTrash` and never into reclaimed.
         case totalFreedBytes
@@ -121,6 +163,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         self.bytesReclaimedOnVolume = try container.decodeIfPresent(Int64.self, forKey: .bytesReclaimedOnVolume)
         self.deletedItems = try container.decode([CleanupHistoryDeletedItemDTO].self, forKey: .deletedItems)
         self.skippedItems = try container.decodeIfPresent([CleanupHistorySkippedItemDTO].self, forKey: .skippedItems) ?? []
+        self.failedItems = try container.decodeIfPresent([CleanupHistoryFailedItemDTO].self, forKey: .failedItems) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -133,6 +176,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(bytesReclaimedOnVolume, forKey: .bytesReclaimedOnVolume)
         try container.encode(deletedItems, forKey: .deletedItems)
         try container.encode(skippedItems, forKey: .skippedItems)
+        try container.encode(failedItems, forKey: .failedItems)
     }
 }
 

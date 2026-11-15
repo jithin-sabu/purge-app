@@ -104,3 +104,37 @@ struct LargeFileSearchTests {
         #expect(subject.matches(searchQuery: "registry.ollama.ai"))
     }
 }
+
+@MainActor
+@Suite("Delete extra copies follows the search")
+struct DuplicateCleanupSearchTests {
+    private func file(_ path: String) -> LargeFile {
+        LargeFile(path: URL(fileURLWithPath: path), sizeBytes: 1_000_000, lastUsed: Date(), category: .video)
+    }
+
+    /// The Duplicates list shows only the sets a search matches, so the review
+    /// must not bring back the sets the search hid (#190).
+    @Test func reviewTakesOnlyTheSetsTheSearchShows() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let wedding = [file("/Users/x/Movies/wedding.mov"), file("/Users/x/Downloads/wedding.mov")]
+        let trip = [file("/Users/x/Movies/trip.mov"), file("/Users/x/Downloads/trip.mov")]
+        store.largeFiles = wedding + trip
+        store.largeFileDuplicates.finish(with: DuplicateIndex(groups: [
+            DuplicateGroup(id: "wedding", fileIDs: wedding.map(\.id), sizeBytes: 1_000_000),
+            DuplicateGroup(id: "trip", fileIDs: trip.map(\.id), sizeBytes: 1_000_000),
+        ]))
+
+        store.requestDuplicateCleanup(searchQuery: "wedding")
+        #expect(store.pendingDuplicateCleanup?.sets.map(\.id) == ["wedding"])
+        #expect(store.pendingDuplicateCleanup?.sets.first?.suggestedKeeperID == wedding[0].id)
+
+        store.requestDuplicateCleanup(searchQuery: "")
+        #expect(Set(store.pendingDuplicateCleanup?.sets.map(\.id) ?? []) == ["wedding", "trip"])
+
+        store.pendingDuplicateCleanup = nil
+        store.requestDuplicateCleanup(searchQuery: "birthday")
+        #expect(store.pendingDuplicateCleanup == nil)
+    }
+}

@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Security
 import ServiceManagement
 
 /// The app's side of the privileged helper: registers the root daemon through
@@ -36,6 +37,15 @@ final class PrivilegedHelperManager: ObservableObject {
     }
 
     var status: SMAppService.Status { service.status }
+
+    /// The same status, read off the main thread. Each read is an XPC round trip
+    /// to the system, about a millisecond, and approval polling makes 600 of them.
+    func statusOffMain() async -> SMAppService.Status {
+        let plistName = PurgeHelperConstants.daemonPlistName
+        return await Task.detached(priority: .utility) {
+            SMAppService.daemon(plistName: plistName).status
+        }.value
+    }
 
     /// Registers the daemon if it isn't already. A fresh registration lands in
     /// `.requiresApproval` until the user flips it on in System Settings, so this
@@ -80,6 +90,9 @@ final class PrivilegedHelperManager: ObservableObject {
     /// user can take minutes. A timeout is therefore an unknown result, never proof
     /// that nothing moved.
     private static let moveTimeout: TimeInterval = 300
+    /// A standard account's request first waits on an administrator, who may have to
+    /// be found, so it gets this much longer before the app stops waiting (#314).
+    private static let approvalTimeout: TimeInterval = 1_800
     private static let versionTimeout: TimeInterval = 10
 
     /// Builds a connection to the helper and applies the code-signing requirement so
@@ -96,10 +109,27 @@ final class PrivilegedHelperManager: ObservableObject {
         return connection
     }
 
+    /// The move that runs now or ran last. The next one waits for it.
+    private var lastMove: Task<PrivilegedMoveResult?, Never>?
+
     /// Moves `urls` to the connecting user's Trash through the helper. Returns `nil`
     /// when the helper is not enabled or the connection fails, so the caller knows
     /// escalation did not happen. Never throws: escalation is best-effort.
+    ///
+    /// Moves run one at a time. For a standard account each one shows the
+    /// administrator dialog, and Retry on several rows would otherwise put up all
+    /// of them at once (#314).
     func moveToTrash(_ urls: [URL]) async -> PrivilegedMoveResult? {
+        let previous = lastMove
+        let move = Task { () -> PrivilegedMoveResult? in
+            _ = await previous?.value
+            return await self.moveToTrashNow(urls)
+        }
+        lastMove = move
+        return await move.value
+    }
+
+    private func moveToTrashNow(_ urls: [URL]) async -> PrivilegedMoveResult? {
         // A helper can be approved after app launch. Check again here so an old,
         // newly-approved copy is replaced before it receives the current protocol.
         // A definite, un-fixable version mismatch reports "not ready" rather than
@@ -111,15 +141,24 @@ final class PrivilegedHelperManager: ObservableObject {
         let connection = vettedConnection()
         defer { connection.invalidate() }
 
+        // For a standard account the helper asks an administrator to approve the move,
+        // in a dialog shown through this authorization (#314). An administrator is
+        // never asked. It stays alive until the helper has answered.
+        let approval = AdministratorApproval()
+        defer { approval.free() }
+
         let sentPaths = urls.map(\.path)
+        let timeout = AdministratorMembership.currentUserIsAdministrator()
+            ? Self.moveTimeout
+            : Self.moveTimeout + Self.approvalTimeout
         return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) in
-            let box = ContinuationBox(continuation)
+            let box = ResumeOnce(continuation)
 
             // The helper may already have moved one or more paths before a timeout.
             // Preserve that uncertainty so callers do not report a false failure or
             // immediately retry an operation that may still be finishing.
-            DispatchQueue.global().asyncAfter(deadline: .now() + Self.moveTimeout) {
-                box.resume(PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                box.resume(returning: PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
             }
 
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
@@ -128,27 +167,36 @@ final class PrivilegedHelperManager: ObservableObject {
                 // caller keeps the honest original error instead of demoting an enabled
                 // helper to a "needs administrator setup" retry.
                 NSLog("Purge: helper XPC error — %@", error.localizedDescription)
-                box.resume(PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
+                box.resume(returning: PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
             } as? PurgeHelperProtocol
 
             guard let proxy else {
-                box.resume(nil)
+                box.resume(returning: nil)
                 return
             }
 
-            proxy.moveToTrashReportingOwnership(
-                paths: sentPaths
-            ) { movedPaths, ownershipIncompletePaths in
+            // `reconcileVersion` above made sure the helper speaks v8, which says why
+            // a path stayed (#299) and asks an administrator for a standard account (#314).
+            proxy.moveToTrashWithAuthorization(
+                paths: sentPaths,
+                authorization: approval.externalForm
+            ) { movedPaths, ownershipIncompletePaths, failureCodes, refusal in
                 let movedSet = Set(movedPaths)
                 let incompleteSet = Set(ownershipIncompletePaths)
                 let moved = urls.filter { movedSet.contains($0.path) }
                 let failed = urls.filter { !movedSet.contains($0.path) }
                 let ownershipIncomplete = urls.filter { incompleteSet.contains($0.path) }
-                box.resume(PrivilegedMoveResult(
+                var codes: [URL: Int] = [:]
+                for url in failed {
+                    if let code = failureCodes[url.path] { codes[url] = code }
+                }
+                box.resume(returning: PrivilegedMoveResult(
                     moved: moved,
                     failed: failed,
                     indeterminate: [],
-                    ownershipIncomplete: ownershipIncomplete
+                    ownershipIncomplete: ownershipIncomplete,
+                    refusal: HelperMoveRefusal(rawValue: refusal) ?? .accepted,
+                    failureCodes: codes
                 ))
             }
         }
@@ -162,15 +210,15 @@ final class PrivilegedHelperManager: ObservableObject {
         defer { connection.invalidate() }
 
         return await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
-            let box = VersionBox(continuation)
+            let box = ResumeOnce(continuation)
             DispatchQueue.global().asyncAfter(deadline: .now() + Self.versionTimeout) {
-                box.resume(nil)
+                box.resume(returning: nil)
             }
             let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
-                box.resume(nil)
+                box.resume(returning: nil)
             } as? PurgeHelperProtocol
-            guard let proxy else { box.resume(nil); return }
-            proxy.helperVersion { version in box.resume(version) }
+            guard let proxy else { box.resume(returning: nil); return }
+            proxy.helperVersion { version in box.resume(returning: version) }
         }
     }
 
@@ -299,40 +347,33 @@ enum HelperReconciler {
     }
 }
 
-/// Guards a checked continuation so the XPC error handler and the reply block — which
-/// can race on different queues — resume it exactly once.
-private final class ContinuationBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<PrivilegedMoveResult?, Never>?
+/// An empty `AuthorizationRef` the helper uses to show the administrator dialog in
+/// this app's session (#314). It holds no rights until the helper asks for one, and
+/// its rights are destroyed once the move is done, so an approval covers one request.
+private final class AdministratorApproval {
+    private var authorization: AuthorizationRef?
 
-    init(_ continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) {
-        self.continuation = continuation
+    /// The form the helper reads back. Empty when no authorization could be made: the
+    /// helper then refuses a standard account and still serves an administrator.
+    let externalForm: Data
+
+    init() {
+        var created: AuthorizationRef?
+        var form = AuthorizationExternalForm()
+        if AuthorizationCreate(nil, nil, [], &created) == errAuthorizationSuccess,
+           let created,
+           AuthorizationMakeExternalForm(created, &form) == errAuthorizationSuccess {
+            authorization = created
+            externalForm = withUnsafeBytes(of: &form) { Data($0) }
+        } else {
+            if let created { AuthorizationFree(created, []) }
+            externalForm = Data()
+        }
     }
 
-    func resume(_ value: PrivilegedMoveResult?) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let continuation else { return }
-        self.continuation = nil
-        continuation.resume(returning: value)
-    }
-}
-
-/// The version-query counterpart of `ContinuationBox`: the reply and the timeout race
-/// on different queues, so this resumes the continuation exactly once.
-private final class VersionBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<String?, Never>?
-
-    init(_ continuation: CheckedContinuation<String?, Never>) {
-        self.continuation = continuation
-    }
-
-    func resume(_ value: String?) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let continuation else { return }
-        self.continuation = nil
-        continuation.resume(returning: value)
+    func free() {
+        guard let authorization else { return }
+        AuthorizationFree(authorization, [.destroyRights])
+        self.authorization = nil
     }
 }

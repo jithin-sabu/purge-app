@@ -80,32 +80,25 @@ struct OverviewView: View {
 
     private func diskSummary(_ breakdown: OverviewBreakdown) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
+            // One line, ahead of the smaller figures: Russian puts the word first
+            // ("Занято 372.7 GB"), and a narrow window broke it after the word (#342).
             Text("\(formatStorageBytes(breakdown.usedBytes)) used")
-                .font(AppStyle.Typography.title.weight(.bold))
+                .font(AppStyle.Typography.title.weight(.bold).numbers)
+                .lineLimit(1)
+                .layoutPriority(1)
                 .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
-                .font(AppStyle.Typography.rowTitle)
+                .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
-            // Right end, above the free part of the bar. With purgeable space the
-            // empty figure comes first, so it matches System Settings.
-            Group {
-                if let split = freeSpaceSplit(breakdown) {
-                    Text("\(formatStorageBytes(split.freeNowBytes)) free + \(formatStorageBytes(split.purgeableBytes)) purgeable")
-                } else {
-                    Text("\(formatStorageBytes(breakdown.freeBytes)) free")
-                }
-            }
-            .font(AppStyle.Typography.rowTitle)
-            .foregroundStyle(AppColors.textSecondary)
-            .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
+            // Right end, above the free part of the bar.
+            Text("\(formatStorageBytes(breakdown.freeBytes)) free")
+                .font(AppStyle.Typography.rowTitle.numbers)
+                .foregroundStyle(AppColors.textSecondary)
+                .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private func freeSpaceSplit(_ breakdown: OverviewBreakdown) -> FreeSpaceSplit? {
-        FreeSpaceSplit(availableBytes: breakdown.freeBytes, freeNowBytes: diskStore.freeNowDiskBytes)
     }
 
     private func barSegments(_ breakdown: OverviewBreakdown) -> [OverviewDiskBar.Segment] {
@@ -162,9 +155,7 @@ struct OverviewView: View {
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
                 title: String(localized: "Free"),
-                detail: freeSpaceSplit(breakdown).map {
-                    String(localized: "\(formatStorageBytes($0.freeNowBytes)) empty now. macOS frees the other \(formatStorageBytes($0.purgeableBytes)) by itself when it needs room.")
-                } ?? String(localized: "Available for new files"),
+                detail: String(localized: "Available for new files"),
                 bytes: breakdown.freeBytes,
                 share: breakdown.share(of: breakdown.freeBytes),
                 linkedState: linkedRowState(OverviewDiskBar.freeID)
@@ -213,7 +204,7 @@ struct OverviewView: View {
     private func footnotes(now: Date) -> some View {
         let lines = footnoteLines(now: now)
         if !lines.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 ForEach(lines, id: \.self) { line in
                     Text(line)
                 }
@@ -260,7 +251,7 @@ private struct OverviewCategoryRow: View {
     @State private var isHovering = false
 
     private var phase: OverviewCategoryPhase { store.overviewPhase(for: category) }
-    private var record: ScanRecord? { store.scanRecords[category] }
+    private var record: ScanRecord? { store.applicableRecord(for: category) }
     private var isRecorded: Bool { store.isShowingRecordedFigure(for: category) }
 
     var body: some View {
@@ -270,11 +261,11 @@ private struct OverviewCategoryRow: View {
                 color: OverviewCategoryStyle.tileColor(category)
             )
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(OverviewCategoryStyle.name(category))
                         .font(AppStyle.Typography.headline)
-                    if OverviewCategoryStyle.isReview(category), showsFigure {
+                    if OverviewCategoryStyle.isReview(category), showsFigure, !isEmptyLargeFiles {
                         AppBadge(text: String(localized: "Review first"), tone: .warning)
                     }
                 }
@@ -288,7 +279,7 @@ private struct OverviewCategoryRow: View {
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: phase)
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .background(isHovering || linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .contentShape(Rectangle())
@@ -317,7 +308,7 @@ private struct OverviewCategoryRow: View {
     }
 
     private var scanTimeHelp: String {
-        guard phase == .ready || phase == .notScanned, let record else { return "" }
+        guard phase == .ready || isRecorded, let record else { return "" }
         return String(localized: "Scanned \(compactAgoText(from: record.completedAt, to: now))")
     }
 
@@ -325,12 +316,23 @@ private struct OverviewCategoryRow: View {
         phase == .ready || phase == .scanning || isRecorded
     }
 
+    /// A finished Large Files scan, live or saved, that found nothing under the
+    /// current filters. There is nothing to review and no size to show, so the row
+    /// explains the filters instead and offers to change them (#279).
+    private var isEmptyLargeFiles: Bool {
+        guard category == .largeFiles else { return false }
+        if phase == .ready { return store.totals(for: category).count == 0 }
+        // A saved zero that is waiting or being rescanned keeps its place in the
+        // queue; "Change filter" only makes sense once nothing is coming.
+        if phase == .notScanned, isRecorded, let record { return record.count == 0 }
+        return false
+    }
+
     /// While scanning, the text itself shimmers; a spinner beside it would come and
     /// go with every pass of the scan.
     private var statusLine: some View {
-        Text(statusText)
+        Text(figures: statusText, style: AppStyle.Typography.callout)
             .lineLimit(1)
-            .font(AppStyle.Typography.callout)
             .foregroundStyle(AppColors.textSecondary)
             .contentTransition(reduceMotion ? .identity : .numericText())
             .animation(reduceMotion ? nil : OverviewMotion.number, value: statusText)
@@ -346,21 +348,25 @@ private struct OverviewCategoryRow: View {
             Image(systemName: "lock")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.textTertiary)
-                .padding(.trailing, 2)
+                .padding(.trailing, AppStyle.Spacing.xxxSmall)
         case .notScanned where !isRecorded:
             Button("Scan") { store.requestScan(category.step) }
                 .buttonStyle(.purge(.secondary))
-        case .waiting:
-            // About to be measured again: no figure, not even the last one, until it scans.
+        case .waiting where !isRecorded:
+            // Nothing saved to show until its scan lands.
             EmptyView()
+        case _ where isEmptyLargeFiles:
+            // "0%  0 bytes" gives the user nothing to act on. The filters do.
+            Button(String(localized: "Change filter")) { store.selectedTab = .largeFiles }
+                .buttonStyle(.purge(.secondary))
         default:
             HStack(spacing: AppStyle.Spacing.small) {
                 Text(OverviewCategoryStyle.shareText(share))
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .foregroundStyle(AppColors.textTertiary)
                     .overviewNumberTransition(share, reduceMotion: reduceMotion)
                 Text(formatStorageBytes(bytes))
-                    .font(AppStyle.Typography.sectionTitle)
+                    .font(AppStyle.Typography.sectionTitle.numbers)
                     .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                     .foregroundStyle(isRecorded ? AppColors.textSecondary : AppColors.textPrimary)
                     .frame(minWidth: 64, alignment: .trailing)
@@ -404,15 +410,15 @@ private struct OverviewCategoryRow: View {
             }.count
             return unused > 0
                 ? String(localized: "\(unused) not opened in 90 days")
-                : String(localized: "\(totals.count) \(totals.count == 1 ? String(localized: "app") : String(localized: "apps"))")
+                : String(localized: "\(totals.count) apps")
         case .leftovers:
             guard totals.count > 0 else { return String(localized: "Nothing left behind") }
-            return String(localized: "\(totals.count) \(totals.count == 1 ? String(localized: "item") : String(localized: "items"))")
+            return String(localized: "\(totals.count) items")
         }
     }
 
     private func largeFilesDetail(count: Int) -> String {
-        String(localized: "\(count) \(count == 1 ? String(localized: "file") : String(localized: "files")) over \(LargeFileSizeThreshold.current().label)")
+        OverviewLargeFilesLine.text(count: count, filter: store.largeFileFilter)
     }
 
     private func cacheDetail(safeBytes: Int64) -> String {
@@ -426,14 +432,14 @@ private struct OverviewCategoryRow: View {
             if let safeBytes = record.safeBytes {
                 return cacheDetail(safeBytes: safeBytes)
             }
-            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "item") : String(localized: "items"))")
+            return String(localized: "\(record.count) items")
         case .leftovers:
             guard record.count > 0 else { return String(localized: "Nothing left behind") }
-            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "item") : String(localized: "items"))")
+            return String(localized: "\(record.count) items")
         case .largeFiles:
             return largeFilesDetail(count: record.count)
         case .apps:
-            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "app") : String(localized: "apps"))")
+            return String(localized: "\(record.count) apps")
         }
     }
 
@@ -544,26 +550,25 @@ struct OverviewPlainRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: symbol, color: color)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.headline)
-                Text(LocalizedStringKey(detail))
-                    .font(AppStyle.Typography.callout)
+                Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }
             Spacer(minLength: AppStyle.Spacing.small)
             Text(OverviewCategoryStyle.shareText(share))
-                .font(AppStyle.Typography.metadata)
+                .font(AppStyle.Typography.metadata.numbers)
                 .foregroundStyle(AppColors.textTertiary)
                 .overviewNumberTransition(share, reduceMotion: reduceMotion)
             Text(formatStorageBytes(bytes))
-                .font(AppStyle.Typography.sectionTitle)
+                .font(AppStyle.Typography.sectionTitle.numbers)
                 .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                 .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
@@ -601,14 +606,13 @@ private struct OverviewSnapshotRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, appPath: "/System/Applications/Time Machine.app")
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
                     Text("Time Machine snapshots")
                         .font(AppStyle.Typography.headline)
                     infoButton
                 }
-                Text(LocalizedStringKey(detail))
-                    .font(AppStyle.Typography.callout)
+                Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }
@@ -616,7 +620,7 @@ private struct OverviewSnapshotRow: View {
             trailing
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .accessibilityElement(children: .contain)
     }
@@ -838,6 +842,24 @@ enum OverviewMotion {
     static let bar = Animation.easeOut(duration: 0.6)
 }
 
+// MARK: - Large Files line
+
+/// The Large Files row's line. It names both filters the scan ran under, so a
+/// zero says what was looked for: "No files over 1 GB not used in a year" (#279).
+nonisolated enum OverviewLargeFilesLine {
+    static func text(count: Int, filter: LargeFileFilterSnapshot) -> String {
+        let size = filter.size.label
+        if let span = filter.age.rowSpan {
+            return count == 0
+                ? String(localized: "No files over \(size) not used in \(span)")
+                : String(localized: "\(count) files over \(size) not used in \(span)")
+        }
+        return count == 0
+            ? String(localized: "No files over \(size)")
+            : String(localized: "\(count) files over \(size)")
+    }
+}
+
 // MARK: - Styling shared with the sidebar
 
 enum OverviewCategoryStyle {
@@ -892,10 +914,14 @@ enum OverviewCategoryStyle {
         }
     }
 
-    static func shareText(_ share: Double) -> String {
-        if share <= 0 { return "0%" }
-        if share < 0.001 { return "<0.1%" }
-        return String(format: "%.1f%%", share * 100)
+    /// The share of the disk, written the way the Mac's language writes a percentage:
+    /// "7.8%" in English and "7,8 %" in Russian, beside sizes that already read "5,04 ГБ".
+    /// `locale` is injected so the tests can check both without touching the process's own.
+    static func shareText(_ share: Double, locale: Locale = .current) -> String {
+        if share <= 0 { return (0.0).formatted(.percent.precision(.fractionLength(0)).locale(locale)) }
+        let oneDecimal = FloatingPointFormatStyle<Double>.Percent.percent.precision(.fractionLength(1)).locale(locale)
+        if share < 0.001 { return "<" + (0.001).formatted(oneDecimal) }
+        return share.formatted(oneDecimal)
     }
 }
 
@@ -924,7 +950,7 @@ struct OverviewDiskBar: View {
 
     private static let height: CGFloat = 14
     private static let fadedOpacity: Double = 0.3
-    private nonisolated static let gap: CGFloat = 2
+    private nonisolated static let gap: CGFloat = AppStyle.Spacing.xxxSmall
     private nonisolated static let minimumWidth: CGFloat = 4
 
     var body: some View {
@@ -1025,129 +1051,27 @@ struct OverviewDiskBar: View {
     }
 }
 
-// MARK: - Header button
+// MARK: - Scan step names
 
-/// Scan Everything, or Stop while the queue runs. A running App Caches and Dev Tools
-/// step always finishes (it takes seconds), so once only that is left the button just
-/// shows it is scanning.
-struct OverviewScanButton: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    static func name(for step: ScanStep) -> String {
-        switch step {
+extension ScanStep {
+    /// How the Overview and the scan tabs name a step in "Scanning …" text.
+    var displayName: String {
+        switch self {
         case .cachesAndDevTools: return String(localized: "App Caches and Dev Tools")
         case .largeFiles: return String(localized: "Large Files")
         case .apps: return String(localized: "installed apps")
         case .leftovers: return String(localized: "leftovers from deleted apps")
         case .everythingElse: return String(localized: "Everything else")
+        case .commandLineTools: return String(localized: "command-line tools")
         }
-    }
-
-    private var queue: ScanQueueState { store.scanQueue }
-
-    private var isFinishingCacheScan: Bool {
-        // A queued Everything else walk is not a category scan still to come.
-        (queue.active == .cachesAndDevTools && !queue.pending.contains { $0 != .everythingElse })
-            || (!queue.isRunningCategoryScan && store.isScanningAll)
-    }
-
-    var body: some View {
-        Button {
-            if queue.isRunningCategoryScan {
-                store.stopScans()
-            } else {
-                store.scanEverything()
-            }
-        } label: {
-            CleaningButtonLabel(
-                title: title,
-                systemImage: systemImage,
-                isCleaning: isFinishingCacheScan
-            )
-        }
-        .buttonStyle(.purge(.secondary))
-        .keyboardShortcut("r", modifiers: [.command])
-        .disabled(isFinishingCacheScan || store.isDeleting)
-        .help(queue.isRunningCategoryScan ? LocalizedStringKey("Stop scanning") : LocalizedStringKey("Scan App Caches, Dev Tools, Large Files and apps, one after another"))
-    }
-
-    private var title: String {
-        if isFinishingCacheScan { return String(localized: "Scanning...") }
-        return queue.isRunningCategoryScan ? String(localized: "Stop") : String(localized: "Scan Everything")
-    }
-
-    private var systemImage: String? {
-        if isFinishingCacheScan { return nil }
-        return queue.isRunningCategoryScan ? "stop.fill" : "arrow.clockwise"
     }
 }
 
 // MARK: - Clean safe items
 
-/// Moves every safe App Caches and Dev Tools item to the Trash, after a short
-/// confirmation: the same set the menu bar and the scheduled clean move. The tabs'
-/// Clean Selected is for picking by hand; this is the one click for the safe part.
-/// Hidden when there is nothing safe to clean.
-///
-/// The title carries no size on purpose. Beside the category totals on this page a
-/// smaller figure reads as a mistake; the popover gives the amount next to the
-/// total it comes from.
-struct OverviewCleanSafeButton: View {
-    @EnvironmentObject private var store: PurgeStore
-    @EnvironmentObject private var diskStore: DiskSummaryStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isConfirming = false
-
-    private var bytes: Int64 { store.safeRecoverableBytes }
-    private var isCleaning: Bool { store.isInteractiveSafeCleanupInProgress }
-
-    /// The figure moves while either scan runs, so the button waits for both.
-    private var isReady: Bool {
-        store.isSettled(.appCaches) && store.isSettled(.devTools)
-    }
-
-    var body: some View {
-        if bytes > 0 || isCleaning {
-            Button {
-                isConfirming = true
-            } label: {
-                CleaningButtonLabel(
-                    title: isCleaning ? "Cleaning..." : "Clean Safe Items",
-                    // The same glyph as Clean Selected and Uninstall on the other tabs.
-                    systemImage: isCleaning ? nil : "trash.fill",
-                    isCleaning: isCleaning
-                )
-            }
-            .buttonStyle(.purge(.primary))
-            .disabled(!isReady || store.isDeleting || isCleaning)
-            .help(isReady
-                ? LocalizedStringKey("Move every Safe item in App Caches and Dev Tools to the Trash")
-                : LocalizedStringKey("Waiting for App Caches and Dev Tools to finish scanning"))
-            .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
-                OverviewCleanSafeConfirmation(
-                    breakdown: store.overviewBreakdown(
-                        totalBytes: diskStore.totalDiskBytes,
-                        freeBytes: diskStore.freeDiskBytes
-                    ),
-                    onCancel: { isConfirming = false },
-                    onConfirm: {
-                        isConfirming = false
-                        store.cleanSafeItemsFromOverview(reduceMotion: reduceMotion)
-                    },
-                    onReview: { category in
-                        isConfirming = false
-                        store.openFromOverview(category)
-                    }
-                )
-                .environmentObject(store)
-            }
-        }
-    }
-}
-
-/// What the Clean button will move, by tab, with a way to look first. Review opens
+/// What Clean Safe Items (in `PageHeaderActionBar`) will move, by tab, with a way to look first. Review opens
 /// the tab on its Safe list with exactly these items selected.
-private struct OverviewCleanSafeConfirmation: View {
+struct OverviewCleanSafeConfirmation: View {
     @EnvironmentObject private var store: PurgeStore
     /// The Overview's own figures, so each "of" total matches its row.
     let breakdown: OverviewBreakdown
@@ -1161,7 +1085,7 @@ private struct OverviewCleanSafeConfirmation: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text("Move \(formatBytes(store.safeRecoverableBytes)) to the Trash?")
-                    .font(AppStyle.Typography.sectionTitle)
+                    .font(AppStyle.Typography.sectionTitle.numbers)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash.")
                     .font(AppStyle.Typography.callout)
@@ -1205,7 +1129,7 @@ private struct OverviewCleanSafeConfirmation: View {
             Spacer(minLength: AppStyle.Spacing.small)
             (Text(formatBytes(bytes)).foregroundColor(AppColors.textPrimary)
                 + Text(" of \(formatStorageBytes(breakdown.bytes(for: category)))"))
-                .font(AppStyle.Typography.body)
+                .font(AppStyle.Typography.body.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
                 .lineLimit(1)

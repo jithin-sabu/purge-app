@@ -1,0 +1,4 @@
+/* Türkçe arayüz metinleri. İngilizce kaynak metin yedek olarak kalır. */
+
+/* Info.plist içinde NSServices altında tanımlanan Finder Servisleri öğesi. pbs açık/kapalı durumunu İngilizce varsayılan başlığa göre tutar, bu yüzden bu yalnızca menüde görünen metni değiştirir. */
+"Uninstall with Purge" = "Purge ile Kaldır";

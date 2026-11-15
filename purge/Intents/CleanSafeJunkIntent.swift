@@ -11,7 +11,7 @@ struct CleanSafeJunkIntent: AppIntent {
     static let description = IntentDescription(
         "Scans for junk and moves the Safe items in App Caches and Dev Tools to the Trash, like Clean in Purge's menu bar. Check First items are left alone.",
         searchKeywords: [
-            "clean", "clean junk", "clean safe junk", "clean my mac", "cleanup",
+            "clean", "clean junk", "clean safe junk",
             "clear junk", "clear cache", "clear caches", "delete junk", "remove junk",
             "empty caches", "trash junk",
         ]
@@ -33,11 +33,7 @@ extension IntentRouter.CleanOutcome {
     /// "Moved 1.61 GB of junk to the Trash." with the size in bold.
     var styledAnswer: AttributedString {
         guard case .cleaned(let bytes, _) = self, bytes > 0 else { return AttributedString(dialog) }
-        var answer = AttributedString(dialog)
-        if let sizeRange = answer.range(of: formatBytes(bytes)) {
-            answer[sizeRange].inlinePresentationIntent = .stronglyEmphasized
-        }
-        return answer
+        return IntentAnswer.bolding(bytes, in: dialog)
     }
 
     var dialog: String {

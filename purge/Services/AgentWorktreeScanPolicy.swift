@@ -94,14 +94,14 @@ nonisolated enum AgentWorktreeScanPolicy {
         var seen: Set<String> = []
         return paths
             .map { ($0 as NSString).standardizingPath }
-            .filter { $0.hasPrefix(homePath + "/") && seen.insert($0).inserted }
+            .filter { PathContainment.isInside($0, homePath) && seen.insert($0).inserted }
             .sorted()
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
     static func isLive(_ url: URL, live: LiveContext, fileManager: FileManager = .default) -> Bool {
         let path = url.standardizedFileURL.path
-        let isInside: (String) -> Bool = { $0 == path || $0.hasPrefix(path + "/") }
+        let isInside: (String) -> Bool = { PathContainment.isSameOrInside($0, path) }
         if live.openWorkspacePaths.contains(where: isInside) { return true }
         if live.processWorkingDirectories?.contains(where: isInside) ?? true { return true }
         return hasGitLock(at: url, fileManager: fileManager)
@@ -112,7 +112,7 @@ nonisolated enum AgentWorktreeScanPolicy {
     /// A leaf under one of the tools' home folders. Checked ahead of the
     /// never-delete rules, like Cursor's other leftovers.
     static func isWhitelistedHomeRootPath(_ path: String, home: String) -> Bool {
-        for root in homeRoots.map({ "\(home)/\($0)" }) where path.hasPrefix(root + "/") {
+        for root in homeRoots.map({ "\(home)/\($0)" }) where PathContainment.isInside(path, root) {
             let parts = path.dropFirst(root.count + 1)
                 .split(separator: "/", omittingEmptySubsequences: false)
             guard (1...2).contains(parts.count),
@@ -120,8 +120,8 @@ nonisolated enum AgentWorktreeScanPolicy {
                 return false
             }
             let url = URL(fileURLWithPath: path, isDirectory: true)
-            return !containsSymlinkComponent(url, home: home)
-                && staysInside(root: root, url: url, home: home)
+            return !PathContainment.containsSymlinkComponent(url, home: home)
+                && PathContainment.staysInside(root: root, url: url, home: home)
                 && hasGitMarker(at: url, fileManager: .default)
         }
         return false
@@ -132,14 +132,14 @@ nonisolated enum AgentWorktreeScanPolicy {
     /// since the project can be anywhere in home.
     static func isWhitelistedProjectWorktreePath(_ path: String, home: String) -> Bool {
         let marker = "/" + projectRelativeRoot + "/"
-        guard path.hasPrefix(home + "/"),
+        guard PathContainment.isInside(path, home),
               let range = path.range(of: marker, options: .backwards) else {
             return false
         }
         let name = path[range.upperBound...]
         guard !name.isEmpty, !name.contains("/"), !name.hasPrefix(".") else { return false }
         let url = URL(fileURLWithPath: path, isDirectory: true)
-        guard !containsSymlinkComponent(url, home: home) else { return false }
+        guard !PathContainment.containsSymlinkComponent(url, home: home) else { return false }
         var info = stat()
         guard lstat(url.appendingPathComponent(".git").path, &info) == 0 else { return false }
         return info.st_mode & S_IFMT == S_IFREG
@@ -238,29 +238,5 @@ nonisolated enum AgentWorktreeScanPolicy {
         return ["index.lock", "HEAD.lock", "locked"].contains {
             fileManager.fileExists(atPath: gitDir.appendingPathComponent($0).path)
         }
-    }
-
-    static func containsSymlinkComponent(_ url: URL, home: String) -> Bool {
-        let path = url.standardizedFileURL.path
-        guard path == home || path.hasPrefix(home + "/") else { return true }
-        var current = URL(fileURLWithPath: home, isDirectory: true)
-        for part in path.dropFirst(home.count).split(separator: "/") {
-            current.appendPathComponent(String(part))
-            if (try? current.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
-                return true
-            }
-        }
-        return false
-    }
-
-    /// The root itself must not be reached through a link, and the path must
-    /// resolve to somewhere under it.
-    private static func staysInside(root: String, url: URL, home: String) -> Bool {
-        let rootURL = URL(fileURLWithPath: root, isDirectory: true)
-        guard !containsSymlinkComponent(rootURL, home: home) else { return false }
-        let resolvedRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
-        guard resolvedRoot == root else { return false }
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
-        return resolved.hasPrefix(resolvedRoot + "/")
     }
 }

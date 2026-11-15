@@ -91,13 +91,6 @@ nonisolated struct DuplicateIndex: Equatable {
         return groups[rank]
     }
 
-    /// Rank used to lay duplicate rows out group-by-group. Files in the same
-    /// group share a rank, so sorting on it puts copies next to each other with
-    /// the most reclaimable group on top. Non-members sort last.
-    func groupRank(forFileID fileID: String) -> Int {
-        rankByFileID[fileID] ?? .max
-    }
-
     /// Restates every group's size in the same bytes the list shows, and re-ranks
     /// the groups accordingly.
     ///

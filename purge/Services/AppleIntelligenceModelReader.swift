@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Reads MobileAsset's persisted records to measure the Apple Intelligence
 /// models, with no private API: plain reads of world-readable property lists
@@ -15,6 +16,13 @@ import Foundation
 /// summed figure when the models went (the rest was already counted as
 /// purgeable), so the app shows them as Apple's estimate and records the
 /// measured delta after a removal.
+///
+/// A record can outlive its files. Macs that went through several betas keep
+/// records for model versions macOS has since purged, often under specifiers a
+/// later beta renamed, and their sizes added up to 127 GB where 7.5 GB was on
+/// disk (#305). A record counts only while its asset folder,
+/// `<type folder>/purpose_auto/<assetID>.asset`, exists. macOS refuses to list
+/// these folders but answers for a named path.
 nonisolated enum AppleIntelligenceModelReader {
     static let descriptorsRoot = "/System/Library/AssetsV2/persisted/AutoAssetDescriptors"
     static let assetsRoot = "/System/Library/AssetsV2"
@@ -24,9 +32,21 @@ nonisolated enum AppleIntelligenceModelReader {
         let assetType: String
         let specifier: String
         let version: String
+        /// MobileAsset's id for the asset, which names its folder. Nil unless it
+        /// is 40 hex characters, so a record can't name a path of its own.
+        let assetID: String?
         let bytes: Int64?
-        let isOnFilesystem: Bool
+        /// Nil when a readable descriptor has no such key; the folder decides then.
+        let isOnFilesystem: Bool?
         let isEliminating: Bool
+    }
+
+    /// Whether a record's asset folder is on disk.
+    nonisolated enum AssetState: Equatable, Sendable {
+        case present
+        case missing
+        /// No usable id, or the path couldn't be checked.
+        case unknown
     }
 
     static func read(fileManager: FileManager = .default) -> AppleIntelligenceReading {
@@ -49,21 +69,44 @@ nonisolated enum AppleIntelligenceModelReader {
         return records
     }
 
-    /// Sums only records on the filesystem, newest version of each model.
+    /// Sums only records whose asset folder is on disk, each asset once and the
+    /// newest version of each model. A record that can't be checked makes the
+    /// size unknown and the set present, so a removal is never reported done
+    /// and Download Again never asks for a set on a guess.
     static func measure(_ set: AppleIntelligenceModelSet, records: [Record],
                         fileManager: FileManager = .default, root: String = assetsRoot) -> AppleIntelligenceSetReading {
-        let onDisk = records.filter(\.isOnFilesystem)
+        let folder = folderState(set.assetType, root: root, fileManager: fileManager)
+        var onDisk: [Record] = []
+        var slot: [String: Int] = [:]
+        var anyUnchecked = false
+        for record in records where record.isOnFilesystem != false {
+            var state = assetState(record, root: root)
+            // A missing path is only believed while the set's own folder reads,
+            // so a layout Purge doesn't know never makes a set look removed.
+            if state == .missing, folder == .unknown { state = .unknown }
+            switch state {
+            case .present: break
+            case .missing: continue
+            case .unknown: anyUnchecked = true
+            }
+            guard let id = record.assetID else { onDisk.append(record); continue }
+            if let index = slot[id] {
+                onDisk[index] = newer(onDisk[index], record)
+            } else {
+                slot[id] = onDisk.count
+                onDisk.append(record)
+            }
+        }
         var latest: [String: Record] = [:]
         for record in onDisk {
             if let known = latest[record.specifier], !versionIsOrdered(known.version, before: record.version) { continue }
             latest[record.specifier] = record
         }
         var total: Int64 = 0
-        var allKnown = true
+        var allKnown = !anyUnchecked
         for record in latest.values {
             if let bytes = record.bytes { total += bytes } else { allKnown = false }
         }
-        let folder = folderState(set.assetType, root: root, fileManager: fileManager)
         // No readable record but files in the folder: a size nobody knows, not zero.
         let bytes: Int64?
         if onDisk.isEmpty {
@@ -109,14 +152,39 @@ nonisolated enum AppleIntelligenceModelReader {
             descriptor = root
         }
         let bytes = (descriptor["downloadedFilesystemBytes"] as? NSNumber)?.int64Value
+        let assetID = (descriptor["assetID"] as? String).flatMap { id in
+            id.utf8.count == 40 && id.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) || (65...70).contains($0) }
+                ? id : nil
+        }
         return Record(
             assetType: identity.type,
             specifier: identity.specifier,
             version: identity.version,
+            assetID: assetID,
             bytes: bytes,
-            isOnFilesystem: (descriptor["isOnFilesystem"] as? Bool) ?? !descriptor.isEmpty,
+            // A record whose descriptor can't be read says nothing is there.
+            isOnFilesystem: descriptor.isEmpty ? false : descriptor["isOnFilesystem"] as? Bool,
             isEliminating: (descriptor["secureOperationEliminating"] as? Bool) ?? false
         )
+    }
+
+    /// Checks the one named path, as `folderState` does, without listing.
+    static func assetState(_ record: Record, root: String = assetsRoot) -> AssetState {
+        guard let id = record.assetID else { return .unknown }
+        let folder = folderName(for: record.assetType)
+        var info = stat()
+        if lstat(root + "/" + folder + "/purpose_auto/" + id + ".asset", &info) == 0 { return .present }
+        return errno == ENOENT ? .missing : .unknown
+    }
+
+    /// Of two records for one asset, the newer version, whatever order the
+    /// records were read in. Same version with different sizes: size unknown.
+    static func newer(_ known: Record, _ other: Record) -> Record {
+        if versionIsOrdered(known.version, before: other.version) { return other }
+        if versionIsOrdered(other.version, before: known.version) || known.bytes == other.bytes { return known }
+        return Record(assetType: known.assetType, specifier: known.specifier, version: known.version,
+                      assetID: known.assetID, bytes: nil, isOnFilesystem: known.isOnFilesystem,
+                      isEliminating: known.isEliminating)
     }
 
     /// Orders versions like `600.0.81600.13.202072,0` numerically, component
@@ -136,7 +204,7 @@ nonisolated enum AppleIntelligenceModelReader {
     /// `.purged` copy; anything else counts as files (RemoveMacAI's rule).
     static func folderState(_ assetType: String, root: String = assetsRoot,
                             fileManager: FileManager = .default) -> AppleIntelligenceFolderState {
-        let name = assetType.replacingOccurrences(of: ".", with: "_")
+        let name = folderName(for: assetType)
         let folder = root + "/" + name
         var info = stat()
         if lstat(folder, &info) != 0 { return errno == ENOENT ? .missing : .unknown }
@@ -146,6 +214,12 @@ nonisolated enum AppleIntelligenceModelReader {
         guard let inner = entryCount(purpose) else { return .unknown }
         let catalog = [name + ".xml", name + ".xml.purged"].filter { fileManager.fileExists(atPath: purpose + "/" + $0) }
         return (top > 1 || inner > catalog.count) ? .holdsFiles : .empty
+    }
+
+    /// The folder an asset type's files sit in: `com.apple.MobileAsset.X` is
+    /// `com_apple_MobileAsset_X`.
+    static func folderName(for assetType: String) -> String {
+        assetType.replacingOccurrences(of: ".", with: "_")
     }
 
     /// Entries in a folder from its attributes rather than a listing, or nil.
@@ -230,6 +304,13 @@ nonisolated enum AppleIntelligenceDownloadBlock {
     static let blockedURL = "https://127.0.0.1:9/purge-blocked/"
     static let managedPreferences = "/Library/Managed Preferences/com.apple.MobileAsset.plist"
 
+    /// The name System Settings lists the profile under. The steps that send the
+    /// user there quote it, so both read this one value (#187). It stays in
+    /// English: an installed profile keeps the name it was installed with, and
+    /// every earlier release used this one, so a translated name could send the
+    /// user looking for a profile System Settings doesn't list.
+    static let profileDisplayName = "Purge: Apple Intelligence models removed"
+
     /// The types a new profile has to block: the ones already in force plus the
     /// ones being removed now. The profile keeps one identifier and UUID, so
     /// installing it replaces the earlier one; a profile that named only the
@@ -247,7 +328,7 @@ nonisolated enum AppleIntelligenceDownloadBlock {
             "PayloadVersion": 1,
             "PayloadIdentifier": payloadID,
             "PayloadUUID": stableUUID(payloadID),
-            "PayloadDisplayName": "Block Apple Intelligence model downloads",
+            "PayloadDisplayName": String(localized: "Block Apple Intelligence model downloads"),
             "PayloadContent": [domain: ["Forced": [["mcx_preference_settings": settings]]]],
         ]
         let profile: [String: Any] = [
@@ -255,9 +336,9 @@ nonisolated enum AppleIntelligenceDownloadBlock {
             "PayloadVersion": 1,
             "PayloadIdentifier": profileIdentifier,
             "PayloadUUID": stableUUID(profileIdentifier),
-            "PayloadDisplayName": "Purge: Apple Intelligence models removed",
-            "PayloadDescription":
-                "Stops macOS downloading the Apple Intelligence models Purge removed. Remove this profile, or choose Download Again in Purge, to let them come back.",
+            "PayloadDisplayName": profileDisplayName,
+            "PayloadDescription": String(localized:
+                "Stops macOS downloading the Apple Intelligence models Purge removed. Remove this profile, or choose Download Again in Purge, to let them come back."),
             "PayloadOrganization": "Purge",
             "PayloadScope": "System",
             "PayloadRemovalDisallowed": false,
@@ -289,9 +370,7 @@ nonisolated enum AppleIntelligenceDownloadBlock {
     /// Empty when no profile is in force. Read from the file `mobileassetd`
     /// itself reads, so it says what the daemon sees.
     static func installedBlocks(path: String = managedPreferences, fileManager: FileManager = .default) -> [String] {
-        guard let data = fileManager.contents(atPath: path),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return [] }
+        guard let plist = readPlistDictionary(atPath: path, fileManager: fileManager) else { return [] }
         return plist.compactMap { key, value -> String? in
             guard key.hasPrefix(keyPrefix), value as? String == blockedURL else { return nil }
             return String(key.dropFirst(keyPrefix.count))
@@ -368,9 +447,7 @@ nonisolated enum AppleIntelligenceAccounts {
         guard fileManager.isReadableFile(atPath: path) else {
             return fileManager.isReadableFile(atPath: home + "/Library/Preferences") ? .off : .unknown
         }
-        guard let data = fileManager.contents(atPath: path),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return .unknown }
+        guard let plist = readPlistDictionary(atPath: path, fileManager: fileManager) else { return .unknown }
         for (key, value) in plist {
             guard let flag = value as? Bool, flag else { continue }
             if key.lowercased().contains("opt_out") || key.lowercased().contains("opted_out") { continue }
@@ -386,23 +463,146 @@ nonisolated enum AppleIntelligenceWorker {
     nonisolated struct Outcome {
         let ok: Bool
         let result: [String: Any]
+        /// The whole failure, userInfo included. It goes in the details and the
+        /// log; the row shows `problem`.
         let error: String?
+        /// The `NSError` behind the failure, when the service or the connection
+        /// gave one. The worker's own refusals have neither.
+        let domain: String?
+        let code: Int?
+        /// `domain code: description`, without the userInfo that follows it in `error`.
+        let summary: String?
 
-        var problem: String { error ?? String(localized: "no reason given") }
+        init(ok: Bool, result: [String: Any], error: String?,
+             domain: String? = nil, code: Int? = nil, summary: String? = nil) {
+            self.ok = ok
+            self.result = result
+            self.error = error
+            self.domain = domain
+            self.code = code
+            self.summary = summary
+        }
+
+        /// The reason short enough for the row. The row has one or two lines,
+        /// and the full text once cut the code off (#343).
+        var problem: String {
+            AppleIntelligenceWorker.connectionProblem(domain: domain, code: code)
+                ?? summary ?? error ?? String(localized: "no reason given")
+        }
+
+        /// One line for the details: what was asked, about what, and the whole answer.
+        func detailLine(op: String, subject: String) -> String {
+            "\(op) \(subject): \(error ?? "no reason given")"
+        }
     }
+
+    /// The three ways the connection to macOS's asset service fails, in plain
+    /// words: it was interrupted, it was never made, or the reply could not be
+    /// read. Nil for any other error, which keeps its own text.
+    static func connectionProblem(domain: String?, code: Int?) -> String? {
+        guard domain == NSCocoaErrorDomain, let code else { return nil }
+        switch code {
+        case NSXPCConnectionInterrupted:
+            return String(localized: "macOS's asset service stopped before it answered")
+        case NSXPCConnectionInvalid:
+            return String(localized: "macOS's asset service couldn't be reached")
+        case NSXPCConnectionReplyInvalid:
+            return String(localized: "macOS's asset service sent an answer Purge couldn't read")
+        default:
+            return nil
+        }
+    }
+
+    /// The text behind the row's Details button, made to be pasted into a bug
+    /// report: the Purge and macOS versions, then one line per failed call.
+    /// The lines are the service's own words, so they stay as they came.
+    static func details(_ lines: [String], purge: String = AppleIntelligenceWorker.purgeVersion,
+                        system: String = ProcessInfo.processInfo.operatingSystemVersionString) -> String? {
+        guard !lines.isEmpty else { return nil }
+        // A blank line between requests: each one wraps over several lines.
+        return (["Purge \(purge), macOS \(system)"] + lines).joined(separator: "\n\n")
+    }
+
+    static var purgeVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    /// The op, its sets and `clearText` are public on purpose: they are the
+    /// only way to read a failed removal from someone's log (#343). The whole
+    /// answer, description included, is private. The Details button is where
+    /// a user copies that.
+    private static let log = Logger(subsystem: "io.getpurge.app", category: "apple-intelligence")
+
+    /// The part of a failure that goes in the log unredacted. For an error
+    /// macOS returned that is its domain and code, which are what tell one
+    /// failure from another. The description and the userInfo are whatever
+    /// macOS put there and could name a file, so they are left out. Purge's
+    /// and the worker's own refusals are fixed sentences with Apple's set
+    /// names, and go whole.
+    static func clearText(of outcome: Outcome) -> String {
+        guard let domain = outcome.domain else { return outcome.error ?? "no reason given" }
+        return "\(domain) \(outcome.code.map(String.init) ?? "?")"
+    }
+
+    /// Calls whose failure the store expects and ignores. Download Again
+    /// clears Purge's old subscriptions before it asks again, and a name that
+    /// was never subscribed may answer with an error. Logged as an error, that
+    /// line would point a reader at the wrong call.
+    static let ignoredFailures: Set<String> = ["unsubscribe"]
 
     static var executableURL: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/io.getpurge.assetworker")
     }
 
+    /// Runs one call and writes a failed one to the log.
     static func run(_ op: String, _ input: [String: Any] = [:], timeout: TimeInterval) async -> Outcome {
+        let outcome = await call(op, input, timeout: timeout)
+        if !outcome.ok {
+            let subject = subject(of: input)
+            let clear = clearText(of: outcome)
+            if ignoredFailures.contains(op) {
+                log.debug("\(op, privacy: .public) \(subject, privacy: .public) answered: \(clear, privacy: .public)")
+            } else {
+                log.error("\(op, privacy: .public) \(subject, privacy: .public) failed: \(clear, privacy: .public); whole answer: \(outcome.error ?? "no reason given", privacy: .private)")
+            }
+        }
+        return outcome
+    }
+
+    /// What a call was about, for the log and the details: the set or the
+    /// subscription names it carried.
+    static func subject(of input: [String: Any]) -> String {
+        if let set = input["assetSet"] as? String { return set }
+        if let sets = input["assetSets"] as? [String] { return sets.joined(separator: ", ") }
+        if let names = input["names"] as? [String] { return names.joined(separator: ", ") }
+        if let subscriptions = input["subscriptions"] as? [[String: Any]] {
+            return subscriptions.compactMap { $0["name"] as? String }.joined(separator: ", ")
+        }
+        return ""
+    }
+
+    /// The worker's JSON reply as an outcome. A reply from a worker that sends
+    /// no domain or code still reads; the row then shows its whole text.
+    static func outcome(fromReply reply: [String: Any]) -> Outcome {
+        Outcome(ok: reply["ok"] as? Bool ?? false,
+                result: reply["result"] as? [String: Any] ?? [:],
+                error: reply["error"] as? String,
+                domain: reply["errorDomain"] as? String,
+                code: reply["errorCode"] as? Int,
+                summary: reply["errorSummary"] as? String)
+    }
+
+    private static func call(_ op: String, _ input: [String: Any], timeout: TimeInterval) async -> Outcome {
         let path = executableURL.path
         guard FileManager.default.isExecutableFile(atPath: path) else {
             return Outcome(ok: false, result: [:], error: String(localized: "Purge's asset worker is missing from the app"))
         }
         guard let payload = try? JSONSerialization.data(withJSONObject: input),
               let json = String(data: payload, encoding: .utf8)
-        else { return Outcome(ok: false, result: [:], error: "request could not be encoded") }
+        else { return Outcome(ok: false, result: [:], error: String(localized: "request could not be encoded")) }
         guard let output = await ProcessRunner.runAsync(executablePath: path, arguments: [op, json], timeout: timeout + 10)
         else { return Outcome(ok: false, result: [:], error: String(localized: "Purge's asset worker could not be started")) }
         if output.timedOut {
@@ -414,9 +614,7 @@ nonisolated enum AppleIntelligenceWorker {
             return Outcome(ok: false, result: [:],
                            error: String(localized: "The asset service call stopped without an answer (status \(Int(output.status)))"))
         }
-        return Outcome(ok: reply["ok"] as? Bool ?? false,
-                       result: reply["result"] as? [String: Any] ?? [:],
-                       error: reply["error"] as? String)
+        return outcome(fromReply: reply)
     }
 }
 
@@ -431,4 +629,10 @@ nonisolated enum VolumeRawCapacityReader {
         else { return nil }
         return Int64(available)
     }
+}
+
+/// A property list file read as a dictionary, or nil when it can't be read.
+private nonisolated func readPlistDictionary(atPath path: String, fileManager: FileManager) -> [String: Any]? {
+    guard let data = fileManager.contents(atPath: path) else { return nil }
+    return try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
 }

@@ -1,18 +1,5 @@
 import SwiftUI
 
-// MARK: - Row count
-
-enum SkeletonRowCount {
-    static let defaultCount = 8
-    static let minimum = 6
-    static let maximum = 12
-
-    static func clamped(_ count: Int, default defaultCount: Int = defaultCount) -> Int {
-        guard count > 0 else { return defaultCount }
-        return max(minimum, min(maximum, count))
-    }
-}
-
 // MARK: - Primitives
 
 enum SkeletonOpacity {
@@ -23,26 +10,12 @@ enum SkeletonOpacity {
 struct SkeletonBar: View {
     var width: CGFloat
     var height: CGFloat = 10
-    var cornerRadius: CGFloat = 4
+    var cornerRadius: CGFloat = AppStyle.Radius.xs
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
             .frame(width: width, height: height)
-            .accessibilityHidden(true)
-    }
-}
-
-/// Horizontal skeleton bar that expands to the width of its container.
-struct SkeletonFillBar: View {
-    var height: CGFloat = 10
-    var cornerRadius: CGFloat = 4
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
             .accessibilityHidden(true)
     }
 }
@@ -106,47 +79,20 @@ extension AnyTransition {
     }
 }
 
-// MARK: - List placeholder
-
-/// List-shaped placeholder rows shown while a tab scan is in progress.
-///
-/// Renders the real `ScanResultRow` view in placeholder mode so the loading
-/// state shares identical paddings, fonts, stack directions, and list styling
-/// with the loaded state. The crossfade handled by `ScanContentCrossfade` then
-/// has no layout shift to fight.
-struct ScanListSkeletonPlaceholder: View {
-    var rowCount: Int = SkeletonRowCount.defaultCount
-
-    var body: some View {
-        List {
-            ForEach(0..<rowCount, id: \.self) { index in
-                ScanResultRow.placeholder(seed: index)
-                    .listRowInsets(ScanListRowInsets.standard)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(AppColors.surfaceBase)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading results")
-    }
-}
-
 // MARK: - Deletion overlay
 
 struct CleaningOverlay: View {
-    var message: String = "Cleaning…"
+    /// Already translated, so VoiceOver reads the same text the overlay shows.
+    var message = String(localized: "Cleaning…")
 
     var body: some View {
         ZStack {
             Rectangle()
                 .fill(.ultraThinMaterial)
-            VStack(spacing: 10) {
+            VStack(spacing: AppStyle.Spacing.small) {
                 ProgressView()
                     .controlSize(.regular)
-                Text(LocalizedStringKey(message))
+                Text(message)
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
             }

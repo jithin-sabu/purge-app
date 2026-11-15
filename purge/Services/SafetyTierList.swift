@@ -29,8 +29,6 @@ enum SafetyTierList {
         "Code Cache",
         "DawnWebGPUCache",
         "component_crx_cache",
-        "CacheStorage",
-        "ScriptCache",
         "DocumentationCache",
         "LinkThumbnail",
         "ChatMedia",
@@ -117,9 +115,17 @@ enum SafetyTierList {
 
         if let path {
             let pathLower = path.standardizedFileURL.path.lowercased()
-            if pathLower.contains("/service worker/cachestorage")
-                || pathLower.contains("/service worker/scriptcache")
-                || pathLower.contains("/gpucache")
+            // Never a `Service Worker` cache: its loss removes sites' workers and
+            // their web push subscriptions (`CacheDiscoveryPaths`).
+            if pathLower.contains("/service worker/") {
+                return nil
+            }
+            // Crash reports an app has not sent yet are Check First (#367), even in
+            // a folder the Application Support shape below would call Safe.
+            if pathLower.hasSuffix("/crashpad/pending") || pathLower.contains("/crashpad/pending/") {
+                return .medium
+            }
+            if pathLower.contains("/gpucache")
                 || pathLower.contains("/shadercache")
                 || pathLower.contains("/code cache")
                 || pathLower.contains("/cacheddata")
@@ -145,10 +151,6 @@ enum SafetyTierList {
             if pathLower.contains(".app/contents/frameworks/") && pathLower.contains("/versions/") {
                 return .medium
             }
-            if pathLower.contains("/.cursor/extensions/")
-                || pathLower.contains("/.vscode/extensions/") {
-                return .safe
-            }
             if pathLower.contains("/.cursor/projects/")
                 || AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(
                     path,
@@ -156,10 +158,6 @@ enum SafetyTierList {
                 ) {
                 return .medium
             }
-        }
-
-        if lower.contains("obsolete") && lower.contains("extension") {
-            return .safe
         }
 
         if lower == "stale-browser-framework" {

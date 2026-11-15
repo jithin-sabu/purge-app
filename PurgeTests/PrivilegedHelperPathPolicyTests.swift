@@ -69,7 +69,53 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "6")
+        #expect(PurgeHelperConstants.version == "9")
+    }
+
+    /// These numbers cross XPC between an app and a helper that may come from
+    /// different builds of this file, so they never change meaning (#299).
+    @Test("Helper failure codes keep their wire values")
+    func helperFailureCodesKeepTheirWireValues() {
+        #expect(HelperMoveRefusal.accepted.rawValue == 0)
+        #expect(HelperMoveRefusal.notAdministrator.rawValue == 1)
+        #expect(HelperMoveRefusal.invalidTrash.rawValue == 2)
+        #expect(HelperMoveRefusal.invalidPeer.rawValue == 3)
+        #expect(HelperMoveRefusal.approvalUnavailable.rawValue == 4)
+        #expect(PurgeHelperConstants.outsideAllowedLocationsCode == -1)
+    }
+
+    /// The right a standard account's move needs (#314). It must take an
+    /// administrator's name and password typed for this request: not a password
+    /// shared from elsewhere in the session, not one kept from an earlier request,
+    /// and never granted to a root caller without asking.
+    @Test("The removal right asks an administrator every time")
+    func removalRightAsksAnAdministratorEveryTime() {
+        let rule = PurgeHelperConstants.removalRightDefinition
+        #expect(rule["class"] as? String == "user")
+        #expect(rule["group"] as? String == "admin")
+        #expect(rule["authenticate-user"] as? Bool == true)
+        #expect(rule["shared"] as? Bool == false)
+        #expect(rule["timeout"] as? Int == 0)
+        #expect(rule["allow-root"] as? Bool == false)
+        #expect(rule["session-owner"] as? Bool == false)
+        #expect(rule["rule"] == nil)
+        #expect(rule["k-of-n"] == nil)
+        #expect(PurgeHelperConstants.removalRightName.hasPrefix(PurgeHelperConstants.machServiceName + "."))
+    }
+
+    /// The prompt is a dictionary in code, not a string table, so the translations
+    /// check can't see it. Russian shipped its tables without a prompt, and a
+    /// standard account was asked in English.
+    @Test("The removal prompt is written in every language the app ships")
+    func removalPromptCoversEveryShippedLanguage() throws {
+        let prompts = try #require(PurgeHelperConstants.removalRightDefinition["default-prompt"] as? [String: String])
+        #expect(prompts[""]?.isEmpty == false)
+
+        let shipped = Bundle.main.localizations.filter { $0 != "Base" && $0 != "en" }
+        #expect(shipped.contains("ru"))
+        for language in shipped {
+            #expect(prompts[language]?.isEmpty == false, "no admin prompt for \(language)")
+        }
     }
 
     private func isAllowedMove(_ path: String, ruleHolds: Bool) -> Bool {
@@ -140,6 +186,24 @@ struct PrivilegedHelperPathPolicyTests {
             )
             let app = AppBundleReach.folderDepth(ofAppAtPath: path, roots: roots) != nil
             #expect(helper == app, "\(path)")
+        }
+    }
+
+    /// The helper keeps its own copy of the leftover folders, since it does not
+    /// compile the uninstaller. A folder only the uninstaller has is refused at the
+    /// root move; one only the helper has lets root move more than the app offers.
+    @Test("Helper leftover folders match the uninstaller's")
+    func helperLeftoverRootsMatchUninstaller() {
+        let helper = PurgeHelperConstants.leftoverRoots(homeDirectory: home).map(\.standardizedFileURL.path)
+        let app = AppUninstallScanPolicy.leftoverSearchRoots(home: home).map(\.url.standardizedFileURL.path)
+        #expect(Set(helper) == Set(app))
+        #expect(helper.count == Set(helper).count)
+
+        // And through the check the helper runs: one entry directly inside each.
+        // A `.plist`, since `/Library/Preferences` takes nothing else (#352).
+        for root in app {
+            let entry = URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("com.vendor.leftover.plist")
+            #expect(isAllowed(entry.path), "\(root)")
         }
     }
 }

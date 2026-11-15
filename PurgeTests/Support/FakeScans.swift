@@ -14,21 +14,35 @@ final class FakeScans {
     var holdsGeneral = false
     var holdsDeveloper = false
     var holdsProjects = false
+    var holdsLargeFiles = false
     var holdsGitStatus = false
     var holdsFullAccessSteps = false
     var holdsEverythingElse = false
     /// Yielded by an Everything else walk as soon as it starts. A held walk then
     /// stays open until it is let go.
     var everythingElseEvents: [EverythingElseMeasureEvent] = []
+    /// What the Command-line tools scan returns (#225).
+    var commandLineTools = CommandLineToolScanResult()
     private(set) var everythingElseAccesses: [ScanAccess] = []
+    /// Yielded by an App Caches scan as soon as it starts. A held scan then stays
+    /// open until it is let go.
+    var generalEvents: [CacheScanEvent] = []
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
     /// Yielded by project discovery as soon as it starts. A held discovery then
     /// stays open until it is let go.
     var projectEvents: [DeveloperScanEvent] = []
+    /// Yielded by a Large Files walk as soon as it starts. A held walk then stays
+    /// open until it is let go; one that is not held ends with `.finished`.
+    var largeFileEvents: [LargeFileScanEvent] = []
+    /// How many Large Files walks have started. The AI model passes list nothing.
+    private(set) var largeFileScanCount = 0
     /// What the git status check answers, by standardized path, once it returns.
     /// A path with no answer comes back clean, as a folder outside any repository does.
     var gitAnswers: [String: GitWorktreeStatus] = [:]
+    /// When set, the store's git status checks go to this real checker instead of
+    /// `gitAnswers`, so a test can see what its session cache does to them.
+    var gitStatusChecker: GitStatusChecker?
     private(set) var generalAccesses: [ScanAccess] = []
     private(set) var developerAccesses: [ScanAccess] = []
     private(set) var projectScanCount = 0
@@ -38,19 +52,38 @@ final class FakeScans {
     private(set) var gitStatusAnswerCount = 0
     /// Full Disk Access steps as they start, plus anything a test adds.
     var log: [String] = []
+    /// Runs as each Full Disk Access step starts, so a test can change what the
+    /// store holds the way the real step would.
+    var onFullAccessStep: ((ScanStep) -> Void)?
     /// Every scan in the order it started: App Caches with its access, and the steps.
     private(set) var events: [String] = []
 
     private var heldGeneral: [AsyncStream<CacheScanEvent>.Continuation] = []
     private var heldDeveloper: [AsyncStream<DeveloperScanEvent>.Continuation] = []
     private var heldProjects: [AsyncStream<DeveloperScanEvent>.Continuation] = []
+    private var heldLargeFiles: [AsyncStream<LargeFileScanEvent>.Continuation] = []
     private var heldGitStatus: [CheckedContinuation<Void, Never>] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
     private var heldEverythingElse: [AsyncStream<EverythingElseMeasureEvent>.Continuation] = []
     private let suite = ThrowawayDefaults()
 
-    func makeStore() -> PurgeStore {
-        let store = PurgeStore(defaults: defaults, scanSources: sources)
+    /// `gitChecker` is the one a clean asks before it moves anything. `fileDeleter`
+    /// is the engine a clean or a retry runs; pass one with a `FakeTrash` so a test
+    /// moves nothing real.
+    /// `lastScanStore` is the saved-scan file (#283); pass one on a temporary file
+    /// to test it. Without one the store reads and writes no saved scan.
+    func makeStore(
+        gitChecker: GitStatusChecker = GitStatusChecker(),
+        fileDeleter: FileDeleter = FileDeleter(),
+        lastScanStore: LastScanStore? = nil
+    ) -> PurgeStore {
+        let store = PurgeStore(
+            defaults: defaults,
+            scanSources: sources,
+            gitChecker: gitChecker,
+            fileDeleter: fileDeleter,
+            lastScanStore: lastScanStore
+        )
         store.refreshPermission()
         return store
     }
@@ -74,6 +107,16 @@ final class FakeScans {
         let held = heldProjects
         heldProjects = []
         held.forEach { $0.finish() }
+    }
+
+    /// Lets every held Large Files walk run to its end.
+    func finishHeldLargeFiles() {
+        let held = heldLargeFiles
+        heldLargeFiles = []
+        for continuation in held {
+            continuation.yield(.finished(LargeFileScanSummary(minBytes: 0)))
+            continuation.finish()
+        }
     }
 
     /// Sends more events to a held Everything else walk.
@@ -102,6 +145,7 @@ final class FakeScans {
         holdsGeneral = false
         holdsDeveloper = false
         holdsProjects = false
+        holdsLargeFiles = false
         holdsGitStatus = false
         holdsFullAccessSteps = false
         holdsEverythingElse = false
@@ -109,6 +153,7 @@ final class FakeScans {
         finishHeldGeneral()
         heldDeveloper.forEach { $0.finish() }
         finishHeldProjects()
+        finishHeldLargeFiles()
         finishHeldGitStatus()
         finishHeldSteps()
         suite.remove()
@@ -121,6 +166,7 @@ final class FakeScans {
                 self.generalAccesses.append(access)
                 self.events.append("general \(access)")
                 let (stream, continuation) = AsyncStream<CacheScanEvent>.makeStream()
+                self.generalEvents.forEach { continuation.yield($0) }
                 if self.holdsGeneral {
                     self.heldGeneral.append(continuation)
                 } else {
@@ -150,9 +196,28 @@ final class FakeScans {
                 }
                 return stream
             },
+            largeFiles: { minBytes, _ in
+                self.largeFileScanCount += 1
+                self.events.append("largeFiles")
+                let (stream, continuation) = AsyncStream<LargeFileScanEvent>.makeStream()
+                self.largeFileEvents.forEach { continuation.yield($0) }
+                if self.holdsLargeFiles {
+                    self.heldLargeFiles.append(continuation)
+                } else {
+                    continuation.yield(.finished(LargeFileScanSummary(minBytes: minBytes)))
+                    continuation.finish()
+                }
+                return stream
+            },
+            aiModels: { _, _, _, _ in
+                let (stream, continuation) = AsyncStream<LargeFile>.makeStream()
+                continuation.finish()
+                return stream
+            },
             fullAccessStep: { step, _ in
                 self.log.append("step \(step.rawValue)")
                 self.events.append("step \(step.rawValue)")
+                self.onFullAccessStep?(step)
                 if self.holdsFullAccessSteps {
                     await withCheckedContinuation { self.heldSteps.append($0) }
                 }
@@ -169,8 +234,15 @@ final class FakeScans {
                 }
                 return stream
             },
+            commandLineTools: {
+                self.events.append("commandLineTools")
+                return self.commandLineTools
+            },
             gitStatuses: { urls in
                 self.gitStatusRequests.append(urls)
+                if let checker = self.gitStatusChecker {
+                    return await checker.cleanupStatuses(for: urls)
+                }
                 if self.holdsGitStatus {
                     await withCheckedContinuation { self.heldGitStatus.append($0) }
                 }

@@ -246,7 +246,17 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support",
             "\(home)/Documents",
             "\(home)/Desktop",
-            "\(home)/Downloads"
+            "\(home)/Downloads",
+            // Gradle's own folder: installed JDKs, `gradle.properties` (often
+            // signing or repository keys) and `init.d`. Its caches are offered as
+            // subfolders. A stray `~/settings.gradle` made home a project whose
+            // `.gradle` the project rule offered whole (#190).
+            "\(home)/.gradle",
+            // The shared cache folder of many command-line tools, which also holds
+            // installed runtimes (`codex-runtimes`) and AI models (`huggingface`).
+            // `.cache` is an allowed folder name, so without this the folder-name
+            // rule allowed all of it. Its caches are offered as subfolders (#323).
+            "\(home)/.cache"
         ]
     }
 
@@ -265,14 +275,14 @@ enum DeletionSafetyPolicy {
         home == cachedHomePath ? cachedWhitelistedPrefixes : whitelistedAbsolutePrefixes(home: home)
     }
 
-    /// Absolute paths (and their descendants) we are explicitly authorized to delete.
+    /// Absolute paths, with everything inside them, that may be offered for
+    /// cleaning. Being listed decides only that: the tier comes from the path's
+    /// entry in explanations.json, and Clean Safe Items takes Safe rows alone.
     ///
-    /// Audit note: every entry below resolves to a regenerable cache, build
-    /// artifact, or log directory — nothing here holds non-recoverable user
-    /// data. A handful of entries are flagged `AUDIT` where the folder holds
-    /// re-creatable but not-instantly-regenerated state; those are surfaced as
-    /// "Check First" by their classifiers (never silently downgraded to Safe),
-    /// and are called out here so the risk stays visible.
+    /// Most entries are caches and logs their owner rebuilds. Those flagged
+    /// `AUDIT` hold things that come back only slowly or by hand, and their
+    /// explanations keep them at Check First. An entry inside another one adds
+    /// nothing, so none is listed (#185).
     nonisolated static func whitelistedAbsolutePrefixes(home: String) -> [String] {
         [
             "\(home)/Library/Caches",
@@ -283,8 +293,6 @@ enum DeletionSafetyPolicy {
             // user data, but not auto-regenerated — treat as Check First, never Safe.
             "\(home)/Library/Developer/Xcode/Archives",
             "\(home)/.npm",
-            "\(home)/.npm/_npx",
-            "\(home)/.npm/_logs",
             "\(home)/.cache/node/corepack",
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
@@ -305,7 +313,6 @@ enum DeletionSafetyPolicy {
             // (`1.0/global.sbt`, `1.0/plugins`) next to the launcher jars.
             "\(home)/.ivy2/cache",
             "\(home)/.cache/act",
-            "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
             // Downloaded packages only. `~/.pub-cache/bin` and `global_packages` hold
             // tools installed with `dart pub global activate`, which are not a cache.
@@ -322,7 +329,6 @@ enum DeletionSafetyPolicy {
             "\(home)/.nuget/packages",
             "\(home)/.bun/install/cache",
             "\(home)/.cabal/packages",
-            "\(home)/Library/Caches/org.swift.swiftpm",
             "\(home)/.swiftpm/cache",
             // AUDIT: Stack's package store, and `~/.cache/bazel`, can be tens of GB.
             // Both re-download rather than being lost, but the next build is very
@@ -337,7 +343,6 @@ enum DeletionSafetyPolicy {
             // backups) is deliberately NOT on the allowlist. Those backups are
             // non-recoverable, so they must never be scanned, sized, or shown.
             "\(home)/Library/Logs",
-            "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
             // `~/.gem` as a whole is NOT listed: `gem install --user-install` puts
             // installed gems and their commands (CocoaPods, fastlane) under
@@ -359,15 +364,13 @@ enum DeletionSafetyPolicy {
             // by name alone. `isWhitelistedApplicationSupportCachePath` allows them
             // by their Chromium shape (#226).
             "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
-            "\(home)/Library/Caches/JetBrains",
             // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
             // the allowlist. It holds installed plugins and all IDE settings (not a
             // cache), so it must never be scanned, sized, or deleted.
             // NOTE: `~/Library/Application Support/Zed/db` is deliberately NOT listed.
             // It is Zed's workspace state database, not a cache.
-            "\(home)/Library/Caches/Zed",
-            "\(home)/Library/Caches/ms-playwright",
-            "\(home)/.cache/ms-playwright",
+            // `~/.cache/ms-playwright` is not listed: a project still runs some of
+            // its builds. `PlaywrightBuildScanPolicy` allows one build at a time.
             "\(home)/Library/Developer/CoreSimulator/Devices",
             // Adobe stores its heavy caches under Application Support rather than
             // ~/Library/Caches, so the broad Caches sweep never reaches them. These
@@ -400,6 +403,12 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/pnpm/store",
             "\(home)/.yarn/berry/cache",
             "\(home)/.cache/pre-commit",
+            // Check First. The prek store also holds patches for unstaged work,
+            // so only the known cache folders are offered.
+            "\(home)/.cache/prek/repos",
+            "\(home)/.cache/prek/hooks",
+            "\(home)/.cache/prek/tools",
+            "\(home)/.cache/prek/cache",
             "\(home)/.cache/prisma",
             // Expo's download caches only; `~/.expo/state.json` holds the login.
             "\(home)/.expo/android-apk-cache",
@@ -428,6 +437,20 @@ enum DeletionSafetyPolicy {
             // their scratch space here. The rest of `~/.hermes` is config, API keys,
             // sessions and memories, and is not listed.
             "\(home)/.hermes/cache",
+            // Download caches found by the #323 survey. nvm's Node downloads, which
+            // `nvm cache clear` empties too; installed versions are in `~/.nvm/versions`.
+            "\(home)/.nvm/.cache",
+            // Templates giget fetched for `nuxi init` and `create-*` tools.
+            "\(home)/.cache/giget",
+            // The emulator files firebase-tools downloads, and downloads again
+            // the next time the emulators start.
+            "\(home)/.cache/firebase/emulators",
+            // uv's package cache, which `uv cache clean` empties too (#345). Check
+            // First by its explanation: a tool started with `uvx` runs from an
+            // environment in here, and with `link-mode = "symlink"` an environment's
+            // packages are links into it. `~/.local/share/uv` holds the tools from
+            // `uv tool install` and uv's Python versions, and is not listed.
+            "\(home)/.cache/uv",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
@@ -471,7 +494,20 @@ enum DeletionSafetyPolicy {
         if spotifyOfflineMusicRefusesDeletion(url) { return false }
         // Which CLI version is in use changes on every auto-update.
         if oldCLIVersionRefusesDeletion(url) { return false }
+        // Which tool version, emulator image or Figma profile is in use can
+        // change at any time, and an unfinished install becomes old.
+        if OldToolVersionScanPolicy.refusesDeletion(url) { return false }
+        // Which Playwright builds a project uses changes with every install. The
+        // Dev Tools filter asks on the main thread for each build on every scan
+        // flush, so it may reuse a read from the last few seconds. `FileDeleter`
+        // asks off the main thread, so a move always reads the links again.
+        if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // Recheck before a move in case the prek store was redirected since the scan.
+        if prekStoreLinkRefusesDeletion(url) { return false }
+        if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
+        // A daemon's log stays while it runs, and a temp file until it is old.
+        if gradleLeftoverRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -483,13 +519,49 @@ enum DeletionSafetyPolicy {
         let verdict = !requiresAdminPrivileges(for: url) && evaluate(url) == .allow
 
         offeredForCleanupLock.lock()
+        // A scan looks at a few thousand paths, and the cache only needs to outlast
+        // one. It used to keep every path it ever saw (#190); now it starts over when
+        // full, which costs one re-evaluation of each path still on screen.
+        if offeredForCleanupCache.count >= offeredForCleanupCacheLimit {
+            offeredForCleanupCache.removeAll(keepingCapacity: true)
+        }
         offeredForCleanupCache[key] = verdict
         offeredForCleanupLock.unlock()
         return verdict
     }
 
+    /// The allowlist compares path text, so if `~/.cache/prek` or `~/.cache` were a
+    /// link to `~/Developer`, its `repos`, `tools` and `cache` would be the user's own
+    /// folders. Any link on the way down from home refuses the path.
+    nonisolated static func prekStoreLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        guard PathContainment.isInside(url.standardizedFileURL.path, "\(home)/.cache/prek") else { return false }
+        return PathContainment.containsSymlinkComponent(url, home: home)
+    }
+
+    /// Installed prek hooks can retain absolute paths to managed Rust tools.
+    /// Recheck exclusions before the cached verdict so a hook kept after scanning
+    /// also keeps its tools at deletion time.
+    nonisolated static func prekToolsRefuseDeletion(
+        _ url: URL,
+        home: String = cachedHomePath,
+        isExcluded: (URL) -> Bool = { ExcludedPathsStore.isExcluded($0) }
+    ) -> Bool {
+        let root = URL(fileURLWithPath: home).appendingPathComponent(".cache/prek", isDirectory: true)
+        let tools = root.appendingPathComponent("tools", isDirectory: true).standardizedFileURL.path
+        guard PathContainment.isSameOrInside(url.standardizedFileURL.path, tools) else { return false }
+        return isExcluded(root.appendingPathComponent("hooks", isDirectory: true))
+    }
+
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
     private nonisolated static let offeredForCleanupLock = NSLock()
+    nonisolated static let offeredForCleanupCacheLimit = 20_000
+
+    /// How many verdicts are cached. For tests.
+    nonisolated static var offeredForCleanupCacheCount: Int {
+        offeredForCleanupLock.lock()
+        defer { offeredForCleanupLock.unlock() }
+        return offeredForCleanupCache.count
+    }
 
     nonisolated static func filterCacheItems(_ items: [CacheItem]) -> [CacheItem] {
         items.compactMap(filterCacheItem)
@@ -555,7 +627,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func requiresAdminPrivileges(for url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         return systemCacheDeletionPrefixes.contains { prefix in
-            path == prefix || path.hasPrefix(prefix + "/")
+            PathContainment.isSameOrInside(path, prefix)
         }
     }
 
@@ -574,7 +646,7 @@ enum DeletionSafetyPolicy {
         let home = cachedHomePath
         let cachesPrefix = "\(home)/Library/Caches"
         let path = standardized.path
-        guard path.hasPrefix(cachesPrefix + "/") else { return false }
+        guard PathContainment.isInside(path, cachesPrefix) else { return false }
 
         let relative = String(path.dropFirst(cachesPrefix.count + 1))
         let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
@@ -595,7 +667,7 @@ enum DeletionSafetyPolicy {
         let home = cachedHomePath
         let logsPrefix = "\(home)/Library/Logs"
         let path = standardized.path
-        guard path == logsPrefix || path.hasPrefix(logsPrefix + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, logsPrefix) else { return false }
 
         let relative = path == logsPrefix ? "" : String(path.dropFirst(logsPrefix.count + 1))
         let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
@@ -644,18 +716,18 @@ enum DeletionSafetyPolicy {
     }
 
     /// Whether `path` is a cache folder inside one of `chromiumUserDataRoots`, or
-    /// a descendant of one: `<root>/<cache name>`, `<root>/<profile>/<cache name>`
-    /// or `<root>/<profile>/Service Worker/{CacheStorage,ScriptCache}`, the same
-    /// shape `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists. The root, a
-    /// profile folder and everything else in it are refused.
+    /// a descendant of one: `<root>/<cache name>` or `<root>/<profile>/<cache name>`,
+    /// the same shape `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists. The
+    /// root, a profile folder, its `Service Worker` folder and everything else in
+    /// it are refused.
     nonisolated static func isWhitelistedChromiumUserDataCachePath(_ path: String, home: String) -> Bool {
         for root in chromiumUserDataRoots(home: home) {
-            guard path.hasPrefix(root + "/") else { continue }
+            guard PathContainment.isInside(path, root) else { continue }
             let parts = String(path.dropFirst(root.count + 1)).split(separator: "/").map(String.init)
             // The cache folder itself, or anything inside one, in the shape
             // `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists.
             let userData = URL(fileURLWithPath: root, isDirectory: true)
-            return (1...min(3, max(parts.count, 1))).contains { depth in
+            return (1...min(2, max(parts.count, 1))).contains { depth in
                 CacheDiscoveryPaths.isChromiumUserDataCachePath(Array(parts.prefix(depth)), userData: userData)
             }
         }
@@ -773,50 +845,138 @@ enum DeletionSafetyPolicy {
         let home = cachedHomePath
         let cache = spotifyCachePath(home: home)
         let path = url.standardizedFileURL.path
-        guard path == cache || path.hasPrefix(cache + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, cache) else { return false }
         return spotifyOfflineIndexShowsDownloads(home: home)
     }
 
+    /// Where the Cursor app installs its own copy of the agent CLI, with the same
+    /// `.local` layout as the one in the home folder (#323).
+    nonisolated static let cursorAgentWorkerCLI =
+        "Library/Application Support/Cursor/User/globalStorage/anysphere.cursor-agent-worker/agent-cli"
+
+    /// Which entries in a CLI's versions folder are versions.
+    nonisolated enum CLIVersionEntry: Equatable, Sendable {
+        /// The folder holds only versions, so every entry is one (Claude Code,
+        /// Cursor Agent).
+        case anyName
+        /// A generic downloads folder. Only a plain file named
+        /// `grok-<version>` or `grok-<version>-macos-<arch>` is a version, never
+        /// a link, a folder, a partial download or a manifest.
+        case grokBinary
+
+        /// Whether `name` is a version by its name alone.
+        func matches(name: String) -> Bool {
+            switch self {
+            case .anyName:
+                return !name.isEmpty
+            case .grokBinary:
+                return Self.isGrokBinaryName(name)
+            }
+        }
+
+        /// Whether the entry `name` in `versionsRoot` is a version, by its name
+        /// and by what is on disk.
+        func accepts(name: String, in versionsRoot: String) -> Bool {
+            guard matches(name: name) else { return false }
+            switch self {
+            case .anyName:
+                return true
+            case .grokBinary:
+                let url = URL(fileURLWithPath: versionsRoot, isDirectory: true).appendingPathComponent(name)
+                guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else {
+                    return false
+                }
+                return values.isRegularFile == true && values.isSymbolicLink != true
+            }
+        }
+
+        /// `grok-1.0.13` or `grok-1.0.13-macos-aarch64`: digits and dots, starting
+        /// and ending with a digit, then an optional `-macos-<arch>`.
+        static func isGrokBinaryName(_ name: String) -> Bool {
+            guard name.hasPrefix("grok-") else { return false }
+            var rest = Substring(name.dropFirst("grok-".count))
+            if let range = rest.range(of: "-macos-") {
+                let arch = rest[range.upperBound...]
+                guard !arch.isEmpty, arch.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }) else {
+                    return false
+                }
+                rest = rest[..<range.lowerBound]
+            }
+            guard let first = rest.first, let last = rest.last,
+                  first.isASCII, first.isNumber, last.isASCII, last.isNumber,
+                  rest.contains("."), !rest.contains("..") else { return false }
+            return rest.allSatisfy { ($0.isASCII && $0.isNumber) || $0 == "." }
+        }
+    }
+
     /// AI coding CLIs that install each version side by side: the folder of versions,
-    /// and the command whose symlink points at the version in use.
-    nonisolated static let cliVersionStores: [(versions: String, command: String)] = [
-        (".local/share/claude/versions", ".local/bin/claude"),
-        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent")
+    /// the command whose symlink points at the version in use, the Dev Tools row,
+    /// and which entries in the folder are versions.
+    nonisolated static let cliVersionStores: [
+        (versions: String, command: String, label: String, entry: CLIVersionEntry)
+    ] = [
+        (".local/share/claude/versions", ".local/bin/claude", "Old Claude Code Versions", .anyName),
+        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent", "Old Cursor Agent Versions", .anyName),
+        ("\(cursorAgentWorkerCLI)/.local/share/cursor-agent/versions",
+         "\(cursorAgentWorkerCLI)/.local/bin/cursor-agent", "Old Cursor Agent Versions", .anyName),
+        // Grok keeps every binary it downloaded and points its command at one.
+        // The folder is a generic downloads folder, so only its binaries count.
+        (".grok/downloads", ".grok/bin/grok", "Old Grok Versions", .grokBinary)
     ]
 
-    /// The version folder or file `path` belongs to, with its store.
+    /// The version folder or file `path` belongs to, with its store. Nil for an
+    /// entry the store doesn't count as a version, and for anything inside an
+    /// entry of a store whose versions are single files.
     nonisolated static func cliVersion(
         containing path: String,
         home: String
-    ) -> (versionsRoot: String, command: String, version: String)? {
+    ) -> (versionsRoot: String, command: String, version: String, entry: CLIVersionEntry)? {
         for store in cliVersionStores {
             let root = "\(home)/\(store.versions)"
-            guard path.hasPrefix(root + "/") else { continue }
-            guard let version = path.dropFirst(root.count + 1).split(separator: "/").first.map(String.init),
-                  !version.isEmpty else { return nil }
-            return (root, "\(home)/\(store.command)", version)
+            guard PathContainment.isInside(path, root) else { continue }
+            let parts = path.dropFirst(root.count + 1).split(separator: "/")
+            // A hidden entry is never a version. Cursor's `.tmp-*` unfinished
+            // installs sit here, and `OldToolVersionScanPolicy` gates them by age.
+            guard let version = parts.first.map(String.init),
+                  !version.hasPrefix("."),
+                  store.entry.matches(name: version) else { return nil }
+            if store.entry == .grokBinary, parts.count != 1 { return nil }
+            return (root, "\(home)/\(store.command)", version, store.entry)
         }
         return nil
     }
 
     /// The versions to keep: the one the command runs, and the newest, in case an
-    /// update has installed it and not yet switched the link. Nil when the command
-    /// cannot be read, and then nothing is offered.
-    nonisolated static func keptCLIVersions(versionsRoot: String, command: String) -> Set<String>? {
-        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
-        let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
-            .standardizedFileURL.path
-        guard resolved.hasPrefix(versionsRoot + "/"),
-              let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init) else {
+    /// update has installed it and not yet switched the link. Only entries that
+    /// `entry` accepts count toward the newest, so a manifest or partial download
+    /// never stands in for it. Nil when the command cannot be read or points at
+    /// something that is not a version, and then nothing is offered.
+    nonisolated static func keptCLIVersions(
+        versionsRoot: String,
+        command: String,
+        entry: CLIVersionEntry = .anyName
+    ) -> Set<String>? {
+        guard let inUse = cliVersionInUse(versionsRoot: versionsRoot, command: command),
+              entry.matches(name: inUse) else {
             return nil
         }
         var kept: Set<String> = [inUse]
         let all = ((try? FileManager.default.contentsOfDirectory(atPath: versionsRoot)) ?? [])
-            .filter { !$0.hasPrefix(".") }
+            .filter { !$0.hasPrefix(".") && entry.accepts(name: $0, in: versionsRoot) }
         if let newest = all.max(by: { $0.compare($1, options: .numeric) == .orderedAscending }) {
             kept.insert(newest)
         }
         return kept
+    }
+
+    /// The entry in `versionsRoot` the `command` symlink points at, or into. Nil
+    /// when the command is not a link or points anywhere else.
+    nonisolated static func cliVersionInUse(versionsRoot: String, command: String) -> String? {
+        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
+        let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
+            .standardizedFileURL.path
+        guard PathContainment.isInside(resolved, versionsRoot) else { return nil }
+        return resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init)
     }
 
     nonisolated static func isWhitelistedOldCLIVersionPath(_ path: String, home: String) -> Bool {
@@ -826,7 +986,13 @@ enum DeletionSafetyPolicy {
     nonisolated static func oldCLIVersionRefusesDeletion(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         guard let match = cliVersion(containing: path, home: cachedHomePath) else { return false }
-        guard let kept = keptCLIVersions(versionsRoot: match.versionsRoot, command: match.command) else {
+        // A link, folder or other entry by a version's name stays.
+        guard match.entry.accepts(name: match.version, in: match.versionsRoot) else { return true }
+        guard let kept = keptCLIVersions(
+            versionsRoot: match.versionsRoot,
+            command: match.command,
+            entry: match.entry
+        ) else {
             return true
         }
         return kept.contains(match.version)
@@ -836,7 +1002,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func mailRunningRefusesDeletion(_ url: URL) -> Bool {
         let downloads = "\(cachedHomePath)/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
         let path = url.standardizedFileURL.path
-        guard path == downloads || path.hasPrefix(downloads + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, downloads) else { return false }
         return isAppRunning(bundleID: "com.apple.mail")
     }
 
@@ -846,6 +1012,161 @@ enum DeletionSafetyPolicy {
         #else
         return false
         #endif
+    }
+
+    /// What Gradle leaves behind that it never reads again (#323). Folders, not the
+    /// files in them, so a clean lists a handful of lines instead of one per log.
+    nonisolated enum GradleLeftover: Equatable, Sendable {
+        /// `~/.gradle/daemon/<version>`: one Gradle version's daemon logs and its
+        /// registry of running daemons, which Gradle writes again when one starts.
+        case daemonFolder
+        /// `~/.gradle/.tmp`, Gradle's temp folder.
+        case temporaryFolder
+    }
+
+    /// Nothing in the temp folder may be younger than this. A download in progress,
+    /// or a worker that has just read its class path, is minutes old.
+    nonisolated static let gradleTemporaryFileMinimumAge: TimeInterval = 7 * 24 * 60 * 60
+
+    /// The leftover `path` is, by its place alone. `~/.gradle/daemon` itself, the
+    /// files inside these folders, the JDKs and everything else in `~/.gradle` are
+    /// never one.
+    nonisolated static func gradleLeftover(at path: String, home: String) -> GradleLeftover? {
+        if path == "\(home)/.gradle/.tmp" { return .temporaryFolder }
+        let daemonRoot = "\(home)/.gradle/daemon/"
+        guard path.hasPrefix(daemonRoot) else { return nil }
+        let version = path.dropFirst(daemonRoot.count)
+        // Gradle names each one for its version (`8.10.2`, `9.0-rc-1`), so it starts
+        // with a digit. `CACHEDIR.TAG` and stray files next to them never do.
+        guard let first = version.first, ("0"..."9").contains(first), !version.contains("/") else { return nil }
+        return .daemonFolder
+    }
+
+    /// The pids in a version folder's `daemon-<pid>.out.log` names. Nil when the
+    /// folder can't be listed.
+    nonisolated static func gradleDaemonPids(in versionFolder: URL) -> [Int32]? {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: versionFolder.path) else { return nil }
+        return names.compactMap { name in
+            guard name.hasPrefix("daemon-"), name.hasSuffix(".out.log") else { return nil }
+            let digits = name.dropFirst("daemon-".count).dropLast(".out.log".count)
+            guard !digits.isEmpty, digits.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
+            return Int32(digits)
+        }
+    }
+
+    /// A version folder stays while any daemon whose log is in it may still run
+    /// (`isGradleDaemonRunning`). The temp folder stays while any
+    /// Gradle daemon runs, and while anything directly in it changed in the last
+    /// week. `~/.gradle`, `~/.gradle/daemon` and the folder itself must be real
+    /// folders, not links, and anything that can't be read keeps the folder.
+    nonisolated static func gradleLeftoverRefusesDeletion(
+        _ url: URL,
+        home: String = cachedHomePath,
+        now: Date = Date(),
+        isRunning: (Int32) -> Bool = isGradleDaemonRunning
+    ) -> Bool {
+        let standardized = url.standardizedFileURL
+        guard let leftover = gradleLeftover(at: standardized.path, home: home) else { return false }
+        let gradle = URL(fileURLWithPath: "\(home)/.gradle", isDirectory: true)
+        let daemonRoot = gradle.appendingPathComponent("daemon", isDirectory: true)
+
+        /// A folder, not a link to one and not a file.
+        func isRealFolder(_ folder: URL) -> Bool {
+            guard let values = try? folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else {
+                return false
+            }
+            return values.isDirectory == true && values.isSymbolicLink != true
+        }
+        /// True when a logged daemon may still run, or the folder can't be listed.
+        func hasRunningDaemon(_ versionFolder: URL) -> Bool {
+            guard let pids = gradleDaemonPids(in: versionFolder) else { return true }
+            return pids.contains(where: isRunning)
+        }
+
+        switch leftover {
+        case .daemonFolder:
+            guard isRealFolder(gradle), isRealFolder(daemonRoot), isRealFolder(standardized) else { return true }
+            return hasRunningDaemon(standardized)
+        case .temporaryFolder:
+            guard isRealFolder(gradle), isRealFolder(standardized) else { return true }
+            // No daemon folder at all means no daemon has ever run.
+            if FileManager.default.fileExists(atPath: daemonRoot.path) {
+                guard isRealFolder(daemonRoot),
+                      let versions = try? FileManager.default.contentsOfDirectory(atPath: daemonRoot.path) else {
+                    return true
+                }
+                for version in versions where !version.hasPrefix(".") {
+                    let folder = daemonRoot.appendingPathComponent(version, isDirectory: true)
+                    if isRealFolder(folder), hasRunningDaemon(folder) { return true }
+                }
+            }
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: standardized.path) else {
+                return true
+            }
+            let checked = [standardized] + entries.map { standardized.appendingPathComponent($0) }
+            for entry in checked {
+                guard let modified = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate else { return true }
+                if now.timeIntervalSince(modified) < gradleTemporaryFileMinimumAge { return true }
+            }
+            return false
+        }
+    }
+
+    /// Whether `pid` may still be a Gradle daemon: a process with it exists and runs
+    /// `java`, or can't be read. macOS hands old pids to new processes, and one
+    /// Siri took on this Mac would otherwise hold a whole version folder back.
+    nonisolated static func isGradleDaemonRunning(_ pid: Int32) -> Bool {
+        guard isProcessRunning(pid) else { return false }
+        guard pid > 0, let path = ProcessWorkingDirectories.executablePath(of: pid) else { return true }
+        return URL(fileURLWithPath: path).lastPathComponent == "java"
+    }
+
+    /// True when a process with `pid` exists, ours or not.
+    nonisolated static func isProcessRunning(_ pid: Int32) -> Bool {
+        guard pid > 0 else { return true }
+        return kill(pid, 0) == 0 || errno == EPERM
+    }
+
+    /// clang's module cache in the per-user cache folder, which command-line
+    /// `clang`, `swiftc` and Swift scripts use when no other is named; Xcode builds
+    /// use the one in DerivedData. Compiled module files only, rebuilt on the next
+    /// compile (#323). Both spellings of `/var` are listed, since a walk reports
+    /// `/private/var` and a standardized path `/var`.
+    nonisolated static let clangModuleCachePaths: [String] = {
+        guard let base = darwinUserCacheDirectory() else { return [] }
+        let path = URL(fileURLWithPath: base, isDirectory: true)
+            .appendingPathComponent("clang/ModuleCache", isDirectory: true).path
+        return bothVarSpellings(of: path)
+    }()
+
+    /// Whether `path` is the clang module cache, or inside it, under either
+    /// spelling of `/var`. Nothing else in the per-user cache folder is.
+    nonisolated static func isWhitelistedClangModuleCachePath(
+        _ path: String,
+        cachePaths: [String] = clangModuleCachePaths
+    ) -> Bool {
+        cachePaths.contains { PathContainment.isSameOrInside(path, $0) }
+    }
+
+    /// `getconf DARWIN_USER_CACHE_DIR`: `/var/folders/<xx>/<id>/C/`.
+    nonisolated static func darwinUserCacheDirectory() -> String? {
+        let length = confstr(_CS_DARWIN_USER_CACHE_DIR, nil, 0)
+        guard length > 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: length)
+        guard confstr(_CS_DARWIN_USER_CACHE_DIR, &buffer, length) > 0 else { return nil }
+        let path = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        // Never a cache folder that is not the per-user one under /var/folders.
+        guard path.hasPrefix("/var/folders/") || path.hasPrefix("/private/var/folders/") else { return nil }
+        return path
+    }
+
+    /// `path` as both `/var/...` and `/private/var/...` when it is under either;
+    /// any other path as it is.
+    nonisolated static func bothVarSpellings(of path: String) -> [String] {
+        if path.hasPrefix("/private/var/") { return [path, String(path.dropFirst("/private".count))] }
+        if path.hasPrefix("/var/") { return [path, "/private" + path] }
+        return [path]
     }
 
     /// Unfinished downloads sitting directly in ~/Downloads: Chrome's
@@ -1046,7 +1367,7 @@ enum DeletionSafetyPolicy {
 
     nonisolated static func isProtectedJetBrainsCachePath(_ path: String, home: String) -> Bool {
         let root = "\(home)/Library/Caches/JetBrains"
-        guard path == root || path.hasPrefix(root + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, root) else { return false }
         let parts = path.dropFirst(root.count).split(separator: "/").map(String.init)
         // The JetBrains folder itself, or one IDE folder whole.
         if parts.count < 2 { return true }
@@ -1069,17 +1390,6 @@ enum DeletionSafetyPolicy {
     /// row is Check First, so nothing here is ever cleaned without the user.
     nonisolated static func isWhitelistedEditorWorkspaceStorageEntry(_ path: String, home: String) -> Bool {
         EditorWorkspaceStoragePolicy.isEntryPath(path, home: home)
-    }
-
-    nonisolated static func isWhitelistedEditorExtensionPath(_ path: String, home: String) -> Bool {
-        let prefixes = [
-            "\(home)/.cursor/extensions/",
-            "\(home)/.vscode/extensions/"
-        ]
-        guard let matched = prefixes.first(where: { path.hasPrefix($0) }) else { return false }
-        let relative = String(path.dropFirst(matched.count))
-        guard !relative.isEmpty, !relative.contains("/") else { return false }
-        return true
     }
 
     /// Cursor agent leftovers only: a junk temp/empty-window namespace under
@@ -1111,10 +1421,23 @@ enum DeletionSafetyPolicy {
         return candidates.contains { $0.refusesArtifact(at: standardized) }
     }
 
+    /// A folder allowed by its name or a project marker can sit under a linked
+    /// folder, and the move to the Trash follows the link: `app/android` linked
+    /// into `~/Pictures` would trash a `.gradle` in Pictures (#190). The folder
+    /// is judged again where it really is. Only a never-delete place refuses it,
+    /// so a project on a linked drive still cleans.
+    private nonisolated static func resolvesIntoNeverDelete(_ url: URL) -> Bool {
+        let resolved = url.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(url.lastPathComponent).standardizedFileURL
+        // A resolved path has no links left, so the second `evaluate` stops here.
+        guard resolved.path != url.path else { return false }
+        return evaluate(resolved) == .blockedNeverDelete
+    }
+
     nonisolated static func isWhitelistedProjectArtifactPath(_ url: URL, home: String) -> Bool {
         let standardized = url.standardizedFileURL
         let path = standardized.path
-        guard path == home || path.hasPrefix(home + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, home) else { return false }
 
         guard let candidates = ProjectArtifactCatalog.rulesByFolderName[standardized.lastPathComponent] else {
             return false
@@ -1123,10 +1446,13 @@ enum DeletionSafetyPolicy {
         for rule in candidates {
             // Walk back up by however many components the rule's folder spans, so
             // `ios/Pods` anchors on the Xcode project root rather than on `ios`.
+            // The path must end in the whole folder: `P/ios/.gradle` is not the
+            // `android/.gradle` rule's folder (#190).
+            guard path.hasSuffix("/" + rule.folder) else { continue }
             let depth = rule.folder.split(separator: "/").count
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
-            guard root.path.hasPrefix(home + "/") || root.path == home else { continue }
+            guard PathContainment.isSameOrInside(root.path, home) else { continue }
             guard rule.matchesRoot(root) else { continue }
             // Checked here rather than only in the scanner so that no caller can route
             // around it: a `.terraform` folder holding state is never deletable.
@@ -1153,7 +1479,7 @@ enum DeletionSafetyPolicy {
         // ends in "Cache" (e.g. a plugin's own cache dir). ~/Library/Caches/JetBrains
         // is the real, rebuildable cache and is unaffected by this guard.
         let jetBrainsAppSupport = "\(home)/Library/Application Support/JetBrains"
-        if path == jetBrainsAppSupport || path.hasPrefix(jetBrainsAppSupport + "/") {
+        if PathContainment.isSameOrInside(path, jetBrainsAppSupport) {
             return .blockedNeverDelete
         }
         if isProtectedJetBrainsCachePath(path, home: home) {
@@ -1170,7 +1496,7 @@ enum DeletionSafetyPolicy {
         }
 
         for allowed in whitelistedPrefixes(home: home) {
-            if path == allowed || path.hasPrefix(allowed + "/") {
+            if PathContainment.isSameOrInside(path, allowed) {
                 return .allow
             }
         }
@@ -1199,10 +1525,25 @@ enum DeletionSafetyPolicy {
         if isWhitelistedOldCLIVersionPath(path, home: home) {
             return .allow
         }
-        if isWhitelistedUnfinishedDownloadPath(path, home: home) {
+        // Shape only. Whether the version is still in use is checked by
+        // `OldToolVersionScanPolicy.refusesDeletion` before every move.
+        if OldToolVersionScanPolicy.isWhitelistedPath(path, home: home) {
             return .allow
         }
-        if isWhitelistedEditorExtensionPath(path, home: home) {
+        // Shape only. Whether a link still names the build is checked by
+        // `PlaywrightBuildScanPolicy.refusesDeletion` before every move.
+        if PlaywrightBuildScanPolicy.isWhitelistedPath(path, home: home) {
+            return .allow
+        }
+        if gradleLeftover(at: path, home: home) != nil {
+            return .allow
+        }
+        // Above the never-delete guards on purpose: it is in `/var/folders`, which
+        // `/var` refuses.
+        if isWhitelistedClangModuleCachePath(path) {
+            return .allow
+        }
+        if isWhitelistedUnfinishedDownloadPath(path, home: home) {
             return .allow
         }
         if isWhitelistedGemDownloadCachePath(path, home: home) {
@@ -1222,7 +1563,7 @@ enum DeletionSafetyPolicy {
         }
 
         for blocked in neverDeletePrefixes(home: home) {
-            if path == blocked || path.hasPrefix(blocked + "/") {
+            if PathContainment.isSameOrInside(path, blocked) {
                 return .blockedNeverDelete
             }
         }
@@ -1231,15 +1572,15 @@ enum DeletionSafetyPolicy {
             return .blockedNeverDelete
         }
 
-        let inHome = path == home || path.hasPrefix(home + "/")
+        let inHome = PathContainment.isSameOrInside(path, home)
         if inHome && whitelistedFolderNames.contains(standardized.lastPathComponent) {
-            return .allow
+            return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
         }
         // Deliberately below the never-delete guards, exactly like the folder-name rule
         // above it: this matches on a name plus nearby evidence, not on an audited
         // absolute path, so the protections for Pictures, Music, Mail and the rest win.
         if isWhitelistedProjectArtifactPath(standardized, home: home) {
-            return .allow
+            return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
         }
         // Claude Code's `<project>/.claude/worktrees/<name>`. Below the never-delete
         // guards for the same reason as project artifacts: the project can be anywhere.

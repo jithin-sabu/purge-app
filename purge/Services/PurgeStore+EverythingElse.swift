@@ -165,7 +165,10 @@ extension PurgeStore {
             for: folder.path,
             group: folder.group,
             home: FileManager.default.homeDirectoryForCurrentUser,
-            steamGames: everythingElseMeasurement?.steamGames ?? [:]
+            steamGames: everythingElseMeasurement?.steamGames ?? [:],
+            // The uninstaller is locked without Full Disk Access, so the link
+            // would land on the lock page.
+            commandLineTools: hasFullDiskAccess ? (everythingElseMeasurement?.commandLineTools ?? [:]) : [:]
         )
     }
 
@@ -182,6 +185,10 @@ extension PurgeStore {
             selectedTab = .largeFiles
         case .showInDevTools:
             selectedTab = .devTools
+        case .showInCommandLineTools:
+            uninstallSection = .commandLineTools
+            selectedTab = .uninstaller
+            requestScanIfNeeded(.commandLineTools)
         }
     }
 }

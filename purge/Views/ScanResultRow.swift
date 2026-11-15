@@ -1,17 +1,6 @@
 import AppKit
 import SwiftUI
 
-private struct ScanRowPlaceholderAppearanceKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var scanRowPlaceholderAppearance: Bool {
-        get { self[ScanRowPlaceholderAppearanceKey.self] }
-        set { self[ScanRowPlaceholderAppearanceKey.self] = newValue }
-    }
-}
-
 /// Observes `ScanSelection` and hands the current selected state to its content, so a
 /// toggle re-renders only this scope (and the row) — never the list container, whose
 /// re-render reverts scroll. Mirrors the LargeFileSelection decoupling.
@@ -62,32 +51,22 @@ struct ScanResultRow: View {
     var showsLeadingIcon: Bool = true
     /// When true, reserves one explanation line instead of two (e.g. simulator device rows).
     var usesCompactExplanation: Bool = false
+    /// A row from the last scan's saved file (#283): dimmed, a clock where the
+    /// checkbox goes, and no way to select it until the scan finds it again.
+    var isFromLastScan: Bool = false
 
-    @Environment(\.scanRowPlaceholderAppearance) private var rendersAsPlaceholder
     @State private var isContextMenuActive = false
 
-    private var statusLabel: String {
-        safetyInfo.level.displayName
-    }
-
-    private var statusTone: AppBadge.Tone {
-        switch safetyInfo.level {
-        case .safe: return .safe
-        case .medium: return .warning
-        case .unknown: return .neutral
-        }
-    }
-
     private var canSelectForBulk: Bool {
-        allowsBulkSelection
+        allowsBulkSelection && !isFromLastScan
     }
 
     private var showsRowCheckbox: Bool {
-        showsBulkCheckbox && allowsBulkSelection
+        showsBulkCheckbox && allowsBulkSelection && !isFromLastScan
     }
 
     private var canTapRowToToggleSelection: Bool {
-        showsBulkCheckbox && allowsBulkSelection
+        showsBulkCheckbox && allowsBulkSelection && !isFromLastScan
     }
 
     private var hasExtraBadges: Bool {
@@ -101,11 +80,7 @@ struct ScanResultRow: View {
     }
 
     private var explanationLineLimit: Int {
-        usesCompactExplanation ? 1 : 3
-    }
-
-    private var rowVerticalPadding: CGFloat {
-        usesCompactExplanation ? 10 : 12
+        usesCompactExplanation ? 1 : 2
     }
 
     private var showsReinstallBadge: Bool {
@@ -132,7 +107,8 @@ struct ScanResultRow: View {
         isMetadataPending: Bool = false,
         showsCardChrome: Bool = true,
         showsLeadingIcon: Bool = true,
-        usesCompactExplanation: Bool = false
+        usesCompactExplanation: Bool = false,
+        isFromLastScan: Bool = false
     ) {
         self.isSelected = isSelected
         self.onToggle = onToggle
@@ -153,6 +129,7 @@ struct ScanResultRow: View {
         self.showsCardChrome = showsCardChrome
         self.showsLeadingIcon = showsLeadingIcon
         self.usesCompactExplanation = usesCompactExplanation
+        self.isFromLastScan = isFromLastScan
     }
 
     @ViewBuilder
@@ -211,8 +188,10 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var rowBody: some View {
-        let stack = HStack(alignment: .center, spacing: 12) {
-            if showsRowCheckbox {
+        let stack = HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+            if isFromLastScan, showsBulkCheckbox {
+                LastScanRowMarker()
+            } else if showsRowCheckbox {
                 // Non-interactive: the row's own tap gesture publishes selection.
                 // An interactive Toggle here routes clicks through AppKit's control
                 // path, which scrolls the clicked row into view and shifts the list.
@@ -226,12 +205,12 @@ struct ScanResultRow: View {
 
             rowMainContent
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             trailingColumn
         }
         .padding(.horizontal, showsCardChrome ? AppStyle.Row.scanCardHorizontalPadding : 0)
-        .padding(.vertical, showsCardChrome ? rowVerticalPadding : 8)
+        .padding(.vertical, showsCardChrome ? AppStyle.Spacing.small : AppStyle.Spacing.xSmall)
 
         // The tap target must blanket the ENTIRE row, not just rowMainContent: a
         // Button/interactive control in a macOS List row scrolls the clicked row
@@ -247,13 +226,17 @@ struct ScanResultRow: View {
                 .accessibilityAction {
                     onToggle()
                 }
+        } else if isFromLastScan {
+            stack
+                .contentShape(Rectangle())
+                .help(LastScanRowMarker.help)
         } else {
             stack
         }
     }
 
     private var rowMainContent: some View {
-        HStack(alignment: .center, spacing: showsLeadingIcon ? 12 : 0) {
+        HStack(alignment: .center, spacing: showsLeadingIcon ? AppStyle.Spacing.small : 0) {
             if showsLeadingIcon {
                 rowIconView
             }
@@ -264,28 +247,13 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var rowIconView: some View {
-        if rendersAsPlaceholder {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.light))
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-                .shimmering()
-        } else if let brandIcon {
+        if let brandIcon {
             AdaptiveBrandIconImage(source: brandIcon)
         }
     }
 
-    @ViewBuilder
     private var rowTextColumn: some View {
-        if rendersAsPlaceholder {
-            rowPlaceholderTextColumn
-        } else {
-            rowLoadedTextColumn
-        }
-    }
-
-    private var rowLoadedTextColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
             Text(primaryLabel)
                 .font(AppStyle.Typography.headline)
                 .lineLimit(1)
@@ -295,69 +263,37 @@ struct ScanResultRow: View {
                 .truncationMode(.tail)
                 .font(AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textSecondary)
-                .frame(
-                    minHeight: explanationMinHeight,
-                    alignment: usesCompactExplanation ? .leading : .topLeading
-                )
 
             if hasExtraBadges {
                 badgesRow
             }
         }
+        // Reserve the height on the whole column, not the explanation, so a
+        // one-line explanation centres with the title instead of leaving a gap below.
+        .frame(minHeight: textColumnMinHeight, alignment: .leading)
     }
 
-    private var rowPlaceholderTextColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SkeletonFillBar(height: ScanResultRow.headlineOneLineHeight, cornerRadius: AppStyle.Radius.xs)
-
-            VStack(alignment: .leading, spacing: 4) {
-                if usesCompactExplanation {
-                    SkeletonFillBar(height: 10)
-                } else {
-                    SkeletonFillBar(height: 10)
-                    SkeletonFillBar(height: 10)
-                }
-            }
-            .frame(
-                maxWidth: .infinity,
-                minHeight: explanationMinHeight,
-                alignment: .topLeading
-            )
-
-            if hasExtraBadges {
-                SkeletonBar(width: 96, height: 16, cornerRadius: AppStyle.Radius.sm)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .shimmering()
+    private var textColumnMinHeight: CGFloat {
+        ScanResultRow.headlineOneLineHeight + 4 + explanationMinHeight
     }
 
-    @ViewBuilder
     private var trailingColumn: some View {
-        if rendersAsPlaceholder {
-            trailingMetadataSkeleton
-        } else {
-            loadedTrailingColumn
-        }
-    }
-
-    private var loadedTrailingColumn: some View {
         ScanContentCrossfade(isLoading: isMetadataPending, contentAlignment: .topTrailing) {
             trailingMetadataSkeleton
         } loaded: {
-            VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .trailing, spacing: AppStyle.Spacing.xSmall) {
                 Text(formattedSize)
-                    .font(AppStyle.Typography.metadata.weight(.medium))
+                    .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                     .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
 
-                AppBadge(text: statusLabel, tone: statusTone)
+                AppBadge(level: safetyInfo.level)
             }
         }
     }
 
     private var trailingMetadataSkeleton: some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .trailing, spacing: AppStyle.Spacing.xSmall) {
             SkeletonBar(width: 56, height: ScanResultRow.subheadlineOneLineHeight, cornerRadius: AppStyle.Radius.xs)
             SkeletonBar(width: 92, height: 18, cornerRadius: AppStyle.Radius.sm)
         }
@@ -378,7 +314,7 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var badgesRow: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.xxSmallPlus) {
             extraBadges
         }
     }
@@ -642,6 +578,20 @@ struct ScanRowContextMenu: NSViewRepresentable {
 
 // MARK: - Row chrome
 
+/// Sits where a row's checkbox goes when the row is from the last scan (#283), so
+/// the column keeps its width and nothing shifts when the live row takes its place.
+struct LastScanRowMarker: View {
+    static let help = String(localized: "From the last scan. Purge is checking it again.")
+
+    var body: some View {
+        Image(systemName: "clock.arrow.circlepath")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(AppColors.textTertiary)
+            .frame(width: 14)
+            .accessibilityLabel(Self.help)
+    }
+}
+
 struct ScanRowCardChrome: ViewModifier {
     var showsCardChrome: Bool = true
     var canSelectForBulk: Bool = true
@@ -684,101 +634,3 @@ struct ScanRowCardChrome: ViewModifier {
 }
 
 private typealias ScanResultRowChrome = ScanRowCardChrome
-
-// MARK: - Placeholder
-
-extension ScanResultRow {
-    /// Renders a `ScanResultRow` as a redacted, shimmering placeholder that matches
-    /// the geometry of a real loaded row. Used by `ScanListSkeletonPlaceholder` so
-    /// the loading-to-loaded crossfade has no layout shift.
-    ///
-    /// - Parameter showsExtraBadges: When `true`, reserves the optional badges row
-    ///   beneath the subtitle (e.g. project artifact tags). Default `false` matches
-    ///   typical App Cache and dev tool rows.
-    static func placeholder(seed: Int, showsExtraBadges: Bool = false) -> some View {
-        ScanResultRowPlaceholder(seed: seed, showsExtraBadges: showsExtraBadges)
-    }
-}
-
-private struct ScanResultRowPlaceholder: View {
-    let seed: Int
-    var showsExtraBadges: Bool
-
-    var body: some View {
-        ScanResultRow(
-            isSelected: false,
-            primaryLabel: Self.primaryLabel(for: seed),
-            formattedSize: Self.formattedSize(for: seed),
-            safetyInfo: Self.safetyInfo(for: seed, showsExtraBadges: showsExtraBadges),
-            brandIcon: nil,
-            detailCaption: showsExtraBadges ? Self.detailCaption(for: seed) : nil,
-            reinstallSafety: nil,
-            showUncommittedRepoChanges: false,
-            onResetToAutomatic: nil,
-            isUserOverride: false,
-            allowsBulkSelection: true,
-            isMetadataPending: false
-        )
-        .environment(\.scanRowPlaceholderAppearance, true)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private static let primaryLabels: [String] = [
-        "Sample Application",
-        "Another Cache Folder",
-        "A Slightly Longer Item Name",
-        "Short Name",
-        "Medium-Length Title Here",
-        "Yet Another Sample Item",
-        "Compact",
-        "Placeholder Application Title"
-    ]
-
-    private static let explanations: [String] = [
-        "This cache rebuilds automatically the next time the application launches and is generally safe to remove without losing user data.",
-        "Stored derived data and indexes that the tool will regenerate on the next build, so deleting it only costs a one-time rebuild.",
-        "Holds intermediate artifacts that are reproducible from source. Removing them frees disk space at the cost of the next compile or fetch.",
-        "Temporary files that the system or app keeps around for performance. They are recreated on demand and do not contain user content."
-    ]
-
-    private static let detailCaptions: [String] = [
-        "Cache",
-        "Build folder",
-        "Derived data",
-        "Module store"
-    ]
-
-    private static let sizeStrings: [String] = [
-        "123 MB",
-        "1.2 GB",
-        "45 MB",
-        "678 MB",
-        "2.4 GB"
-    ]
-
-    private static func primaryLabel(for seed: Int) -> String {
-        primaryLabels[abs(seed) % primaryLabels.count]
-    }
-
-    private static func detailCaption(for seed: Int) -> String {
-        detailCaptions[abs(seed) % detailCaptions.count]
-    }
-
-    private static func formattedSize(for seed: Int) -> String {
-        sizeStrings[abs(seed) % sizeStrings.count]
-    }
-
-    private static func safetyInfo(for seed: Int, showsExtraBadges: Bool) -> SafetyInfo {
-        let levels: [SafetyLevel] = [.safe, .medium, .unknown]
-        let level = showsExtraBadges ? levels[abs(seed) % levels.count] : .safe
-        let explanation = explanations[abs(seed) % explanations.count]
-        return SafetyInfo(
-            level: level,
-            headline: primaryLabel(for: seed),
-            explanation: explanation,
-            recoverySteps: "",
-            reinstallCommand: nil
-        )
-    }
-}

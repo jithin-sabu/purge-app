@@ -25,9 +25,27 @@ nonisolated enum RemovedAppHandoff {
         var until: Date
     }
 
-    /// Tests point this at a temporary directory. The app and the watcher use the default.
-    static var root: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Purge", isDirectory: true)
+    /// The folder the records and the ignore list live in. The app and the
+    /// watcher use the default. Tests bind it to a temporary folder with
+    /// `RemovedAppHandoff.$root.withValue`; it is task-local, so suites running
+    /// at the same time each see their own folder and none of them writes here.
+    ///
+    /// The unit-test host gets a folder of its own, so a test that does not bind
+    /// one never reads or writes the user's records, folder list or remembered
+    /// drive apps (#99).
+    @TaskLocal static var root: URL = runsInTestHost
+        ? FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-host-\(ProcessInfo.processInfo.processIdentifier)/handoff", isDirectory: true)
+        : FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Purge", isDirectory: true)
+
+    /// The same check as `TestHost.isActive()`, which the watch agent does not
+    /// compile.
+    static let runsInTestHost: Bool = {
+        let environment = ProcessInfo.processInfo.environment
+        return ["XCTestConfigurationFilePath", "XCTestBundlePath", "XCTestSessionIdentifier"]
+            .contains { environment[$0] != nil }
+    }()
 
     static let launchURL = URL(string: "purge://removed-apps")!
     static let agentPlistName = "io.getpurge.watch.plist"
@@ -50,6 +68,10 @@ nonisolated enum RemovedAppHandoff {
     /// as allowed while nothing runs: it crashed, launchd gave up restarting it,
     /// or the user switched it off in System Settings. Only an answer proves it.
     static let agentPingNotification = Notification.Name("io.getpurge.watch.ping")
+    /// Posted by Purge when the user adds or removes an app folder (#99), so the
+    /// watcher starts again on the new list.
+    static let appFoldersChangedNotification = Notification.Name("io.getpurge.watch.appFoldersChanged")
+
     /// The watcher's answer, sent only while it is watching. The object is the
     /// path of the agent executable that answered.
     static let agentPongNotification = Notification.Name("io.getpurge.watch.pong")
@@ -78,8 +100,8 @@ nonisolated enum RemovedAppHandoff {
         loadPending(now: now).map(\.record)
     }
 
-    /// Removes every pending record for `path`. Called once a removal has been
-    /// shown, or once it has been decided not to be a removal.
+    /// Removes every pending record for `path`. Called once a removal's review is
+    /// over, or once it has been decided not to be a removal.
     static func discard(path: String) {
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
         for entry in loadPending(now: Date())
@@ -117,9 +139,10 @@ nonisolated enum RemovedAppHandoff {
             }
     }
 
-    static func ignore(paths: [String]) {
-        var current = loadIgnored().filter { $0.until > Date() }
-        let until = Date().addingTimeInterval(ignoreGrace)
+    /// `now` is for tests, so they can check an entry runs out after `ignoreGrace`.
+    static func ignore(paths: [String], now: Date = Date()) {
+        var current = loadIgnored().filter { $0.until > now }
+        let until = now.addingTimeInterval(ignoreGrace)
         for path in paths {
             current.removeAll { $0.path == path }
             current.append(Ignored(path: path, until: until))
@@ -127,8 +150,8 @@ nonisolated enum RemovedAppHandoff {
         save(current)
     }
 
-    static func isIgnored(path: String) -> Bool {
-        loadIgnored().contains { $0.path == path && $0.until > Date() }
+    static func isIgnored(path: String, now: Date = Date()) -> Bool {
+        loadIgnored().contains { $0.path == path && $0.until > now }
     }
 
     private static var ignoreFile: URL {

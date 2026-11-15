@@ -59,14 +59,12 @@ enum DefinitionCacheGrouper {
         var infos: [SafetyInfo] = []
         for member in members {
             for loc in member.locations {
-                let folderName = loc.folderName
                 let fallback = member.appName
                 if let pathOverride = UserOverridesStore.read(path: loc.path) {
                     infos.append(UserOverridesStore.safetyInfo(from: pathOverride, friendlyHeadline: fallback))
                 } else {
                     infos.append(member.safetyInfo)
                 }
-                _ = folderName
             }
         }
 

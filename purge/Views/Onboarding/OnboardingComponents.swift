@@ -26,14 +26,14 @@ extension OnboardingScanFinding {
 
 struct OnboardingLayout {
   static let contentMaxWidth: CGFloat = 520
-  static let horizontalPadding: CGFloat = 48
-  static let verticalPadding: CGFloat = 40
+  static let horizontalPadding: CGFloat = 48 // design-lint: allow, page geometry
+  static let verticalPadding: CGFloat = 40 // design-lint: allow, page geometry
   static let buttonWidth: CGFloat = 240
   /// Space between the results (total and category list) and the action group
   /// below it. Clearly more than the 40pt between the total and the list inside
   /// `OnboardingResultsStep`, so the two read as separate groups, without the old
   /// stretched gap.
-  static let resultsFooterGap: CGFloat = 64
+  static let resultsFooterGap: CGFloat = 64 // design-lint: allow, page geometry
   /// Fixed height for streamed scan rows so the list does not reflow per item.
   static let scanRowHeight: CGFloat = 56
 }
@@ -44,7 +44,6 @@ struct OnboardingPrimaryButton: View {
   var leadingSystemImage: String? = nil
   /// After the title, for an icon that points onward (arrow).
   var systemImage: String? = nil
-  var isEnabled: Bool = true
   var isLoading: Bool = false
   let action: () -> Void
 
@@ -52,7 +51,7 @@ struct OnboardingPrimaryButton: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 8) {
+      HStack(spacing: AppStyle.Spacing.xSmall) {
         if let leadingSystemImage {
           Image(systemName: leadingSystemImage)
             .font(.system(size: 12, weight: .semibold))
@@ -77,7 +76,7 @@ struct OnboardingPrimaryButton: View {
       }
     }
     .buttonStyle(.purge(.primary, size: .large, width: .fixed(OnboardingLayout.buttonWidth)))
-    .disabled(!isEnabled || isLoading)
+    .disabled(isLoading)
     .keyboardShortcut(.return, modifiers: [])
   }
 }
@@ -171,7 +170,7 @@ private struct OnboardingSizeComparisonChip: View {
   let item: OnboardingSizeComparisonItem
 
   var body: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
       Image(systemName: item.symbol)
         .imageScale(.small)
         .accessibilityHidden(true)
@@ -181,8 +180,8 @@ private struct OnboardingSizeComparisonChip: View {
     }
     .font(AppStyle.Typography.sectionTitle.weight(.medium))
     .foregroundStyle(AppColors.textSecondary)
-    .padding(.horizontal, 12)
-    .padding(.vertical, 6)
+    .padding(.horizontal, AppStyle.Spacing.small)
+    .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
     .background {
       Capsule(style: .continuous)
         .fill(AppColors.fillSecondary)
@@ -202,21 +201,21 @@ struct OnboardingResultsCategoryRow: View {
   private static let sizeColumnWidth: CGFloat = 72
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 8) {
+    HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
       Image(systemName: symbol)
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(AppColors.textTertiary)
         .frame(width: 18, alignment: .center)
         .accessibilityHidden(true)
 
-      Text(LocalizedStringKey(title))
+      Text(title)
         .font(AppStyle.Typography.callout)
         .foregroundStyle(AppColors.textSecondary)
 
       Spacer(minLength: AppStyle.Spacing.xxSmall)
 
       Text(formattedSize)
-        .font(AppStyle.Typography.callout)
+        .font(AppStyle.Typography.callout.numbers)
         .foregroundStyle(AppColors.textSecondary)
         .monospacedDigit()
         .frame(width: Self.sizeColumnWidth, alignment: .trailing)
@@ -426,7 +425,6 @@ private struct OnboardingStepTransition: ViewModifier {
 enum OnboardingTransitions {
   static let dismissDuration: TimeInterval = 0.45
   static let dismissBlurRadius: CGFloat = 12
-  private static let listRowRemovalBlur: CGFloat = 10
 
   static func stepTransition(reduceMotion: Bool) -> AnyTransition {
     if reduceMotion {
@@ -435,19 +433,6 @@ enum OnboardingTransitions {
     return .modifier(
       active: OnboardingStepTransition(blur: 8, opacity: 0),
       identity: OnboardingStepTransition(blur: 0, opacity: 1)
-    )
-  }
-
-  /// Rows leaving a list during onboarding cleaning — blur and fade, no slide.
-  static func listRowRemoval(reduceMotion: Bool) -> AnyTransition {
-    .asymmetric(
-      insertion: .identity,
-      removal: reduceMotion
-        ? .opacity
-        : .modifier(
-          active: OnboardingStepTransition(blur: listRowRemovalBlur, opacity: 0),
-          identity: OnboardingStepTransition(blur: 0, opacity: 1)
-        )
     )
   }
 }

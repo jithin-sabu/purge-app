@@ -41,16 +41,7 @@ final class CleanupLedgerStore {
     }
 
     private static func defaultDirectory() -> URL {
-        // Tests run inside a hosted copy of the app. A clean a test drives must
-        // never land in the user's permanent record, so they get a scratch folder.
-        if TestHost.isActive() {
-            return FileManager.default.temporaryDirectory
-                .appendingPathComponent("PurgeTestLedger-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
-        }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("io.getpurge.app", isDirectory: true)
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("ledger", isDirectory: true)
+        AppSupportFolder.url().appendingPathComponent("ledger", isDirectory: true)
     }
 
     // MARK: - Recording
@@ -202,6 +193,8 @@ final class CleanupLedgerStore {
         let bytesMovedToTrash: Int64
         let bytesReclaimedOnVolume: Int64?
         let skippedForSafetyCount: Int
+        /// Zero for entries written before #303, which did not keep failures.
+        let failedCount: Int
         let items: [(path: String, bytes: Int64)]
         /// False for entries whose items are not files moved to the Trash, so the
         /// import never files them as a clean.
@@ -214,6 +207,7 @@ final class CleanupLedgerStore {
             bytesMovedToTrash = entry.bytesMovedToTrash
             bytesReclaimedOnVolume = entry.bytesReclaimedOnVolume
             skippedForSafetyCount = entry.skippedItems.filter(\.isUserVisible).count
+            failedCount = entry.failedItems.count
             items = entry.deletedItems.map { ($0.path, $0.sizeBytes) }
             belongsInLedger = Self.importsIntoLedger(entry.kind)
         }
@@ -227,6 +221,10 @@ final class CleanupLedgerStore {
             case nil:
                 return true
             case .appleIntelligenceModels?:
+                return false
+            // Nothing was cleaned: the files are still in iCloud, and the
+            // recap counts what went to the Trash.
+            case .iCloudDownloadsRemoved?:
                 return false
             }
         }
@@ -291,7 +289,7 @@ final class CleanupLedgerStore {
             bytesRemovedDirectly: 0,
             bytesReclaimedOnVolume: entry.bytesReclaimedOnVolume,
             skippedForSafetyCount: entry.skippedForSafetyCount,
-            failedCount: 0,
+            failedCount: entry.failedCount,
             importedFromHistory: true,
             items: items
         )
@@ -421,12 +419,6 @@ final class CleanupLedgerStore {
     }
 
     nonisolated private static func homeRelative(_ path: String, home homePath: String) -> String {
-        let home = homePath.hasSuffix("/") ? String(homePath.dropLast()) : homePath
-        guard !home.isEmpty, path.hasPrefix(home) else { return path }
-        let remainder = path.dropFirst(home.count)
-        if remainder.isEmpty { return "~" }
-        // `/Users/alice2` must not become `~2`: only a match on a path boundary counts.
-        guard remainder.hasPrefix("/") else { return path }
-        return "~" + remainder
+        abbreviatingHome(in: path, home: homePath)
     }
 }

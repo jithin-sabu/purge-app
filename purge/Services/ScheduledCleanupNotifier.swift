@@ -15,10 +15,9 @@ enum ScheduledCleanupNotifier {
 
     static func notifyScheduledCleanFinished(bytesMovedToTrash: Int64, deletedCount: Int) async {
         let space = formatBytes(bytesMovedToTrash)
-        let noun = deletedCount == 1 ? String(localized: "item") : String(localized: "items")
         await deliver(
             title: String(localized: "Scheduled clean finished"),
-            body: String(localized: "Moved \(deletedCount) \(noun) to Trash, about \(space). Empty the trash to reclaim the space.")
+            body: String(localized: "Moved \(deletedCount) items to Trash, about \(space). Empty the trash to reclaim the space.")
         )
     }
 
@@ -30,6 +29,10 @@ enum ScheduledCleanupNotifier {
     }
 
     private static func deliver(title: String, body: String) async {
+        // The tests run in a hosted copy of the app, which has the user's own
+        // permission to notify. A scheduled clean a test runs must not post a
+        // banner on their Mac (#189).
+        guard !TestHost.isActive() else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

@@ -22,7 +22,7 @@ final class MenuViewModel: ObservableObject {
     /// the menu always shows the cached result; past this age it also kicks off
     /// a silent background refresh that updates the number in place.
     static let stalenessWindow: TimeInterval = 60 * 60
-    /// How long the "cleaned" hero dwells before settling back to "all clear".
+    /// How long the "cleaned" hero dwells before settling on what is left.
     private static let cleanedDwellNanoseconds: UInt64 = 1_800_000_000
     /// One spring for every hero state swap (and the checking word cycle) so
     /// the whole menu moves with the same soft, non-bouncy feel.
@@ -37,7 +37,10 @@ final class MenuViewModel: ObservableObject {
     /// True between a menu "Scan now" click and its resolution.
     private var menuScanArmed = false
     /// True between the notification Clean action and the cleaned state.
-    private var cleanFromNotification = false
+    private(set) var cleanFromNotification = false
+    /// True when the notification's Clean action came in while a scan was
+    /// running. The clean starts once the scan settles.
+    private var notificationCleanAwaitsScan = false
 
     private weak var store: PurgeStore?
     private var hasAttached = false
@@ -54,6 +57,9 @@ final class MenuViewModel: ObservableObject {
     /// True once `isScanningAll` has been observed high, so the subscription
     /// only settles state on real completions, not on the initial `false`.
     private var storeScanWasInFlight = false
+    /// True when `attach` skipped the launch scan. The first menu open runs it,
+    /// unless a scan started elsewhere first.
+    private var launchScanPending = false
 
     /// True while a scan or clean is in flight; gates re-entrant scans/cleans.
     var isBusy: Bool {
@@ -65,14 +71,23 @@ final class MenuViewModel: ObservableObject {
 
     /// Wires up the store and performs the one-time launch scan + wake observer.
     /// Idempotent: safe to call from multiple lifecycle hooks.
-    func attach(store: PurgeStore) {
+    ///
+    /// `scansAtLaunch` is false when the deleted-apps watcher started Purge
+    /// windowless: that Purge shows one review and quits again, so a full App
+    /// Caches and Dev Tools scan would only walk the disk for seconds of life.
+    /// The scan then waits for the first menu open, or for the window (#177).
+    func attach(store: PurgeStore, scansAtLaunch: Bool = true) {
         guard !hasAttached else { return }
         hasAttached = true
         self.store = store
         registerWakeObserver()
         observeStoreScans(store)
-        // Scan on app launch.
-        runScan(forced: true)
+        if scansAtLaunch {
+            // Scan on app launch.
+            runScan(forced: true)
+        } else {
+            launchScanPending = true
+        }
     }
 
     /// `PurgeStore.scanAll` cancels-and-restarts any in-flight scan, so the
@@ -92,6 +107,8 @@ final class MenuViewModel: ObservableObject {
                 guard let self else { return }
                 if isScanning {
                     storeScanWasInFlight = true
+                    // The window's own launch scan counts as the one this skipped.
+                    launchScanPending = false
                     return
                 }
                 guard storeScanWasInFlight else { return }
@@ -141,17 +158,32 @@ final class MenuViewModel: ObservableObject {
     /// Only falls back to a blocking scan when there is nothing to show yet.
     func menuDidOpen() {
         guard let store else { return }
+        // The user has the panel now, with its own Clean button.
+        notificationCleanAwaitsScan = false
         // A finished scan can be invisible here: completion arrives via a
         // debounced sink on RunLoop.main, and menu tracking stalls the main
         // queue — opening the menu inside that window (or holding it open
         // through completion) leaves state stuck at `.checking` even though
         // the store already has results. Resolve synchronously off the store
-        // so opening always shows a finished scan immediately.
+        // so opening always shows a finished scan immediately. Results from
+        // this session only: `lastScanCompletedAt` outlives the launch, and a
+        // launch that skipped its scan has nothing to show until one runs (#177).
         if case .checking = state,
            !store.isScanningAll,
            activeWorkTask == nil, backgroundRefreshTask == nil,
-           store.lastScanCompletedAt != nil {
+           store.hasSessionResults(for: .cachesAndDevTools) {
+            // A scan the window ran is the launch scan this skipped, even one
+            // over too quickly for the debounced sink to see it start.
+            launchScanPending = false
             resolveAfterScan(animated: false)
+        }
+        // A launch that skipped its scan: the first open runs it, as the launch
+        // would have, so the menu never settles on numbers no scan produced.
+        // While a clean runs no scan can start, and checking is the cold state
+        // until the next open.
+        if launchScanPending {
+            runScan(forced: true)
+            return
         }
         guard !isBusy else { return }
         guard hasSessionScan, let scannedAt = store.lastScanCompletedAt else {
@@ -176,13 +208,61 @@ final class MenuViewModel: ObservableObject {
 
     /// Entry point for the notification's Clean action. Routes through the same
     /// guarded, trash-by-default clean the menu uses.
+    ///
+    /// The action can relaunch or wake Purge, so a scan may still be running.
+    /// The clean then waits for it. When nothing is left to clean, the tap gets
+    /// an answer instead of silence, and no flag is left set for a later clean
+    /// from the panel to pick up (#183).
     func performCleanFromNotification() {
+        switch state {
+        case .cleaning, .cleaned:
+            // A clean is running already. It says how it went when it ends, and
+            // this tap must not change that: clearing the flag here dropped the
+            // banner of a clean another tap started.
+            return
+        case .checking:
+            // Only a scan that is running is worth waiting for. A windowless
+            // launch has run none, and waiting for whichever scan comes next
+            // could start a clean hours after the tap.
+            if isCachesScanInFlight {
+                notificationCleanAwaitsScan = true
+            }
+            return
+        case .clear, .ready:
+            break
+        }
         cleanFromNotification = true
-        clean()
+        guard clean() else {
+            cleanFromNotification = false
+            if case .clear = state, !isPanelVisible {
+                Task { await MenuScanNotifier.notifyScanResult(readyBytes: 0) }
+            }
+            return
+        }
     }
 
     private var isPanelVisible: Bool {
         panelWindow?.isVisible ?? false
+    }
+
+    private var isCachesScanInFlight: Bool {
+        guard let store else { return false }
+        return store.isScanningAll
+            || store.scanQueue.active == .cachesAndDevTools
+            || store.isScanQueued(.cachesAndDevTools)
+    }
+
+    /// Settles on what a clean would take now. The sidebar total also counts
+    /// rows the clean refuses on the spot, such as the CLI version a link now
+    /// points at, so Ready from that total could sit beside a Clean that does
+    /// nothing (#183).
+    private func settleOnCleanableBytes() {
+        guard let store, let date = store.lastScanCompletedAt else {
+            resolveFromCache()
+            return
+        }
+        let bytes = store.manualSafeCleanupCandidates().reduce(Int64(0)) { $0 + $1.sizeBytes }
+        setState(bytes > 0 ? .ready(bytes: bytes, lastScanned: date) : .clear(lastScanned: date))
     }
 
     private func resolveFromCache(animated: Bool = true) {
@@ -240,6 +320,7 @@ final class MenuViewModel: ObservableObject {
         if store.isDeleting { return }
         if isBusy, !forced { return }
 
+        launchScanPending = false
         cancelBackgroundRefresh()
         activeWorkTask?.cancel()
         // Only animate a real change. Wrapping the cold `.checking -> .checking`
@@ -279,22 +360,28 @@ final class MenuViewModel: ObservableObject {
                 Task { await MenuScanNotifier.notifyScanResult(readyBytes: bytes) }
             }
         }
+        if notificationCleanAwaitsScan {
+            notificationCleanAwaitsScan = false
+            performCleanFromNotification()
+        }
     }
 
     /// Cleans via the existing safe-clean entry point. Pins the candidates from
     /// the current scan so the store does not re-scan, then routes the deletion
     /// through `performManualSafeCleanNow` (allowlist + trash-by-default).
-    func clean() {
+    /// Returns whether a clean started.
+    @discardableResult
+    func clean() -> Bool {
         // The Overview's Clean claims its targets before `isDeleting` turns on, so
         // check both or the two runs race and one reports 0 bytes.
         guard let store, case .ready = state, !store.isDeleting,
-              !store.isInteractiveSafeCleanupInProgress else { return }
+              !store.isInteractiveSafeCleanupInProgress else { return false }
 
         let candidates = store.manualSafeCleanupCandidates()
         let total = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
         guard total > 0 else {
-            resolveAfterScan()
-            return
+            settleOnCleanableBytes()
+            return false
         }
 
         cancelBackgroundRefresh()
@@ -305,6 +392,7 @@ final class MenuViewModel: ObservableObject {
             await self?.runClean(candidates: candidates)
             self?.activeWorkTask = nil
         }
+        return true
     }
 
     private func runClean(candidates: [PurgeStore.DeletionCandidate]) async {
@@ -325,21 +413,28 @@ final class MenuViewModel: ObservableObject {
             progressBuffer: progress
         )
         poller.cancel()
+        let fromNotification = cleanFromNotification
+        cleanFromNotification = false
         guard !Task.isCancelled else { return }
 
-        setState(.cleaned(bytes: summary.bytesMovedToTrash))
-        if cleanFromNotification {
-            cleanFromNotification = false
-            if !isPanelVisible {
-                Task { await MenuScanNotifier.notifyCleaned(bytesMovedToTrash: summary.bytesMovedToTrash) }
-            }
+        // Nothing moved: no "cleaned" beat and no "Moved 0 KB" notification.
+        // The menu shows what the scan still holds.
+        guard !summary.skippedForAnotherClean, !summary.failed, summary.bytesMovedToTrash > 0 else {
+            settleOnCleanableBytes()
+            return
         }
 
-        // Settle to "all clear" and let the all-time total tick up.
+        setState(.cleaned(bytes: summary.bytesMovedToTrash))
+        if fromNotification, !isPanelVisible {
+            Task { await MenuScanNotifier.notifyCleaned(bytesMovedToTrash: summary.bytesMovedToTrash) }
+        }
+
+        // Settle on what is left and let the all-time total tick up. Rows that
+        // failed stay in the scan, so "all clear" shows only when nothing safe
+        // is left (#183).
         try? await Task.sleep(nanoseconds: Self.cleanedDwellNanoseconds)
         guard !Task.isCancelled else { return }
-        let date = store.lastScanCompletedAt ?? Date()
-        setState(.clear(lastScanned: date))
+        settleOnCleanableBytes()
     }
 
     private func mirrorCleaningProgress(_ movedBytes: Int64) {

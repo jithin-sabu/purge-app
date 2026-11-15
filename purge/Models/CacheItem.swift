@@ -129,4 +129,27 @@ nonisolated struct CacheItem: Identifiable, Hashable {
         self.standardizedPaths = locations.map { $0.path.standardizedFileURL.path }
         self.id = "def:\(definitionKey)"
     }
+
+    /// A row from the last scan's saved file (#283). Takes the standardized paths
+    /// saved with it instead of working them out, since that stats the disk, and
+    /// builds the same id the scan would, so the live row replaces it in place.
+    init(
+        restoringDefinitionKey definitionKey: String?,
+        locations: [CacheLocation],
+        standardizedPaths: [String],
+        appName: String,
+        safetyInfo: SafetyInfo,
+        reinstallSafety: ReinstallSafetyStatus,
+        gitStatus: GitWorktreeStatus
+    ) {
+        self.definitionKey = definitionKey
+        self.locations = locations
+        self.appName = appName
+        self.isSelected = false
+        self.safetyInfo = safetyInfo
+        self.reinstallSafety = reinstallSafety
+        self.gitStatus = gitStatus
+        self.standardizedPaths = standardizedPaths
+        self.id = definitionKey.map { "def:\($0)" } ?? "path:\(standardizedPaths[0])"
+    }
 }

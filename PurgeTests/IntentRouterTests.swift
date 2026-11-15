@@ -51,7 +51,7 @@ struct IntentRouterTests {
         _ = await router.scanMac()
 
         #expect(fake.generalAccesses == [.full])
-        #expect(await Self.eventually { fake.log == ["step largeFiles", "step apps", "step leftovers"] })
+        #expect(await eventually { fake.log == ["step largeFiles", "step apps", "step leftovers"] })
         fake.cleanUp()
     }
 
@@ -62,7 +62,7 @@ struct IntentRouterTests {
         let router = Self.makeRouter(store: store, reveals: RevealCounter())
         fake.holdsGeneral = true
         store.startLaunchScans()
-        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
+        #expect(await eventually { fake.generalAccesses.count == 1 })
 
         let answer = Task { await router.scanMac() }
         // Give the intent a chance to queue anything it wrongly would.
@@ -130,6 +130,44 @@ struct IntentRouterTests {
         fake.cleanUp()
     }
 
+    /// The tests above all end before anything moves. Here the scan finds a Safe
+    /// row and a Check First one: only the Safe one moves, through a fake Trash
+    /// that moves nothing (#171), and the answer says how much (#189). Neither
+    /// folder is ever made.
+    @Test("Safe rows the scan found are cleaned, and nothing else")
+    func cleanMovesOnlySafeRows() async {
+        func row(_ level: SafetyLevel) -> CacheItem {
+            let folder = "com.purge.test.intent-\(UUID().uuidString)"
+            return CacheItem(
+                definitionKey: nil,
+                location: CacheLocation(
+                    path: URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+                        .appendingPathComponent("Library/Caches/\(folder)", isDirectory: true),
+                    sizeBytes: 2_000_000,
+                    lastModified: .distantPast,
+                    folderName: folder
+                ),
+                appName: folder,
+                safetyInfo: SafetyInfo(level: level, headline: folder, explanation: "", recoverySteps: "", reinstallCommand: nil)
+            )
+        }
+        let safe = row(.safe)
+        let checkFirst = row(.medium)
+        let fake = FakeScans()
+        fake.hasAccess = true
+        fake.generalEvents = [safe, checkFirst].flatMap { item -> [CacheScanEvent] in
+            [.found(item), .sizeResolved(path: item.path.standardizedFileURL.path, sizeBytes: 2_000_000, lastModified: .distantPast)]
+        }
+        let trash = FakeTrash()
+        let store = fake.makeStore(fileDeleter: FileDeleter(trash: trash.trash))
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .cleaned(bytes: 2_000_000, failedCount: 0))
+        #expect(trash.trashedPaths == [safe.path.standardizedFileURL.path])
+        #expect(fake.generalAccesses.count == 1)
+        fake.cleanUp()
+    }
+
     @Test("Results from the last hour are cleaned from without scanning again")
     func cleanReusesFreshResults() async {
         let fake = FakeScans()
@@ -150,7 +188,7 @@ struct IntentRouterTests {
         let store = fake.makeStore()
         let router = Self.makeRouter(store: store, reveals: RevealCounter())
         store.requestScan(.cachesAndDevTools)
-        #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+        #expect(await eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
         #expect(fake.generalAccesses.count == 1)
 
         let later = Date().addingTimeInterval(MenuViewModel.stalenessWindow + 60)
@@ -210,11 +248,16 @@ struct IntentRouterTests {
     // MARK: Uninstall an app
 
     @Test("Uninstall opens the review for that app alone once the app list has it")
-    func uninstallOpensReview() async {
+    func uninstallOpensReview() async throws {
         let fake = FakeScans()
         fake.hasAccess = true
         let store = fake.makeStore()
-        let zoom = Self.app("Zoom")
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = folder.appendingPathComponent("Zoom.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let zoom = InstalledApp(name: "Zoom", bundleURL: bundle, bundleID: "test.zoom", bundleSizeBytes: 0, isRunning: false)
         store.installedApps = [zoom, Self.app("Other")]
         store.selectedAppIDs = [Self.app("Other").id]
         store.uninstallSection = .leftovers
@@ -234,6 +277,29 @@ struct IntentRouterTests {
         #expect(store.uninstallerFocus == UninstallerFocus(appID: zoom.id, name: "Zoom"))
         #expect(reviews == [[zoom.id]])
         #expect(reveals.count == 1)
+        fake.cleanUp()
+    }
+
+    /// A list that still holds an app removed from disk opens no review for it (#176).
+    @Test("A listed app that is gone from disk gets the gone alert, not a review")
+    func uninstallListedButGoneShowsAlert() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let gone = Self.app("Gone-\(UUID().uuidString)")
+        store.installedApps = [gone]
+        var reviewed = false
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviewed = true },
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: gone.id, name: "Gone")
+
+        #expect(!reviewed)
+        #expect(refusals == [IntentRouter.UninstallMiss.gone(name: "Gone").refusal.title])
         fake.cleanUp()
     }
 
@@ -263,15 +329,103 @@ struct IntentRouterTests {
         fake.hasAccess = true
         let store = fake.makeStore()
         var reviewed = false
+        var refusals: [String] = []
         let router = IntentRouter(
             store: store, reveal: {}, onboardingDone: { true },
-            reviewUninstall: { reviewed = true }
+            reviewUninstall: { reviewed = true },
+            showRefusal: { title, _ in refusals.append(title) }
         )
 
-        await router.showUninstaller(appID: "/Applications/Gone.app", name: "Gone")
+        await router.showUninstaller(appID: "/Applications/Gone-\(UUID().uuidString).app", name: "Gone")
 
-        #expect(fake.log.contains("step apps"))
+        // Nothing is on disk there, so a second scan would not find it either.
+        #expect(fake.log.filter { $0 == "step apps" }.count == 1)
         #expect(!reviewed)
+        #expect(refusals == [IntentRouter.UninstallMiss.gone(name: "Gone").refusal.title])
+        fake.cleanUp()
+    }
+
+    /// The Finder, Dock and Shortcuts route for an app installed after this
+    /// session's list was made (#176): the list is scanned again, and the review
+    /// opens once the app is in it.
+    @Test("An app on disk that the list leaves out gets one more scan, then the review")
+    func uninstallRescansForNewlyInstalledApp() async throws {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = folder.appendingPathComponent("New.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let newApp = InstalledApp(name: "New", bundleURL: bundle, bundleID: "test.new", bundleSizeBytes: 0, isRunning: false)
+        store.installedApps = [Self.app("Other")]
+        // The first apps step sees the old list; the second finds the new app.
+        var appSteps = 0
+        fake.onFullAccessStep = { step in
+            guard step == .apps else { return }
+            appSteps += 1
+            if appSteps == 2 { store.installedApps.append(newApp) }
+        }
+        var reviews: [Set<String>] = []
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviews.append(store.selectedAppIDs) },
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: newApp.id, name: "New")
+
+        #expect(appSteps == 2)
+        #expect(reviews == [[newApp.id]])
+        #expect(refusals.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test("An app on disk that a fresh list still leaves out gets an alert")
+    func uninstallUnlistedAppShowsAlert() async throws {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = folder.appendingPathComponent("Unlisted.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let appID = bundle.standardizedFileURL.path
+        var reviewed = false
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviewed = true },
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: appID, name: "Unlisted")
+
+        #expect(fake.log.filter { $0 == "step apps" }.count == 2)
+        #expect(!reviewed)
+        #expect(refusals == [IntentRouter.UninstallMiss.notListed(name: "Unlisted").refusal.title])
+        fake.cleanUp()
+    }
+
+    @Test("No alert once the person has left the uninstaller")
+    func uninstallMissNoAlertAfterMovingOn() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        fake.onFullAccessStep = { _ in store.selectedTab = .overview }
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: {},
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: "/Applications/Gone-\(UUID().uuidString).app", name: "Gone")
+
+        #expect(refusals.isEmpty)
         fake.cleanUp()
     }
 
@@ -309,7 +463,8 @@ struct IntentRouterTests {
     @Test("The app picker uses the uninstaller's ids and never lists system apps or Purge")
     func appPickerMatchesUninstaller() {
         let discovered = AppUninstallScanner.discoverInstalledApps()
-        #expect(discovered.allSatisfy { !$0.bundleURL.path.hasPrefix("/System/") })
+        // Resolved, because `/Applications/Safari.app` links into `/System` (#176).
+        #expect(discovered.allSatisfy { !$0.bundleURL.resolvingSymlinksInPath().path.hasPrefix("/System/") })
         #expect(discovered.allSatisfy { $0.bundleID != "io.getpurge.app" })
 
         let url = URL(fileURLWithPath: "/Applications/Zoom.app")
@@ -355,24 +510,5 @@ struct IntentRouterTests {
         #expect(InstalledAppIndex.matching("tinyspeck", in: apps).map(\.name) == ["Slack"])
         #expect(InstalledAppIndex.matching("  ", in: apps).count == 2)
         #expect(InstalledAppIndex.matching("figma", in: apps).isEmpty)
-    }
-
-    /// Waits for the store to settle. The deadline only stops a hang: other suites
-    /// fill the cooperative thread pool on purpose for several seconds at a time,
-    /// and a 5-second wait ran out on a 3-core CI runner while the scan was starved.
-    private static func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        // Counts only the time this loop was running: on CI the test host can
-        // stall for tens of seconds with every suite waiting, and a wall-clock
-        // deadline expires during the stall through no fault of the condition.
-        var waited: TimeInterval = 0
-        var last = Date()
-        while !condition() {
-            guard waited < timeout else { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-            let now = Date()
-            waited += min(now.timeIntervalSince(last), 0.25)
-            last = now
-        }
-        return true
     }
 }

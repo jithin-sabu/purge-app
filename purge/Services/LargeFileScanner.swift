@@ -19,11 +19,17 @@ nonisolated final class LargeFileScanner {
     /// accident. `installedApps` defaults to a LaunchServices lookup, and
     /// `isAppRunning` to the running-apps list. `home` decides where a Safari
     /// download bundle may sit; tests pass a temporary one.
+    ///
+    /// `iCloudDriveRoots` are walked like the home folders, but their rows are
+    /// offered for Remove Download only and an iCloud file there that can't
+    /// have its download removed is left off (#106). They default to iCloud
+    /// Drive's own folder, again only when `roots` is left to default.
     func scanStream(
         minBytes: Int64,
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
+        iCloudDriveRoots: [URL]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
@@ -32,7 +38,8 @@ nonisolated final class LargeFileScanner {
     ) -> AsyncStream<LargeFile> {
         let events = scanEvents(
             minBytes: minBytes, staleDays: staleDays, roots: roots,
-            virtualMachineRoots: virtualMachineRoots, installedApps: installedApps,
+            virtualMachineRoots: virtualMachineRoots, iCloudDriveRoots: iCloudDriveRoots,
+            installedApps: installedApps,
             isAppRunning: isAppRunning, home: home, exclusions: exclusions, isExcluded: isExcluded
         )
         return AsyncStream { continuation in
@@ -54,6 +61,7 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
+        iCloudDriveRoots: [URL]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
@@ -64,10 +72,13 @@ nonisolated final class LargeFileScanner {
             let task = Task.detached(priority: .userInitiated) {
                 let home = home ?? FileManager.default.homeDirectoryForCurrentUser
                 var walks = (roots ?? LargeFileScanPolicy.scanRoots(home: home))
-                    .map { (root: $0, bundlesOnly: false) }
+                    .map { Walk(root: $0, bundlesOnly: false, downloadOnly: false) }
+                let driveRoots = iCloudDriveRoots
+                    ?? (roots == nil ? [LargeFileScanPolicy.iCloudDriveRoot(home: home)] : [])
+                walks += driveRoots.map { Walk(root: $0, bundlesOnly: false, downloadOnly: true) }
                 let vmRoots = virtualMachineRoots
                     ?? (roots == nil ? LargeFileScanPolicy.virtualMachineRoots(home: home) : [])
-                walks += vmRoots.map { (root: $0, bundlesOnly: true) }
+                walks += vmRoots.map { Walk(root: $0, bundlesOnly: true, downloadOnly: false) }
                 await Self.run(
                     minBytes: minBytes,
                     staleDays: staleDays,
@@ -98,10 +109,19 @@ nonisolated final class LargeFileScanner {
         })
     }
 
+    /// One root and how it is walked. `bundlesOnly` lists VM bundles and
+    /// nothing else; `downloadOnly` lists files whose iCloud download can be
+    /// removed and offers nothing for the Trash.
+    private struct Walk {
+        let root: URL
+        let bundlesOnly: Bool
+        let downloadOnly: Bool
+    }
+
     private static func run(
         minBytes: Int64,
         staleDays: Int,
-        walks: [(root: URL, bundlesOnly: Bool)],
+        walks: [Walk],
         installedApps: Set<VirtualMachineApp>,
         isAppRunning: @Sendable (String) -> Bool,
         home: URL,
@@ -132,13 +152,69 @@ nonisolated final class LargeFileScanner {
             }
         )
 
-        for (root, bundlesOnly) in walks {
+        // A root the user moved and left a link in its place is walked where the
+        // link leads (#273). Nil for a missing root, and for a link Large Files
+        // doesn't follow.
+        let exists = walks.map { fm.fileExists(atPath: $0.root.path) }
+        let folders = walks.indices.map { index in
+            exists[index] ? LargeFileScanPolicy.walkedFolder(for: walks[index].root, home: home) : nil
+        }
+        // Two roots can lead to one folder, or one into the other's
+        // (`~/Desktop -> ~/Documents/Desktop`). That folder is walked once, by
+        // the root that holds it. Listed twice, a file would be its own
+        // duplicate, and trashing the "extra copy" would trash the only one.
+        // Folders are compared by identity, not spelling: on the default volume
+        // `~/documents` is `~/Documents` (2026-10-22 in `docs/safety-notes.md`).
+        // A VM folder is always walked: the other walk may not reach it, such as
+        // past a model store it skips, and `isFirstListing` keeps a bundle both
+        // walks find to one row.
+        let identities = folders.map { $0.flatMap { FileIdentity(path: $0.path) } }
+        func isCovered(_ index: Int) -> Bool {
+            guard !walks[index].bundlesOnly,
+                  let folder = folders[index], let own = identities[index] else { return false }
+            var above = Set<FileIdentity>()
+            var parent = folder.resolvingSymlinksInPath()
+            while parent.path != "/" {
+                parent = parent.deletingLastPathComponent()
+                if let identity = FileIdentity(path: parent.path) { above.insert(identity) }
+            }
+            return walks.indices.contains { other in
+                guard other != index, !walks[other].bundlesOnly, !walks[other].downloadOnly,
+                      let identity = identities[other] else { return false }
+                return above.contains(identity) || (identity == own && other < index)
+            }
+        }
+        // Skipping a covered root is the fast path. Each entry is also listed
+        // once, by its folder's identity and its name, which holds for any mix
+        // of roots, such as a home folder linked inside a VM folder. Hard links
+        // in two folders are two entries and stay two rows, as before.
+        var listedEntries = Set<ListedEntry>()
+        func isFirstListing(_ file: LargeFile) -> Bool {
+            guard let folder = FileIdentity(path: file.path.deletingLastPathComponent().path) else { return true }
+            return listedEntries.insert(ListedEntry(folder: folder, name: file.path.lastPathComponent)).inserted
+        }
+
+        for (index, walk) in walks.enumerated() {
+            let root = walk.root
+            let bundlesOnly = walk.bundlesOnly
             if Task.isCancelled { break }
-            guard fm.fileExists(atPath: root.path) else { continue }
+            guard exists[index] else { continue }
             // Folders the user excluded are never entered, not just hidden from the
             // results, so an excluded archive also stops costing scan time (#46).
+            // Asked first, so an excluded root is never named as unread or as
+            // checked. `scoped` resolves the link, as the store resolves its keys.
             let excluded = exclusions.scoped(to: root)
             if excluded.excludesRoot { continue }
+            guard let folder = folders[index] else {
+                if !bundlesOnly {
+                    summary.unreadableRoots.append(.init(path: root, reason: unwalkedLinkReason(root)))
+                }
+                continue
+            }
+            if isCovered(index) {
+                if !bundlesOnly { summary.checkedRoots.append(root) }
+                continue
+            }
             // How the enumerator spells the root, taken from its first child rather
             // than from `root`: it can differ (`/private/var` for `/var`), and
             // matching is on the path below this prefix. See `ScanExclusions`.
@@ -148,9 +224,9 @@ nonisolated final class LargeFileScanner {
             // the enumerator reports the refusal here and then yields nothing. The
             // summary names it so the empty state can say the scan was incomplete.
             let rootFailure = RootFailure()
-            let rootPath = root.resolvingSymlinksInPath().path
+            let rootPath = folder.resolvingSymlinksInPath().path
             guard let enumerator = fm.enumerator(
-                at: root,
+                at: folder,
                 includingPropertiesForKeys: Array(resourceKeys),
                 options: [.skipsHiddenFiles, .skipsPackageDescendants],
                 errorHandler: { url, error in
@@ -205,8 +281,9 @@ nonisolated final class LargeFileScanner {
                                 if let file = listed(
                                     fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
                                     minBytes: minBytes, staleDays: staleDays, now: now,
-                                    installedApps: installedApps, isExcluded: isExcluded
-                                ) {
+                                    installedApps: installedApps, isExcluded: isExcluded,
+                                    home: home, downloadOnly: walk.downloadOnly
+                                ), isFirstListing(file) {
                                     continuation.yield(.file(file))
                                 }
                                 continue
@@ -272,8 +349,9 @@ nonisolated final class LargeFileScanner {
                         if let file = listed(
                             fileURL, size: size, lastUsed: max(accessed, modified),
                             minBytes: minBytes, staleDays: staleDays, now: now,
-                            installedApps: installedApps, isExcluded: isExcluded
-                        ) {
+                            installedApps: installedApps, isExcluded: isExcluded,
+                            home: home, downloadOnly: walk.downloadOnly
+                        ), isFirstListing(file) {
                             continuation.yield(.file(file))
                         }
                     }
@@ -303,6 +381,19 @@ nonisolated final class LargeFileScanner {
         var error: Error?
     }
 
+    /// A directory entry: the folder it is in, by identity, and its name.
+    private struct ListedEntry: Hashable {
+        let folder: FileIdentity
+        let name: String
+    }
+
+    /// Why a root that is a link was left out, with where it leads, so the
+    /// summary doesn't read as a folder macOS refused to open.
+    private static func unwalkedLinkReason(_ root: URL) -> String {
+        let target = (root.resolvingSymlinksInPath().path as NSString).abbreviatingWithTildeInPath
+        return String(localized: "It links to \(target), which Large Files doesn't scan.")
+    }
+
     /// The last-used filter, shared by the rows and the summary's tallies.
     private static func passesStaleFilter(lastUsed: Date, staleDays: Int, now: Date) -> Bool {
         guard staleDays > 0 else { return true }
@@ -320,7 +411,9 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         now: Date,
         installedApps: Set<VirtualMachineApp>,
-        isExcluded: (URL) -> Bool
+        isExcluded: (URL) -> Bool,
+        home: URL,
+        downloadOnly: Bool
     ) -> LargeFile? {
         guard size >= minBytes else { return nil }
         guard passesStaleFilter(lastUsed: lastUsed, staleDays: staleDays, now: now) else { return nil }
@@ -349,6 +442,13 @@ nonisolated final class LargeFileScanner {
             forKeys: [.isUbiquitousItemKey]
         ))?.isUbiquitousItem == true
 
+        // The same checks the remover runs before it acts, asked only of synced
+        // files that made the list. In iCloud Drive's own folder Remove Download
+        // is the only thing on offer, so a file that can't have it isn't listed.
+        let canRemoveDownload = syncsWithICloud
+            && ICloudDownloadPolicy.evaluate(fileURL, home: home, now: now).decision == .removable
+        if downloadOnly, !canRemoveDownload { return nil }
+
         var kind = LargeFileKind.kind(forExtension: fileURL.pathExtension)
         if case .virtualMachine(let app, _) = kind {
             kind = .virtualMachine(app, appInstalled: installedApps.contains(app))
@@ -360,6 +460,8 @@ nonisolated final class LargeFileScanner {
             lastUsed: lastUsed,
             category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
             syncsWithICloud: syncsWithICloud,
+            canMoveToTrash: !downloadOnly,
+            canRemoveDownload: canRemoveDownload,
             kind: kind
         )
     }

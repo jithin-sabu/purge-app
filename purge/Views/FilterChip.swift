@@ -9,16 +9,12 @@ enum FilterChipTier {
     case neutral
     case safe
     case checkFirst
-    case danger
-    case unsure
 
     var selectedBackground: Color {
         switch self {
         case .neutral: return AppColors.surfaceRaised
         case .safe: return AppColors.statusSafeFill
         case .checkFirst: return AppColors.statusCheckFill
-        case .danger: return AppColors.statusDangerFill
-        case .unsure: return AppColors.statusUnsureFill
         }
     }
 
@@ -27,8 +23,6 @@ enum FilterChipTier {
         case .neutral: return AppColors.textPrimary
         case .safe: return AppColors.statusSafeText
         case .checkFirst: return AppColors.statusCheckText
-        case .danger: return AppColors.statusDangerText
-        case .unsure: return AppColors.statusUnsureText
         }
     }
 }
@@ -43,9 +37,9 @@ struct FilterChip: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let horizontalPadding: CGFloat = 10
-    private static let verticalPadding: CGFloat = 5
-    private static let contentSpacing: CGFloat = 6
+    private static let horizontalPadding: CGFloat = AppStyle.Spacing.small
+    private static let verticalPadding: CGFloat = AppStyle.Spacing.xxSmallPlus
+    private static let contentSpacing: CGFloat = AppStyle.Spacing.xxSmallPlus
 
     var body: some View {
         HStack(spacing: Self.contentSpacing) {
@@ -72,7 +66,7 @@ struct FilterChip: View {
                     .accessibilityHidden(true)
             } else if let count {
                 Text("\(count)")
-                    .font(AppStyle.Typography.rowTitle)
+                    .font(AppStyle.Typography.rowTitle.numbers)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .foregroundStyle(countColor)
@@ -91,6 +85,8 @@ struct FilterChip: View {
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         }
         .contentShape(Capsule(style: .continuous))
+        // The selected tab is shown only by its fill, which VoiceOver can't see.
+        .accessibilityAddTraits(style == .tab && isSelected ? .isSelected : [])
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isSelected)
     }
 
@@ -109,7 +105,9 @@ struct FilterChip: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         } else {
-            Text(LocalizedStringKey(label))
+            // A dropdown's value, such as "Larger than 1 GB", shows its figure
+            // like the app's other sizes.
+            Text(figures: label, style: AppStyle.Typography.body)
                 .lineLimit(1)
         }
     }

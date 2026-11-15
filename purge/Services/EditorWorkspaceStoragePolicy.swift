@@ -24,7 +24,7 @@ nonisolated enum EditorWorkspaceStoragePolicy {
     /// A folder directly inside one of the roots. Pure string check.
     static func isEntryPath(_ path: String, home: String) -> Bool {
         for root in roots(home: home) {
-            guard path.hasPrefix(root + "/") else { continue }
+            guard PathContainment.isInside(path, root) else { continue }
             let rest = path.dropFirst(root.count + 1)
             return !rest.isEmpty && !rest.contains("/")
         }
@@ -58,6 +58,9 @@ nonisolated enum EditorWorkspaceStoragePolicy {
         guard let project = projectURL(forEntry: entry, fileManager: fileManager) else { return false }
         let projectPath = project.path
         if projectPath.hasPrefix("/Volumes/") {
+            // Looking at a removable or network volume can ask for permission to
+            // reach it, and a limited scan must not ask for anything (#183).
+            guard access == .full else { return false }
             let parts = projectPath.split(separator: "/")
             guard parts.count >= 2 else { return false }
             let volume = "/Volumes/\(parts[1])"

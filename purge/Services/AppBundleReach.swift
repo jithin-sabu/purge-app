@@ -1,14 +1,16 @@
 import Foundation
 
-/// Where the App Uninstaller looks for apps inside `/Applications` and
-/// `~/Applications`: at any depth, but never inside another app or package,
+/// Where the App Uninstaller looks for apps inside each app folder
+/// (`AppFolders`): at any depth, but never inside another app or package,
 /// never through a symlink, and never through a hidden folder.
 ///
 /// Vendors nest their apps, like
 /// `/Applications/Autodesk/AutoCAD 2026/AutoCAD 2026.app` (#143), and people
 /// sort their own apps into folders. Every app found is listed, including a
 /// suite's background parts, so the checks that hold back a leftover another
-/// installed app still uses can see them all.
+/// installed app still uses can see them all. The list folds a vendor's apps
+/// that share a folder into one entry for display only (`AppSuiteGrouping`,
+/// #155); every bundle stays in the list those checks read.
 ///
 /// The picker, the delete gate, the Finder service check, the removal watcher,
 /// the orphan index, and the root helper all read this one rule, so an app the
@@ -39,8 +41,13 @@ nonisolated enum AppBundleReach {
     /// Nil when the path is not an `.app` or is outside every root, and nil when
     /// a folder on the way is a bundle or package, a symlink, or hidden: those
     /// are the folders the walk never enters, so the gate refuses exactly what
-    /// the picker never lists.
-    static func folderDepth(ofAppAtPath path: String, roots: [String]) -> Int? {
+    /// the picker never lists. `skipsFolder` is the same extra rule the walk
+    /// was given, if any (`AppFolders.walkSkips` for drives and added folders).
+    static func folderDepth(
+        ofAppAtPath path: String,
+        roots: [String],
+        skipsFolder: ((URL) -> Bool)? = nil
+    ) -> Int? {
         guard (path as NSString).pathExtension == "app" else { return nil }
         for root in roots {
             guard path.hasPrefix(root + "/") else { continue }
@@ -55,6 +62,7 @@ nonisolated enum AppBundleReach {
                 if values?.isPackage == true || values?.isSymbolicLink == true || values?.isHidden == true {
                     return nil
                 }
+                if let skipsFolder, skipsFolder(URL(fileURLWithPath: folderPath, isDirectory: true)) { return nil }
             }
             return folders.count
         }
@@ -67,8 +75,9 @@ nonisolated enum AppBundleReach {
     ///
     /// Returns nil when `root` cannot be listed, including when it is absent, so
     /// each caller decides what a missing or unreadable root means. A subfolder
-    /// that cannot be listed is skipped: it only hides the apps inside it.
-    static func appBundleURLs(in root: URL) -> [URL]? {
+    /// that cannot be listed is skipped: it only hides the apps inside it, and
+    /// so is one `skipsFolder` names.
+    static func appBundleURLs(in root: URL, skipsFolder: ((URL) -> Bool)? = nil) -> [URL]? {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey]
         guard let entries = try? fm.contentsOfDirectory(
@@ -91,6 +100,7 @@ nonisolated enum AppBundleReach {
                 guard values?.isDirectory == true,
                       values?.isPackage != true,
                       values?.isSymbolicLink != true else { continue }
+                if let skipsFolder, skipsFolder(entry) { continue }
                 let children = (try? fm.contentsOfDirectory(
                     at: entry,
                     includingPropertiesForKeys: keys,
@@ -108,5 +118,22 @@ nonisolated enum AppBundleReach {
     static func readInfoPlist(at bundleURL: URL) -> [String: Any] {
         let plistURL = bundleURL.appendingPathComponent("Contents/Info.plist")
         return NSDictionary(contentsOf: plistURL) as? [String: Any] ?? [:]
+    }
+
+    /// The bundle's `CFBundleIdentifier`, or nil when it has none. Reads the three
+    /// layouts `Bundle(url:)` reads: a Mac app's `Contents/Info.plist`, an iPhone
+    /// or iPad app wrapped for the Mac (`WrappedBundle/Info.plist`), and a flat
+    /// bundle's `Info.plist`. A wrapped app with no id would stop claiming the
+    /// container it shares with a Mac app of the same id (#185).
+    static func bundleID(at bundleURL: URL) -> String? {
+        for relative in ["Contents/Info.plist", "WrappedBundle/Info.plist", "Info.plist"] {
+            let info = NSDictionary(contentsOf: bundleURL.appendingPathComponent(relative)) as? [String: Any] ?? [:]
+            if let id = bundleID(in: info) { return id }
+        }
+        return nil
+    }
+
+    static func bundleID(in info: [String: Any]) -> String? {
+        (info["CFBundleIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 }

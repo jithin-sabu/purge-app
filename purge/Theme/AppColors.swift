@@ -149,15 +149,6 @@ private extension NSColor {
 }
 
 extension Color {
-    init(light: NSColor, dark: NSColor) {
-        self.init(nsColor: NSColor(name: nil) { appearance in
-            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
-                return dark
-            }
-            return light
-        })
-    }
-
     init(light: UInt32, dark: UInt32) {
         self.init(nsColor: NSColor(light: light, dark: dark))
     }

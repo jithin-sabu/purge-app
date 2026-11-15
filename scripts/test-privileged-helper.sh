@@ -22,7 +22,7 @@ DDIR="${TMPDIR:-/tmp}/purge-helpertest-dd"
 cd "$REPO_ROOT"
 
 echo "==> Checking the Developer ID signing certificate is present"
-if ! security find-identity -v -p codesigning | grep -q "$TEAM"; then
+if ! security find-identity -v -p codesigning | grep -qF "$IDENTITY"; then
   echo "No Developer ID Application certificate for team $TEAM found in your keychain." >&2
   echo "The helper cannot be signed without it, so testing can't proceed." >&2
   exit 1
@@ -59,7 +59,8 @@ fi
 echo "==> Final signature check (app + everything nested)"
 codesign --verify --deep --strict --verbose=2 "$APP"
 echo "    Helper identity:"
-codesign -dvvv "$APP/$HELPER" 2>&1 | grep -E "^(Identifier|Authority=Developer ID|TeamIdentifier|flags)=" | sed 's/^/      /'
+# The hardened-runtime flag is on the CodeDirectory line, as flags=0x10000(runtime).
+codesign -dvvv "$APP/$HELPER" 2>&1 | grep -E "^(Identifier=|Authority=Developer ID Application|TeamIdentifier=|CodeDirectory .*flags=)" | sed 's/^/      /'
 
 echo "==> Installing to /Applications"
 osascript -e 'quit app "Purge"' >/dev/null 2>&1 || true

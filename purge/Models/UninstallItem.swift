@@ -10,6 +10,12 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
     case preferences
     case containers
     case groupContainers
+    /// `~/Library/Application Scripts`, the scripts folder macOS makes for each
+    /// sandboxed app and each app group (#352).
+    case applicationScripts
+    /// Cookies and site storage an app's web views keep: `~/Library/Cookies` and
+    /// `~/Library/WebKit` (#352).
+    case webData
     case savedState
     case logs
     case launchAgents
@@ -29,6 +35,8 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .preferences: return String(localized: "Preferences")
         case .containers: return String(localized: "Containers")
         case .groupContainers: return String(localized: "Group Containers")
+        case .applicationScripts: return String(localized: "Application Scripts")
+        case .webData: return String(localized: "Website Data")
         case .savedState: return String(localized: "Saved State")
         case .logs: return String(localized: "Logs")
         case .launchAgents: return String(localized: "Launch Agents")
@@ -46,6 +54,8 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .preferences: return "slider.horizontal.3"
         case .containers: return "shippingbox"
         case .groupContainers: return "square.stack.3d.up"
+        case .applicationScripts: return "applescript"
+        case .webData: return "globe"
         case .savedState: return "clock.arrow.circlepath"
         case .logs: return "doc.text"
         case .launchAgents: return "bolt.badge.clock"
@@ -64,13 +74,15 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .homeFolderData: return 2
         case .containers: return 3
         case .groupContainers: return 4
-        case .caches: return 5
-        case .savedState: return 6
-        case .logs: return 7
-        case .preferences: return 8
-        case .launchAgents: return 9
-        case .launchDaemons: return 10
-        case .other: return 11
+        case .applicationScripts: return 5
+        case .caches: return 6
+        case .webData: return 7
+        case .savedState: return 8
+        case .logs: return 9
+        case .preferences: return 10
+        case .launchAgents: return 11
+        case .launchDaemons: return 12
+        case .other: return 13
         }
     }
 }
@@ -109,6 +121,32 @@ nonisolated enum MatchReason: Hashable {
         switch self {
         case .appBundle, .bundleID, .groupID: return true
         case .appName, .ownerLedger, .libraryCrossEvidence, .dotFolderCatalog: return false
+        }
+    }
+
+    /// Leftovers list one section per reason, strongest link first, so the
+    /// reason is said once in the header instead of on every row.
+    var leftoverSectionRank: Int {
+        switch self {
+        case .appBundle: return 0
+        case .bundleID: return 1
+        case .groupID: return 2
+        case .ownerLedger: return 3
+        case .dotFolderCatalog: return 4
+        case .libraryCrossEvidence: return 5
+        case .appName: return 6
+        }
+    }
+
+    var leftoverSectionTitle: String {
+        switch self {
+        case .appBundle: return String(localized: "Applications")
+        case .bundleID: return String(localized: "Matched by bundle identifier")
+        case .groupID: return String(localized: "Matched by app group")
+        case .ownerLedger: return String(localized: "Seen in use while the app was installed")
+        case .dotFolderCatalog: return String(localized: "Hidden folders the app is known to keep")
+        case .libraryCrossEvidence: return String(localized: "Named like a Preferences or Caches identifier")
+        case .appName: return String(localized: "Matched by name, check each one belongs to the app")
         }
     }
 
@@ -153,6 +191,10 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// uninstaller's own items, whose app is the one being removed, and for app
     /// groups.
     var ownerBundleIDs: [String] = []
+    /// An Application Scripts folder that held files when it was scanned (#352).
+    /// The user may have written them, so the row starts unticked and only a
+    /// click on the row itself ticks it.
+    var holdsAddedScripts = false
 
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }
@@ -160,20 +202,24 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// Whether the per-app header checkbox in the review sheet ticks this row.
     /// A row kept for a surviving app is locked off. A catalog dot folder (#228)
     /// holds settings, extensions and history, so only a click on its own row
-    /// ticks it; the header never sweeps it in. The header can still clear it,
-    /// see `UninstallAppPlan.toggleAllFromHeader`.
-    var isTickedByHeader: Bool { !isKeptForOtherApp && category != .homeFolderData }
+    /// ticks it; the header never sweeps it in. A scripts folder with files in
+    /// it (#352) is the same. The header can still clear either, see
+    /// `UninstallAppPlan.toggleAllFromHeader`.
+    var isTickedByHeader: Bool {
+        !isKeptForOtherApp && category != .homeFolderData && !holdsAddedScripts
+    }
 
     var formattedSize: String { formatBytes(sizeBytes) }
 }
 
-/// The two views inside the App Uninstaller tab. `leftovers` only exists as a
-/// switchable segment once a scan finds any (issue #26). Lives here rather than
+/// The views inside the App Uninstaller tab. `leftovers` and `commandLineTools`
+/// only exist as switchable segments once a scan finds any (issues #26, #225). Lives here rather than
 /// in the view so `PurgeStore` can own the current selection and the tab's
 /// header can swap its action button to match.
 nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
     case installedApps
     case leftovers
+    case commandLineTools
 
     var id: String { rawValue }
 
@@ -181,6 +227,7 @@ nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
         switch self {
         case .installedApps: return String(localized: "Installed Apps")
         case .leftovers: return String(localized: "Leftovers")
+        case .commandLineTools: return String(localized: "Command-Line Tools")
         }
     }
 
@@ -188,6 +235,7 @@ nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
         switch self {
         case .installedApps: return "square.grid.2x2"
         case .leftovers: return "clock.badge.xmark"
+        case .commandLineTools: return "terminal"
         }
     }
 }
@@ -237,11 +285,43 @@ nonisolated struct RemovedAppLeftoverPlan: Identifiable, Hashable {
 nonisolated struct UninstallAppPlan: Identifiable, Hashable {
     let app: InstalledApp
     var items: [UninstallItem]
+    /// Whether Homebrew removes the bundle instead of Purge trashing it (#254).
+    /// Starts on for an app Homebrew installed as a cask, and the sheet's toggle
+    /// turns it off so the app moves to the Trash. Meaningless for any other app.
+    var removesThroughHomebrew: Bool
+
+    init(app: InstalledApp, items: [UninstallItem], removesThroughHomebrew: Bool? = nil) {
+        self.app = app
+        self.items = items
+        self.removesThroughHomebrew = removesThroughHomebrew ?? (app.homebrewCask != nil)
+    }
 
     var id: String { app.id }
 
     var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
     var selectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+
+    var bundleItem: UninstallItem? { items.first { $0.category == .bundle } }
+
+    /// Whether the app is quit before anything moves: only when it is running
+    /// and its bundle is ticked. Leftovers alone never quit it (#176).
+    var quitsAppFirst: Bool {
+        app.isRunning && bundleItem?.isSelected == true
+    }
+
+    /// The cask Homebrew removes when this plan runs: the app's cask, with the
+    /// toggle on and the bundle ticked. Nil means the bundle goes to the Trash,
+    /// or stays.
+    var homebrewCask: HomebrewCask? {
+        guard removesThroughHomebrew, let cask = app.homebrewCask,
+              bundleItem?.isSelected == true else { return nil }
+        return cask
+    }
+
+    /// The bundle, when Homebrew deletes it permanently in this plan.
+    var permanentlyDeletedItem: UninstallItem? {
+        homebrewCask == nil ? nil : bundleItem
+    }
 
     /// What the per-app header checkbox shows.
     enum HeaderSelection {
@@ -284,9 +364,26 @@ nonisolated struct UninstallAppPlan: Identifiable, Hashable {
 nonisolated struct UninstallPlan: Identifiable, Hashable {
     let id: String
     var apps: [UninstallAppPlan]
+    /// The vendor groups the plan's apps belong to (#155), and every app in
+    /// them, so the sheet can warn as the user ticks and unticks bundles.
+    var suiteGroups: [AppSuiteGroup] = []
+    var suiteApps: [InstalledApp] = []
+
+    /// What the sheet warns about, from the bundles ticked right now: an
+    /// unticked bundle stays on disk, so its app is not being removed.
+    var partialSuites: [PartialSuite] {
+        guard !suiteGroups.isEmpty else { return [] }
+        let removing = Set(apps.filter { $0.bundleItem?.isSelected == true }.map(\.app.id))
+        return AppSuiteGrouping.partialSuites(removingIDs: removing, groups: suiteGroups, apps: suiteApps)
+    }
 
     var totalSelectedItems: Int { uniqueSelectedItems.count }
     var totalSelectedBytes: Int64 { uniqueSelectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+
+    /// The bundles Homebrew deletes permanently when this plan runs (#254).
+    /// Everything else ticked moves to the Trash.
+    var permanentlyDeletedItems: [UninstallItem] { apps.compactMap(\.permanentlyDeletedItem) }
+    var trashedItemCount: Int { totalSelectedItems - permanentlyDeletedItems.count }
 
     /// The checked items across every app, with any path selected under more than
     /// one app counted once. Two installs that share a bundle id (Xcode and

@@ -5,7 +5,7 @@ struct AppBrandMark: View {
     var iconSize: CGFloat = 22
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -23,19 +23,18 @@ struct AppBrandMark: View {
 /// Sidebar column insets — brand mark and nav selection share the same leading edge.
 enum SidebarLayout {
     static let width: CGFloat = 240
-    static let horizontalInset: CGFloat = 8
-    static let navRowInnerPadding: CGFloat = 8
-    static let selectionCornerRadius: CGFloat = 8
+    static let navRowInnerPadding: CGFloat = AppStyle.Spacing.xSmall
+    static let selectionCornerRadius: CGFloat = AppStyle.Radius.md
     /// Clears unified title-bar traffic lights with a little breathing room below.
-    static let topContentInset: CGFloat = 42
+    static let topContentInset: CGFloat = 42 // design-lint: allow, page geometry under the traffic lights
 }
 
 /// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
 enum AppDetailPageLayout {
-    static let horizontalInset: CGFloat = 24
+    static let horizontalInset: CGFloat = AppStyle.Spacing.large
     /// Space below the title bar before page content begins.
-    static let topContentInset: CGFloat = 20
-    static let verticalPadding: CGFloat = 12
+    static let topContentInset: CGFloat = 20 // design-lint: allow, page geometry every page header hangs from
+    static let verticalPadding: CGFloat = AppStyle.Spacing.small
     /// Remaining clear band below a `safeAreaBar` page header before content begins.
     /// `AppSectionPageHeader` already pads `Spacing.small` under the title, so this tops
     /// that up to `topContentInset` — the gap under the title then matches the one above
@@ -44,7 +43,7 @@ enum AppDetailPageLayout {
     /// it onto the scroll content instead.
     static let clearanceBelowHeader: CGFloat = topContentInset - AppStyle.Spacing.small
     /// Clear band under the Select All row so the first card sits a small gap below it.
-    static let scanTabSelectAllBottomPadding: CGFloat = 14
+    static let scanTabSelectAllBottomPadding: CGFloat = AppStyle.Spacing.small
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
     static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
     /// Extra line when a subtitle is shown (spacing + subheadline).
@@ -101,8 +100,9 @@ private struct DetailPageScrollEdgeModifier: ViewModifier {
             .safeAreaBar(edge: .top, spacing: 0) {
                 AppSectionPageHeader(title: title, subtitle: includesSubtitle ? " " : nil)
                     .padding(.bottom, AppDetailPageLayout.clearanceBelowHeader)
-                    .opacity(0)
-                    .accessibilityHidden(true)
+                    // Hidden, not just see-through: `accessibilityHidden` doesn't
+                    // reach a `safeAreaBar`, so VoiceOver read the page title twice.
+                    .hidden()
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
                     .background {
@@ -128,34 +128,59 @@ extension View {
 struct AppSectionPageHeader<Trailing: View>: View {
     let title: String
     let subtitle: String?
+    /// Sits after the subtitle on the same line, such as the App Uninstaller's
+    /// "from 3 folders" (#99).
+    var subtitleAccessory: AnyView?
+    /// Text after the accessory, styled like the subtitle, so the accessory can
+    /// sit mid-line: "31 apps" [from 3 folders] "· 53.4 GB".
+    var subtitleTail: String?
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         title: String,
         subtitle: String? = nil,
+        subtitleAccessory: AnyView? = nil,
+        subtitleTail: String? = nil,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.subtitleAccessory = subtitleAccessory
+        self.subtitleTail = subtitleTail
         self.trailing = trailing
+    }
+
+    private func subtitleText(_ text: String) -> some View {
+        Text(text)
+            .font(AppStyle.Typography.metadata.numbers)
+            .foregroundStyle(AppColors.textSecondary)
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .identity : .numericText())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: text)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 AnimatedPageTitle(title)
 
                 if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .monospacedDigit()
-                        .contentTransition(reduceMotion ? .identity : .numericText())
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmall) {
+                        subtitleText(subtitle)
+                        if let subtitleAccessory {
+                            subtitleAccessory
+                        }
+                        if let subtitleTail, !subtitleTail.isEmpty {
+                            subtitleText(subtitleTail)
+                        }
+                    }
                 }
             }
+            // The title takes its width first, so long button labels turn to icons
+            // instead of wrapping the subtitle a few letters a line (#342).
+            .layoutPriority(1)
 
             Spacer(minLength: AppStyle.Spacing.medium)
 
@@ -210,8 +235,12 @@ private struct AnimatedPageTitle: View {
                 .id(animationToken)
         }
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
+        // One heading, translated like the text on screen. A plain String label
+        // is read as is.
+        .accessibilityRepresentation {
+            Text(LocalizedStringKey(title))
+                .accessibilityAddTraits(.isHeader)
+        }
         .onChange(of: title) { newTitle in
             animateTitleChange(to: newTitle)
         }
@@ -263,80 +292,6 @@ enum ScanQueueLabels {
     static let queued = String(localized: "Up next...")
 }
 
-/// Scan and Clean Selected — top-trailing actions on App Caches / Dev Tools pages.
-struct AppScanCleanActions: View {
-    let onScan: () -> Void
-    var scanPhase: PurgeStore.ScanPhase = .idle
-    var isQueued = false
-
-    var body: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            AppScanButton(scanPhase: scanPhase, isQueued: isQueued, action: onScan)
-            AppCleanSelectedButton()
-        }
-        .fixedSize()
-    }
-}
-
-struct AppScanButton: View {
-    let scanPhase: PurgeStore.ScanPhase
-    /// Waiting its turn behind another scan in the queue.
-    var isQueued = false
-    let action: () -> Void
-
-    private var isBusy: Bool {
-        isQueued || scanPhase == .scanning || scanPhase == .cancelling
-    }
-
-    private var title: String {
-        if isQueued { return ScanQueueLabels.queued }
-        switch scanPhase {
-        case .cancelling:
-            return String(localized: "Cancelling...")
-        case .scanning:
-            return String(localized: "Scanning...")
-        case .idle, .completed:
-            return String(localized: "Scan")
-        }
-    }
-
-    var body: some View {
-        Button(action: action) {
-            CleaningButtonLabel(
-                title: title,
-                systemImage: isBusy ? nil : "arrow.clockwise",
-                isCleaning: isBusy
-            )
-        }
-        .buttonStyle(.purge(.secondary))
-        .keyboardShortcut("r", modifiers: [.command])
-        .disabled(isBusy)
-    }
-}
-
-struct AppCleanSelectedButton: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    var body: some View {
-        // Scan-tab selection lives in its own object; scope observes it so the
-        // count/label and enabled state update when a scan-tab selection changes.
-        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-            Button {
-                store.showDeletionSheet = true
-            } label: {
-                AnimatedDeleteActionLabel(
-                    inactiveTitle: String(localized: "Clean Selected"),
-                    activeTitle: String(localized: "Clean Selected"),
-                    selectedCount: store.selectedCount,
-                    selectedBytes: store.selectedTotalBytes
-                )
-            }
-            .buttonStyle(.purge(.primary))
-            .disabled(store.selectedCount == 0 || store.isDeleting)
-        }
-    }
-}
-
 struct CleaningButtonLabel: View {
     let title: String
     let systemImage: String?
@@ -345,7 +300,7 @@ struct CleaningButtonLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             if isCleaning {
                 if reduceMotion {
                     Image(systemName: "clock")
@@ -392,6 +347,10 @@ struct AnimatedDeleteActionLabel: View {
         reduceMotion ? nil : .easeInOut(duration: 0.5)
     }
 
+    private var titleAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.25)
+    }
+
     private var accessibilityTitle: String {
         guard hasSelection else { return inactiveTitle }
         if let selectedBytes {
@@ -401,7 +360,7 @@ struct AnimatedDeleteActionLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: systemImage)
                 .accessibilityHidden(true)
 
@@ -445,6 +404,9 @@ struct AnimatedDeleteActionLabel: View {
         }
         .animation(widthAnimation, value: hasSelection)
         .animation(textAnimation, value: selectedBytes)
+        // A new title (Uninstall to Remove in the uninstaller) crossfades
+        // while the width reader eases the label to its new size.
+        .animation(titleAnimation, value: inactiveTitle)
     }
 
     @ViewBuilder
@@ -453,6 +415,7 @@ struct AnimatedDeleteActionLabel: View {
             HStack(spacing: 0) {
                 Text(" (")
                 Text(formatBytes(selectedBytes))
+                    .font(AppStyle.Typography.headline.numbers)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                 Text(")")
@@ -514,12 +477,21 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var confettiArmed: Bool
     @State private var displayedBytes: Int64
     @State private var displayedFraction: Double
-    @State private var tagline: TimeTagline.Selection?
+    @State private var showsTimeTagline: Bool
     @State private var appearedAt = Date()
     @State private var didBeginCompletion = false
     @State private var sequenceTask: Task<Void, Never>?
-    @State private var failuresExpanded = false
     @State private var retryingFailureIDs: Set<UUID> = []
+    /// Rows whose last Retry came back with nothing to show for it. The row says
+    /// so, rather than looking exactly as it did before the tap (#162).
+    @State private var retryFailedIDs: Set<UUID> = []
+    /// `false` while the cleaning header is up. A run that removed nothing swaps
+    /// it for the outcome header once the dwell has passed (#162); a run that
+    /// removed something keeps the header it has, and this never matters.
+    @State private var completionHeaderShown: Bool
+    /// `true` once a list sits under the header. The header moves up to make room
+    /// and stays there, so a retry that empties a row never shifts it (#162).
+    @State private var headerAnchoredToTop: Bool
     @State private var boltFlashToken = 0
     /// Set once per screen when the lifetime total reached a new milestone.
     @State private var supportMilestoneBytes: Int64?
@@ -527,23 +499,27 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var supportFooterLine: SupportNudge.Line?
     @State private var supportLinkOpened = false
 
-    private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
+    private static let confettiThresholdBytes = SupportNudge.significantCleanBytes
     private static let minimumCleaningDwell: TimeInterval = 1.2
 
     private let celebrationAccent = AppColors.textPrimary
     /// Follows the app's appearance, like the window behind it.
     private let sheetBackground = AppColors.surfaceBase
 
+    /// `retryFailedIDs` seeds the "tried again" note; only the test host passes
+    /// it, to render that state without a retry.
     init(
         session: DeletionSession,
         doneTitle: String = "Done",
         allowsSupportNudge: Bool = true,
+        retryFailedIDs: Set<UUID> = [],
         onDone: @escaping () -> Void
     ) {
         self.session = session
         self.doneTitle = doneTitle
         self.allowsSupportNudge = allowsSupportNudge
         self.onDone = onDone
+        _retryFailedIDs = State(initialValue: retryFailedIDs)
         // Sessions created already-complete mount straight into the final layout;
         // live runs mount in the cleaning phase even if the engine has since finished
         // (the completion sequence then runs from onAppear, honoring the dwell).
@@ -557,10 +533,12 @@ struct SafeCleanupCelebrationOverlay: View {
         _confettiArmed = State(initialValue: mountsComplete)
         _displayedBytes = State(initialValue: mountsComplete ? session.finalBytesMovedToTrash : 0)
         _displayedFraction = State(initialValue: mountsComplete ? 1 : 0)
-        _tagline = State(initialValue: mountsComplete ? TimeTagline.select(for: session.elapsedSeconds) : nil)
-        _boltFlashToken = State(
-            initialValue: mountsComplete && session.elapsedSeconds < 3 ? 1 : 0
-        )
+        // A run that removed nothing has no figure, so no timing line either.
+        let showsFigure = mountsComplete && session.outcome.showsFigure
+        _showsTimeTagline = State(initialValue: showsFigure)
+        _boltFlashToken = State(initialValue: showsFigure && session.elapsedSeconds < 3 ? 1 : 0)
+        _completionHeaderShown = State(initialValue: mountsComplete)
+        _headerAnchoredToTop = State(initialValue: mountsComplete && Self.wantsHeaderAtTop(session))
     }
 
     var body: some View {
@@ -575,79 +553,26 @@ struct SafeCleanupCelebrationOverlay: View {
             }
 
             VStack(spacing: AppStyle.Spacing.large) {
-                Spacer(minLength: 0)
+                if !headerAnchoredToTop {
+                    Spacer(minLength: 0)
+                }
 
-                if hidesSuccessChrome {
-                    // Nothing moved: the panel is the whole story, centered on its own.
-                    administratorPanel
-                        .frame(maxWidth: 460)
-                } else {
-                    CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
-                        .frame(width: 88, height: 88)
-                        .scaleEffect(checkmarkScale)
-                        .opacity(checkmarkVisible ? 1 : 0)
-                        .accessibilityHidden(true)
+                header
 
-                    VStack(spacing: AppStyle.Spacing.small) {
-                        Text(formatBytes(displayedBytes))
-                            .font(AppStyle.Typography.display)
-                            .foregroundStyle(AppColors.textPrimary)
-                            .monospacedDigit()
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                            .multilineTextAlignment(.center)
-                            .accessibilityAddTraits(.isHeader)
-
-                        Text(subtitleText)
-                            .font(AppStyle.Typography.sectionTitle)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .contentTransition(.opacity)
-
-                        // The cleaning-phase progress group draws into the slot the
-                        // completion lines occupy (always laid out, opacity-toggled),
-                        // so neither phase ever shifts the other's elements.
-                        ZStack(alignment: .top) {
-                            VStack(spacing: AppStyle.Spacing.small) {
-                                if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
-                                    OnboardingSizeComparisonLine(items: comparisonItems)
-                                        .foregroundStyle(AppColors.textSecondary)
-                                }
-
-                                if tagline != nil {
-                                    CompletionTimeTagline(
-                                        elapsedSeconds: session.elapsedSeconds,
-                                        boltFlashToken: boltFlashToken
-                                    )
-                                    .padding(.top, AppStyle.Spacing.xSmall)
-                                }
-                            }
-                            .opacity(completionLinesVisible ? 1 : 0)
-
-                            progressGroup
-                                .frame(height: 0, alignment: .top)
-                                .opacity(progressGroupVisible ? 1 : 0)
-                        }
-                    }
-                    .frame(maxWidth: 560)
+                if headerAnchoredToTop, session.phase == .complete {
+                    resultsBlock
                 }
 
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    // When the header is hidden the panel already stands above; only
-                    // show it here (beneath the success number) when the header stayed.
-                    if session.phase == .complete, !administratorFailures.isEmpty, !hidesSuccessChrome {
+                    // The header kept its figure and nothing else is listed: the
+                    // panel sits here, beneath the number, as it always has. Not
+                    // before the outcome is settled: laid out hidden during the
+                    // dwell, it would push the cleaning header up.
+                    if session.phase == .complete, completionHeaderShown, !headerAnchoredToTop,
+                       headerKind == .figure, !administratorFailures.isEmpty {
                         administratorPanel
-                    }
-
-                    if session.phase == .complete, !otherFailures.isEmpty {
-                        CleanFailureDisclosure(
-                            failures: otherFailures,
-                            isExpanded: $failuresExpanded,
-                            retryingIDs: retryingFailureIDs,
-                            onOpenSettings: openFullDiskAccessSettings,
-                            onRetry: retryFailure
-                        )
                     }
 
                     if session.phase == .complete, let supportMilestoneBytes {
@@ -661,7 +586,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     }
 
                     if reservesTrashDisclaimerSpace {
-                        HStack(spacing: 5) {
+                        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                             Image(systemName: "trash")
                             Text("Empty your Trash to reclaim this space.")
                         }
@@ -673,7 +598,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     // The helper moved a protected app but could not hand every file
                     // back, so say so plainly rather than implying a spotless Trash.
                     if session.phase == .complete, session.trashOwnershipWarning {
-                        HStack(spacing: 5) {
+                        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                             Image(systemName: "key")
                             Text("Emptying the Trash may ask for your password.")
                         }
@@ -682,10 +607,22 @@ struct SafeCleanupCelebrationOverlay: View {
                         .multilineTextAlignment(.center)
                     }
 
-                    Button(LocalizedStringKey(doneTitle), action: onDone)
-                        .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!footerVisible)
+                    // Homebrew refused a cask app and Purge trashed it instead
+                    // (#254), in Homebrew's own last words, or macOS kept a
+                    // runtime's download (#165).
+                    if session.phase == .complete {
+                        ForEach(session.notes, id: \.self) { note in
+                            Text(note)
+                                .font(AppStyle.Typography.metadata)
+                                .foregroundStyle(AppColors.textTertiary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(6)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: 420)
+                        }
+                    }
+
+                    footerButtons
 
                     if session.phase == .complete, let supportFooterLine {
                         SupportFooterLink(
@@ -699,8 +636,8 @@ struct SafeCleanupCelebrationOverlay: View {
                 }
                 .opacity(footerVisible ? 1 : 0)
             }
-            .padding(.horizontal, 52)
-            .padding(.vertical, 44)
+            .padding(.horizontal, 52) // design-lint: allow, sheet margins
+            .padding(.vertical, 44) // design-lint: allow, sheet margins
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(sheetBackground)
             .accessibilityElement(children: .contain)
@@ -728,8 +665,322 @@ struct SafeCleanupCelebrationOverlay: View {
         .onChange(of: session.bytesMovedToTrash) { newValue in
             mirrorLiveProgress(bytesMovedToTrash: newValue)
         }
+        // A retry can turn a failed run into a partial one, or empty the list.
+        // The header follows: it shows the figure once there is one, and settles
+        // back to the centre once nothing is listed under it.
+        .onChange(of: session.failedItems) { _ in
+            guard session.phase == .complete, footerVisible else { return }
+            reconcileHeaderWithOutcome()
+        }
         .onDisappear { sequenceTask?.cancel() }
     }
+
+    /// What stands at the top of the sheet. The figure header serves the cleaning
+    /// phase and every run that removed something; a run that removed nothing gets
+    /// the outcome it earned instead (#162).
+    private enum HeaderKind: Equatable {
+        /// Checkmark, figure, wording and timing. Also the cleaning-phase header.
+        case figure
+        /// Only locked apps stand between the run and its items: the permission
+        /// panel is the whole story.
+        case administrator
+        /// Nothing went and something failed.
+        case failed
+        /// Nothing went and Purge kept every item on purpose.
+        case skipped
+        /// Nothing went and nothing is listed: it was all already gone.
+        case gone
+    }
+
+    private var headerKind: HeaderKind {
+        guard session.phase == .complete, completionHeaderShown else { return .figure }
+        switch session.outcome {
+        case .success, .partial:
+            return .figure
+        case .failed:
+            return administratorFailures.isEmpty ? .failed : .administrator
+        case .skippedOnly:
+            return .skipped
+        case .nothingLeft:
+            return .gone
+        }
+    }
+
+    /// The one row of a failed run is the header itself, so no card repeats it.
+    private var failureCardRows: [CleanFailureItem] {
+        if headerKind == .failed, otherFailures.count == 1 { return [] }
+        return otherFailures
+    }
+
+    /// A list under the header moves the header to the top. Static, so `init` can
+    /// settle it for a session that mounts complete.
+    private static func wantsHeaderAtTop(_ session: DeletionSession) -> Bool {
+        guard session.phase == .complete else { return false }
+        let administrator = session.failedItems.filter { $0.reason == .needsAdministrator }
+        let other = session.failedItems.filter { $0.reason != .needsAdministrator }
+        switch session.outcome {
+        case .success, .nothingLeft:
+            return false
+        case .partial, .skippedOnly:
+            return !other.isEmpty
+        case .failed:
+            return administrator.isEmpty ? other.count > 1 : !other.isEmpty
+        }
+    }
+
+    private var wantsHeaderAtTop: Bool { Self.wantsHeaderAtTop(session) }
+
+    @ViewBuilder
+    private var header: some View {
+        switch headerKind {
+        case .figure:
+            figureHeader
+                .transition(.opacity)
+        case .administrator:
+            administratorPanel
+                .frame(maxWidth: 460)
+                .transition(.opacity)
+        case .failed:
+            outcomeHeader(
+                systemImage: "exclamationmark",
+                title: failedTitle,
+                subtitle: failedSubtitle,
+                note: failedRetryNote
+            )
+        case .skipped:
+            outcomeHeader(
+                systemImage: "hand.raised",
+                title: String(localized: "Nothing was cleaned"),
+                subtitle: skippedSubtitle,
+                note: nil
+            )
+        case .gone:
+            outcomeHeader(
+                systemImage: "checkmark",
+                title: String(localized: "Nothing left to clean"),
+                subtitle: String(localized: "Everything you picked was already gone, so there was nothing to move."),
+                note: nil
+            )
+        }
+    }
+
+    private var figureHeader: some View {
+        VStack(spacing: AppStyle.Spacing.large) {
+            CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
+                .frame(width: 88, height: 88)
+                .scaleEffect(checkmarkScale)
+                .opacity(checkmarkVisible ? 1 : 0)
+                .accessibilityHidden(true)
+
+            VStack(spacing: AppStyle.Spacing.small) {
+                Text(formatBytes(displayedBytes))
+                    .font(AppStyle.Typography.display.numbers)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(subtitleText)
+                    .font(AppStyle.Typography.sectionTitle)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+
+                // The cleaning-phase progress group draws into the slot the
+                // completion lines occupy (always laid out, opacity-toggled),
+                // so neither phase ever shifts the other's elements.
+                ZStack(alignment: .top) {
+                    VStack(spacing: AppStyle.Spacing.small) {
+                        // Some went and some did not: say how many of each, in
+                        // the same breath as the figure (#162).
+                        if session.phase == .complete, session.outcome == .partial {
+                            Text("\(session.removedCount) of \(session.attemptedCount) items cleaned")
+                                .font(AppStyle.Typography.body.weight(.medium))
+                                .foregroundStyle(AppColors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
+                            OnboardingSizeComparisonLine(items: comparisonItems)
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
+
+                        if showsTimeTagline {
+                            CompletionTimeTagline(
+                                elapsedSeconds: session.elapsedSeconds,
+                                boltFlashToken: boltFlashToken
+                            )
+                            .padding(.top, AppStyle.Spacing.xSmall)
+                        }
+                    }
+                    .opacity(completionLinesVisible ? 1 : 0)
+
+                    progressGroup
+                        .frame(height: 0, alignment: .top)
+                        .opacity(progressGroupVisible ? 1 : 0)
+                }
+            }
+            .frame(maxWidth: 560)
+        }
+    }
+
+    /// The header of a run that removed nothing: the same 88pt ring as the
+    /// checkmark, with what happened in its place, and under it the one line that
+    /// says what to do. One failure names the item; more are counted, and listed.
+    private func outcomeHeader(systemImage: String, title: String, subtitle: String, note: String?) -> some View {
+        VStack(spacing: AppStyle.Spacing.large) {
+            CompletionOutcomeBadge(systemImage: systemImage, color: celebrationAccent)
+                .frame(width: 88, height: 88)
+                .accessibilityHidden(true)
+
+            VStack(spacing: AppStyle.Spacing.small) {
+                Text(title)
+                    .font(AppStyle.Typography.title)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(subtitle)
+                    .font(AppStyle.Typography.sectionTitle.weight(.regular))
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let note {
+                    Text(note)
+                        .font(AppStyle.Typography.body)
+                        .foregroundStyle(AppColors.statusDangerText)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: 560)
+        }
+        .transition(.opacity)
+    }
+
+    private var failedTitle: String {
+        if otherFailures.count == 1, let only = otherFailures.first {
+            return String(localized: "Couldn't remove \(only.displayName)")
+        }
+        return String(localized: "Nothing was cleaned")
+    }
+
+    private var failedSubtitle: String {
+        if otherFailures.count == 1, let only = otherFailures.first {
+            return only.reason.explanation
+        }
+        return String(localized: "\(otherFailures.count) items couldn't be removed")
+    }
+
+    /// Under the single failure's reason, once its Retry came back empty-handed.
+    private var failedRetryNote: String? {
+        guard otherFailures.count == 1, let only = otherFailures.first,
+              retryFailedIDs.contains(only.id) else { return nil }
+        return String(localized: "Tried again, still couldn't remove it.")
+    }
+
+    private var skippedSubtitle: String {
+        if otherFailures.count == 1, let only = otherFailures.first {
+            return String(localized: "Purge kept \(only.displayName) to stay on the safe side.")
+        }
+        return String(localized: "Purge kept \(otherFailures.count) items to stay on the safe side.")
+    }
+
+    /// What sits under a top-anchored header: the permission panel when locked
+    /// apps are part of a run that also lists other rows, then the card.
+    @ViewBuilder
+    private var resultsBlock: some View {
+        if headerKind != .administrator, !administratorFailures.isEmpty {
+            administratorPanel
+        }
+
+        if !failureCardRows.isEmpty {
+            CleanFailureCard(
+                failures: failureCardRows,
+                // The outcome header already says what the card would: only a
+                // figure or the panel above it leaves the count to the card.
+                showsHeader: headerKind == .figure || headerKind == .administrator,
+                retryingIDs: retryingFailureIDs,
+                retryFailedIDs: retryFailedIDs,
+                onOpenSettings: openFullDiskAccessSettings,
+                onRetry: retryFailure,
+                onRetryAll: retryAllFailures,
+                onShowInFinder: showFailureInFinder
+            )
+            .transition(.opacity)
+        }
+    }
+
+    /// The action a failed run puts on its primary button: the one row's own
+    /// action, or a retry of every row that can be retried. Done steps down to
+    /// secondary then; everywhere else Done is the only button.
+    private enum FooterAction: Equatable {
+        case retry(CleanFailureItem)
+        case retryAll(Int)
+        case openSettings
+        case showInFinder(CleanFailureItem)
+    }
+
+    private var footerAction: FooterAction? {
+        guard headerKind == .failed else { return nil }
+        if otherFailures.count == 1, let only = otherFailures.first {
+            if only.reason.showsRetry { return .retry(only) }
+            if only.reason.showsOpenSettings { return .openSettings }
+            if only.offersFinderRemoval { return .showInFinder(only) }
+            return nil
+        }
+        let retryable = otherFailures.filter(\.reason.showsRetry).count
+        return retryable > 1 ? .retryAll(retryable) : nil
+    }
+
+    private var footerActionTitle: String {
+        switch footerAction {
+        case .retry(let item): item.reason.retryTitle
+        case .retryAll(let count): String(localized: "Retry \(count) items")
+        case .openSettings: String(localized: "Open Settings")
+        case .showInFinder: String(localized: "Remove in Finder instead")
+        case nil: ""
+        }
+    }
+
+    private func performFooterAction() {
+        switch footerAction {
+        case .retry(let item): retryFailure(item)
+        case .retryAll: retryAllFailures()
+        case .openSettings: openFullDiskAccessSettings()
+        case .showInFinder(let item): showFailureInFinder(item)
+        case nil: break
+        }
+    }
+
+    @ViewBuilder
+    private var footerButtons: some View {
+        if footerAction != nil {
+            Button(action: performFooterAction) {
+                if !retryingFailureIDs.isEmpty {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text(footerActionTitle)
+                }
+            }
+            .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
+            .keyboardShortcut(.defaultAction)
+            .disabled(!footerVisible || !retryingFailureIDs.isEmpty)
+
+            Button(LocalizedStringKey(doneTitle), action: onDone)
+                .buttonStyle(.purge(.secondary, size: .large, width: .fixed(300)))
+                .keyboardShortcut(.cancelAction)
+                .disabled(!footerVisible)
+        } else {
+            Button(LocalizedStringKey(doneTitle), action: onDone)
+                .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
+                .keyboardShortcut(.defaultAction)
+                .disabled(!footerVisible)
+        }
+    }
+
 
     private var progressGroup: some View {
         VStack(spacing: AppStyle.Spacing.xSmall) {
@@ -758,7 +1009,7 @@ struct SafeCleanupCelebrationOverlay: View {
     /// files are in the trash and still on the volume; nothing is reclaimed until the
     /// trash is emptied, so this must never read as an achievement.
     private var subtitleText: String {
-        subtitleShowsComplete ? String(localized: "moved to trash, not yet reclaimed") : String(localized: "of \(formatBytes(session.totalBytes))")
+        subtitleShowsComplete ? session.removalWording : String(localized: "of \(formatBytes(session.totalBytes))")
     }
 
     private var currentItemText: String {
@@ -772,11 +1023,15 @@ struct SafeCleanupCelebrationOverlay: View {
             return
         }
         guard !retryingFailureIDs.contains(item.id) else { return }
+        retryFailedIDs.remove(item.id)
         retryingFailureIDs.insert(item.id)
         Task {
             let movedBytes = await store.retryCleanFailure(item, session: session)
             retryingFailureIDs.remove(item.id)
-            guard let movedBytes else { return }
+            guard let movedBytes else {
+                noteRetryChangedNothing([item])
+                return
+            }
             if reduceMotion {
                 displayedBytes += movedBytes
             } else {
@@ -787,8 +1042,17 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
-    /// Locked-app failures get the reassuring setup panel; everything else keeps the
-    /// terse disclosure. Split so a run that hits both still shows each correctly.
+    /// Every row in the card that offers Retry, in one go. Each goes through
+    /// `retryFailure`, which keeps the macOS update leftovers together and skips a
+    /// row whose retry is already running.
+    private func retryAllFailures() {
+        for item in otherFailures where item.reason.showsRetry {
+            retryFailure(item)
+        }
+    }
+
+    /// Locked-app failures get the reassuring setup panel; everything else goes in
+    /// the failure card. Split so a run that hits both still shows each correctly.
     private var administratorFailures: [CleanFailureItem] {
         session.failedItems.filter { $0.reason == .needsAdministrator }
     }
@@ -820,11 +1084,15 @@ struct SafeCleanupCelebrationOverlay: View {
     private func retryInstallLeftovers(_ items: [CleanFailureItem]) {
         let ids = Set(items.map(\.id))
         guard !ids.isEmpty, retryingFailureIDs.isDisjoint(with: ids) else { return }
+        retryFailedIDs.subtract(ids)
         retryingFailureIDs.formUnion(ids)
         Task {
             let movedBytes = await store.retryInstallLeftoverFailures(items, session: session)
             retryingFailureIDs.subtract(ids)
-            guard let movedBytes else { return }
+            guard let movedBytes else {
+                noteRetryChangedNothing(items)
+                return
+            }
             if reduceMotion {
                 displayedBytes += movedBytes
             } else {
@@ -835,20 +1103,47 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
+    /// A retry that came back with nothing to show: the row is still there with
+    /// the reason it had. A row whose reason changed already reads differently,
+    /// a locked app's tap was the setup step, and a standard account's ends when
+    /// the administrator dialog is cancelled (#314), so none of them gets the note.
+    private func noteRetryChangedNothing(_ items: [CleanFailureItem]) {
+        for item in items where item.reason != .needsAdministrator && item.reason != .needsAdministratorAccount {
+            guard let row = session.failedItems.first(where: { $0.id == item.id }),
+                  row.reason == item.reason else { continue }
+            retryFailedIDs.insert(item.id)
+        }
+    }
+
+    /// Brings the header in step with the outcome as it stands now: a run that
+    /// has a figure shows it, and a header with nothing listed under it settles
+    /// back to the centre. Called after a retry, and once more when the
+    /// completion sequence ends, for a retry that finished during the dwell.
+    private func reconcileHeaderWithOutcome() {
+        if session.outcome.showsFigure, !checkmarkVisible {
+            showsTimeTagline = true
+            checkmarkProgress = 1
+            checkmarkScale = 1
+            subtitleShowsComplete = true
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                checkmarkVisible = true
+                completionLinesVisible = true
+            }
+        }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+            headerAnchoredToTop = wantsHeaderAtTop
+        }
+    }
+
+    /// A held app Purge couldn't move can still go in Finder, the route the user in
+    /// #299 took, so its row selects it there.
+    private func showFailureInFinder(_ item: CleanFailureItem) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.path)])
+    }
+
     private func revealAdministratorItemInFinder() {
         guard let first = administratorFailures.first else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: first.path)])
-    }
-
-    /// When the only outcome is a locked app and nothing actually moved, the success
-    /// header (checkmark, "0 bytes", timing) is just noise around a "0". Drop it and
-    /// let the permission panel stand on its own. As soon as something did move, the
-    /// header earns its place again and the panel sits beneath it.
-    private var hidesSuccessChrome: Bool {
-        session.phase == .complete
-            && !administratorFailures.isEmpty
-            && session.movedToTrashCount == 0
-            && session.finalBytesMovedToTrash == 0
     }
 
     private var administratorPanel: some View {
@@ -878,7 +1173,7 @@ struct SafeCleanupCelebrationOverlay: View {
     private var showsConfetti: Bool {
         // Don't celebrate when something still needs the user's attention.
         confettiArmed
-            && administratorFailures.isEmpty
+            && session.outcome == .success
             && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes
             && !reduceMotion
     }
@@ -898,9 +1193,6 @@ struct SafeCleanupCelebrationOverlay: View {
             withAnimation(.easeInOut(duration: 0.6)) {
                 checkmarkProgress = 1
             }
-        }
-        if let tagline {
-            TimeTagline.store(tagline)
         }
         resolveSupportNudge()
     }
@@ -957,10 +1249,10 @@ struct SafeCleanupCelebrationOverlay: View {
 
         sequenceTask = Task { @MainActor in
             let finalBytes = session.finalBytesMovedToTrash
-            tagline = TimeTagline.select(for: session.elapsedSeconds)
-            if let tagline {
-                TimeTagline.store(tagline)
-            }
+            // A run that removed nothing has no figure to settle, draw a
+            // checkmark over, or time (#162).
+            let showsFigure = session.outcome.showsFigure
+            showsTimeTagline = showsFigure
 
             if reduceMotion {
                 displayedBytes = finalBytes
@@ -974,9 +1266,11 @@ struct SafeCleanupCelebrationOverlay: View {
                     subtitleShowsComplete = true
                     checkmarkVisible = true
                     completionLinesVisible = true
+                    completionHeaderShown = true
+                    headerAnchoredToTop = wantsHeaderAtTop
                     footerVisible = true
                 }
-                if session.elapsedSeconds < 3 {
+                if session.outcome.showsFigure, session.elapsedSeconds < 3 {
                     boltFlashToken += 1
                 }
                 return
@@ -999,34 +1293,54 @@ struct SafeCleanupCelebrationOverlay: View {
                 progressGroupVisible = false
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
-            withAnimation(.easeInOut(duration: 0.3)) {
-                subtitleShowsComplete = true
-            }
-            try? await Task.sleep(nanoseconds: 150_000_000)
             guard !Task.isCancelled else { return }
 
-            confettiArmed = true
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                checkmarkVisible = true
-                checkmarkScale = 1
+            // Read again: an automatic retry of a locked app can finish during
+            // the dwell and give the run a figure after all.
+            if session.outcome.showsFigure {
+                showsTimeTagline = true
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    subtitleShowsComplete = true
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                guard !Task.isCancelled else { return }
+
+                confettiArmed = true
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    checkmarkVisible = true
+                    checkmarkScale = 1
+                }
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    checkmarkProgress = 1
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    completionLinesVisible = true
+                }
+                if session.elapsedSeconds < 3 {
+                    boltFlashToken += 1
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            } else {
+                // Nothing to count up to: the cleaning header gives way to the
+                // outcome in one fade, once the bar has gone.
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    completionHeaderShown = true
+                }
+                try? await Task.sleep(nanoseconds: 300_000_000)
             }
-            withAnimation(.easeInOut(duration: 0.6)) {
-                checkmarkProgress = 1
-            }
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            withAnimation(.easeInOut(duration: 0.3)) {
-                completionLinesVisible = true
-            }
-            if session.elapsedSeconds < 3 {
-                boltFlashToken += 1
-            }
-            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
             // Inserted with the footer so the header glides up once, instead of
             // jumping while the counter is still settling.
             withAnimation(.easeInOut(duration: 0.3)) {
                 resolveSupportNudge()
+                completionHeaderShown = true
+                headerAnchoredToTop = wantsHeaderAtTop
                 footerVisible = true
             }
+            // A retry that finished during the dwell changed the outcome after
+            // the branch above was taken; the header catches up here.
+            reconcileHeaderWithOutcome()
         }
     }
 }
@@ -1040,14 +1354,14 @@ private struct SupportNudgeCard: View {
     let onOpenLink: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "rosette")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.textSecondary)
                 .accessibilityHidden(true)
 
             Text("Over \(formatBytes(milestoneBytes)) cleaned up with Purge")
-                .font(AppStyle.Typography.rowTitle)
+                .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textPrimary)
 
             Text("·")
@@ -1059,7 +1373,7 @@ private struct SupportNudgeCard: View {
                 Text("Thanks, that means a lot.")
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textSecondary)
-                    .padding(.trailing, 6)
+                    .padding(.trailing, AppStyle.Spacing.xxSmallPlus)
             } else {
                 Button(action: onOpenLink) {
                     Label("Buy me a coffee", systemImage: "cup.and.saucer")
@@ -1068,9 +1382,9 @@ private struct SupportNudgeCard: View {
             }
         }
         .lineLimit(1)
-        .padding(.leading, 14)
-        .padding(.trailing, 6)
-        .padding(.vertical, 6)
+        .padding(.leading, AppStyle.Spacing.medium)
+        .padding(.trailing, AppStyle.Spacing.xxSmallPlus)
+        .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
         .background(Capsule(style: .continuous).fill(AppColors.surfaceCard))
         .overlay {
             Capsule(style: .continuous)
@@ -1128,7 +1442,7 @@ private struct CompletionTimeTagline: View {
     }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             if isFastClean {
                 CompletionBoltAnchor(flashToken: boltFlashToken)
             } else {
@@ -1251,68 +1565,156 @@ private struct CompletionBoltEchoRing: View {
     }
 }
 
-private struct CleanFailureDisclosure: View {
+/// The items a finished clean left behind, as one card under the header (#162): a
+/// header with the count and, when more than one row can be retried, Retry all;
+/// then a row per item with a tinted icon tile, its name, the reason, and its
+/// action or status. Open from the start, so nothing hides behind a chevron. Past
+/// four rows the list scrolls inside the card, at a fixed height, so the header
+/// above never moves. A screen whose own header already gives the count leaves
+/// the card's out. Internal, not private, so the test host can render its states
+/// for screenshots.
+struct CleanFailureCard: View {
     let failures: [CleanFailureItem]
-    @Binding var isExpanded: Bool
+    var showsHeader = true
     let retryingIDs: Set<UUID>
+    var retryFailedIDs: Set<UUID> = []
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
+    let onRetryAll: () -> Void
+    var onShowInFinder: (CleanFailureItem) -> Void = { _ in }
 
-    private var summaryText: String {
+    /// Rows shown before the list scrolls. Four one-line rows fit under the
+    /// header at the sheet's usual height; the fifth peeks, so the scroll shows.
+    private static let rowsBeforeScroll = 4
+    /// One row of a single-line reason: the 28pt tile and 12pt above and below.
+    private static let rowHeight: CGFloat = 52
+    private static let listHeight: CGFloat = CGFloat(rowsBeforeScroll) * rowHeight + 4
+
+    private var headerText: String {
         failures.count == 1
             ? String(localized: "1 item couldn't be cleaned")
             : String(localized: "\(failures.count) items couldn't be cleaned")
     }
 
-    private var visibleFailures: [CleanFailureItem] {
-        Array(failures.prefix(3))
-    }
-
-    private var hiddenCount: Int {
-        max(0, failures.count - visibleFailures.count)
+    private var retryableCount: Int {
+        failures.filter(\.reason.showsRetry).count
     }
 
     var body: some View {
-        VStack(alignment: .center, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isExpanded.toggle()
+        VStack(spacing: 0) {
+            if showsHeader {
+                HStack(spacing: AppStyle.Spacing.small) {
+                    Text(headerText)
+                        .font(AppStyle.Typography.headline)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if retryableCount > 1 {
+                        Button(String(localized: "Retry all"), action: onRetryAll)
+                            .buttonStyle(.purge(.quiet, size: .small))
+                            .disabled(!retryingIDs.isEmpty)
+                    }
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(summaryText)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.semibold))
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                }
-                .font(AppStyle.Typography.callout)
-                .foregroundStyle(AppColors.textTertiary)
+                .padding(.horizontal, AppStyle.Spacing.medium)
+                .padding(.vertical, AppStyle.Spacing.xSmall)
+
+                hairline
             }
-            .buttonStyle(.plain)
 
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(visibleFailures) { failure in
-                        CleanFailureRow(
-                            failure: failure,
-                            isRetrying: retryingIDs.contains(failure.id),
-                            onOpenSettings: onOpenSettings,
-                            onRetry: onRetry
-                        )
-                    }
-
-                    if hiddenCount > 0 {
-                        Text("+\(hiddenCount) more")
-                            .font(AppStyle.Typography.metadata)
-                            .foregroundStyle(AppColors.textTertiary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
+            if failures.count > Self.rowsBeforeScroll {
+                ScrollView {
+                    rows
                 }
-                .frame(maxWidth: 360)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .scrollIndicators(.visible)
+                .frame(height: Self.listHeight)
+            } else {
+                rows
             }
         }
-        .multilineTextAlignment(.center)
+        .background(
+            AppColors.surfaceCard,
+            in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
+        }
+        .frame(maxWidth: 520)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var rows: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(failures.enumerated()), id: \.element.id) { index, failure in
+                if index > 0 {
+                    hairline.padding(.horizontal, AppStyle.Spacing.medium)
+                }
+                CleanFailureCardRow(
+                    failure: failure,
+                    isRetrying: retryingIDs.contains(failure.id),
+                    retryChangedNothing: retryFailedIDs.contains(failure.id),
+                    onOpenSettings: onOpenSettings,
+                    onRetry: onRetry,
+                    onShowInFinder: onShowInFinder
+                )
+            }
+        }
+    }
+
+    private var hairline: some View {
+        Rectangle()
+            .fill(AppColors.borderSubtle)
+            .frame(height: 0.5)
+    }
+}
+
+/// How the card colours a failure's icon tile, and what its badge says when the
+/// row offers no action. Kept with the view: the model knows no colours.
+private extension CleanFailureReason {
+    var tileTone: AppBadge.Tone {
+        switch self {
+        case .safetySkipped, .keptForOtherApp:
+            .warning
+        case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .systemProtected,
+             .moveInFinder:
+            .neutral
+        case .inUse, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+            .danger
+        }
+    }
+
+    var tileFill: Color {
+        switch tileTone {
+        case .neutral: AppColors.statusUnsureFill
+        case .accent: AppColors.fillSecondary
+        case .safe: AppColors.statusSafeFill
+        case .warning: AppColors.statusCheckFill
+        case .danger: AppColors.statusDangerFill
+        }
+    }
+
+    var tileForeground: Color {
+        switch tileTone {
+        case .neutral: AppColors.statusUnsureText
+        case .accent: AppColors.textSecondary
+        case .safe: AppColors.statusSafeText
+        case .warning: AppColors.statusCheckText
+        case .danger: AppColors.statusDangerText
+        }
+    }
+
+    /// The badge on a row with no button. `nil` where the row has a Retry or Open
+    /// Settings button instead, or where the explanation already says what to do.
+    var statusBadgeTitle: String? {
+        switch self {
+        case .safetySkipped: String(localized: "Skipped")
+        case .keptForOtherApp: String(localized: "Kept")
+        case .systemProtected: String(localized: "Protected")
+        case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .inUse,
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing,
+             .moveInFinder, .unknown:
+            nil
+        }
     }
 }
 
@@ -1395,8 +1797,8 @@ private struct NeedsAdministratorPanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.medium) {
+            VStack(spacing: AppStyle.Spacing.xSmall) {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 30, weight: .regular))
                     .foregroundStyle(AppColors.textSecondary)
@@ -1419,12 +1821,12 @@ private struct NeedsAdministratorPanel: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 1)
+                    .padding(.top, AppStyle.Spacing.xxxSmall)
             }
 
             statusLine
 
-            VStack(spacing: 12) {
+            VStack(spacing: AppStyle.Spacing.small) {
                 Button(action: onPrimaryAction) {
                     if isWorking {
                         ProgressView()
@@ -1447,10 +1849,10 @@ private struct NeedsAdministratorPanel: View {
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textTertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 2)
+                    .padding(.top, AppStyle.Spacing.xxxSmall)
             }
         }
-        .padding(24)
+        .padding(AppStyle.Spacing.large)
         .frame(maxWidth: 400)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.xl, style: .continuous)
@@ -1490,59 +1892,79 @@ private struct NeedsAdministratorPanel: View {
     }
 }
 
-private struct CleanFailureRow: View {
+/// One row of `CleanFailureCard`: a 28pt icon tile tinted by what went wrong, the
+/// item's name over the reason, and on the right its button or its status badge.
+struct CleanFailureCardRow: View {
     let failure: CleanFailureItem
     let isRetrying: Bool
+    /// The last Retry left the row as it was, so it says so under the reason.
+    var retryChangedNothing = false
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
+    var onShowInFinder: (CleanFailureItem) -> Void = { _ in }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             Image(systemName: failure.reason.systemImage)
-                .font(.caption)
-                .foregroundStyle(AppColors.textTertiary)
-                .frame(width: 14, alignment: .center)
-                .padding(.top, 2)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(failure.reason.tileForeground)
+                .frame(width: 28, height: 28)
+                .background(
+                    failure.reason.tileFill,
+                    in: RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                )
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text(failure.displayName)
-                    .font(AppStyle.Typography.callout)
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 Text(LocalizedStringKey(failure.reason.explanation))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textTertiary)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if failure.reason.showsOpenSettings || failure.reason.showsRetry {
-                    HStack(spacing: 10) {
-                        if failure.reason.showsOpenSettings {
-                            Button("Open Settings", action: onOpenSettings)
-                                .buttonStyle(.purge(.quiet, size: .small))
-                        }
-                        if failure.reason.showsRetry {
-                            Button {
-                                onRetry(failure)
-                            } label: {
-                                if isRetrying {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .scaleEffect(0.7)
-                                } else {
-                                    Text(failure.reason.retryTitle)
-                                }
-                            }
-                            .buttonStyle(.purge(.quiet, size: .small))
-                            .disabled(isRetrying)
-                        }
-                    }
-                    .padding(.top, 2)
+                if retryChangedNothing {
+                    Text("Tried again, still couldn't remove it.")
+                        .font(AppStyle.Typography.callout)
+                        .foregroundStyle(AppColors.statusDangerText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if failure.offersFinderRemoval {
+                Button("Show in Finder") { onShowInFinder(failure) }
+                    .buttonStyle(.purge(.secondary, size: .small))
+            }
+            if failure.reason.showsOpenSettings {
+                Button("Open Settings", action: onOpenSettings)
+                    .buttonStyle(.purge(.secondary, size: .small))
+            }
+            if failure.reason.showsRetry {
+                Button {
+                    onRetry(failure)
+                } label: {
+                    if isRetrying {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                    } else {
+                        Text(failure.reason.retryTitle)
+                    }
+                }
+                .buttonStyle(.purge(.secondary, size: .small))
+                .disabled(isRetrying)
+            } else if let title = failure.reason.statusBadgeTitle {
+                AppBadge(text: title, tone: failure.reason.tileTone)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, AppStyle.Spacing.medium)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .multilineTextAlignment(.leading)
     }
 }
 
@@ -1632,7 +2054,26 @@ private struct CompletionCheckmarkBadge: View {
                 .stroke(color.opacity(0.92), lineWidth: 5)
 
             AnimatedCompletionCheckmark(progress: progress, color: color)
-                .padding(22)
+                .padding(22) // design-lint: allow, sizes the checkmark inside its ring
+        }
+    }
+}
+
+/// The checkmark's ring with a symbol in it, for a run that removed nothing
+/// (#162): an exclamation mark when something failed, a raised hand when Purge
+/// kept every item on purpose.
+private struct CompletionOutcomeBadge: View {
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.92), lineWidth: 5)
+
+            Image(systemName: systemImage)
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(color)
         }
     }
 }
@@ -1697,8 +2138,8 @@ struct AppBadge: View {
         Text(LocalizedStringKey(text))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.horizontal, AppStyle.Spacing.xxSmallPlus)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
             .background(backgroundColor, in: RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
@@ -1733,6 +2174,24 @@ struct AppBadge: View {
         case .safe: return AppColors.statusSafeText.opacity(0.22)
         case .warning: return AppColors.statusCheckText.opacity(0.22)
         case .danger: return AppColors.statusDangerText.opacity(0.22)
+        }
+    }
+}
+
+extension AppBadge {
+    /// A safety level's badge. Scan rows, project rows and the delete sheet all
+    /// draw it, so a level reads the same wherever it shows (#185).
+    init(level: SafetyLevel) {
+        self.init(text: level.displayName, tone: Tone(level))
+    }
+}
+
+extension AppBadge.Tone {
+    init(_ level: SafetyLevel) {
+        switch level {
+        case .safe: self = .safe
+        case .medium: self = .warning
+        case .unknown: self = .neutral
         }
     }
 }
@@ -1831,7 +2290,7 @@ struct AppNavRow: View {
             }
             .foregroundStyle(isSelected ? AppColors.textPrimary : AppColors.textSecondary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
-            .padding(.vertical, 6)
+            .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
             .background(navBackground, in: RoundedRectangle(cornerRadius: SidebarLayout.selectionCornerRadius, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -1847,7 +2306,7 @@ struct AppNavRow: View {
             EmptyView()
         case .value(let text, let isDimmed):
             Text(LocalizedStringKey(text))
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .monospacedDigit()
                 .foregroundStyle(isDimmed ? AppColors.textTertiary.opacity(0.5) : AppColors.textTertiary)
                 .lineLimit(1)
@@ -1917,23 +2376,54 @@ enum CleaningQuitGuard {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// Shared gate for `windowShouldClose` / `applicationShouldTerminate`.
+    /// The gate for `applicationShouldTerminate`.
     static func shouldAllowTermination() -> Bool {
         guard isCleaningActive() else { return true }
         return confirmInterruption()
     }
+
+    enum WindowCloseDecision: Equatable {
+        case close
+        /// Keep the window and quit instead, so the quit confirmation asks once.
+        case quitThroughTerminate
+    }
+
+    /// What closing the window does while a clean may be running. A close that
+    /// does not quit Purge leaves the clean running, so it asks nothing. One that
+    /// would quit goes through `NSApp.terminate`, which asks once. The window used
+    /// to ask too, so on-demand mode asked twice, and the menu bar mode offered
+    /// Quit Anyway when nothing quit (#183).
+    static func windowCloseDecision(isCleaning: Bool, closeQuitsApp: Bool) -> WindowCloseDecision {
+        isCleaning && closeQuitsApp ? .quitThroughTerminate : .close
+    }
 }
 
 /// Clamps live resize attempts; SwiftUI often overrides `minSize` / `maxSize` alone.
-private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
+final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
     let fixedWidth: CGFloat
     let minHeight: CGFloat
-    private weak var chainedDelegate: NSWindowDelegate?
+    /// The delegate this one took the window from, normally SwiftUI's own.
+    weak var chainedDelegate: NSWindowDelegate?
 
     init(fixedWidth: CGFloat, minHeight: CGFloat, chainedDelegate: NSWindowDelegate?) {
         self.fixedWidth = fixedWidth
         self.minHeight = minHeight
         self.chainedDelegate = chainedDelegate
+    }
+
+    // SwiftUI's delegate answers far more than the two calls below: key and main
+    // changes, full screen, occlusion, the undo manager. Taking the window's
+    // delegate dropped all of them (#183). Every call this class does not
+    // answer itself goes on to the delegate it took over from.
+    override func responds(to aSelector: Selector!) -> Bool {
+        super.responds(to: aSelector) || chainedDelegate?.responds(to: aSelector) == true
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if let chainedDelegate, chainedDelegate.responds(to: aSelector) {
+            return chainedDelegate
+        }
+        return super.forwardingTarget(for: aSelector)
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
@@ -1949,9 +2439,17 @@ private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard MainActor.assumeIsolated({ CleaningQuitGuard.shouldAllowTermination() }) else {
-            return false
+        let quitsInstead = MainActor.assumeIsolated { () -> Bool in
+            let decision = CleaningQuitGuard.windowCloseDecision(
+                isCleaning: CleaningQuitGuard.isCleaningActive(),
+                closeQuitsApp: WindowCloseQuitter.closeWouldQuit(sender)
+            )
+            guard decision == .quitThroughTerminate else { return false }
+            // Keep Cleaning leaves the window where it was; Quit Anyway quits.
+            onNextRunloopTurn { NSApp.terminate(nil) }
+            return true
         }
+        guard !quitsInstead else { return false }
         if let chainedDelegate,
            chainedDelegate.responds(to: #selector(NSWindowDelegate.windowShouldClose(_:))) {
             return chainedDelegate.windowShouldClose!(sender)
@@ -1988,6 +2486,10 @@ private struct FixedWindowWidthConfigurator: NSViewRepresentable {
                 &FixedWindowWidthStorage.delegateKey
             ) as? FixedWindowWidthDelegate {
                 if window.delegate !== existing {
+                    // SwiftUI set a delegate of its own again. Pass calls on to
+                    // that one now, and assign afresh so AppKit asks
+                    // `responds(to:)` again for the new chain.
+                    existing.chainedDelegate = window.delegate
                     window.delegate = existing
                 }
             } else {

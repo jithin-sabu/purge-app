@@ -1,12 +1,12 @@
 # Purge design system
 
-Every colour, button, font and radius in Purge comes from three files:
+Every colour, button, font, radius and gap in Purge comes from three files:
 
 - `purge/Theme/AppColors.swift`: colours
 - `purge/Views/AppStyle.swift`: type scale, radii, spacing, row metrics
 - `purge/Views/PurgeButtonStyle.swift`: the one button style
 
-`node scripts/lint-design-tokens.mjs` (also `npm run lint:design`, and a CI step) fails when a view uses a raw colour, a SwiftUI grey like `.secondary`, a point size or text style on text, a literal corner radius, a hex colour outside the theme file, or a removed button style. Add `design-lint: allow` to a line only when there is a real reason, and say why in a comment.
+`node scripts/lint-design-tokens.mjs` (also `npm run lint:design`, and a CI step) fails when a view uses a raw colour, a SwiftUI grey like `.secondary`, a point size or text style on text, a literal corner radius, a raw gap, a hex colour outside the theme file, or a removed button style. A raw gap is a number in `.padding`, `EdgeInsets`, a stack's `spacing:`, `Spacer(minLength:)`, or a frame on `Spacer()` or `Color.clear`. A radius or gap kept in a named constant counts too, stored or computed, so `let cornerRadius: CGFloat = 6`, `let rowPadding: CGFloat = 10` and `var rowPadding: CGFloat { compact ? 10 : 12 }` all fail. A constant passed to `cornerRadius:` counts as a radius whatever its name; a blur radius does not. A 0 passes, and so does a number that scales a token, like `AppStyle.Spacing.xxxSmall / 2`, but not one that scales another number, like `12 / 2`. The condition of a `? :` is not a gap, so the 1 in `count > 1 ? AppStyle.Spacing.small : 0` passes. Add `design-lint: allow` to a line only when there is a real reason, and say why in a comment. Page geometry that is not a gap on the scale, like the onboarding margins or the clearance under the traffic lights, stays in a named layout constant with an allow comment.
 
 ## Colour
 
@@ -70,21 +70,26 @@ Rules:
 
 Every `.font(...)` on text uses `AppStyle.Typography`, adding `.weight(...)` for emphasis. SF Symbols may still size their glyph with `.system(size:)`.
 
-| Style | Spec | Use for |
-| --- | --- | --- |
-| `display` | 56 bold, rounded | Freed bytes on the celebration |
-| `displaySmall` | 36 bold, rounded | Large totals |
-| `title` | 26 semibold, rounded | Onboarding and empty-state headings |
-| `pageTitle` | 20 semibold, rounded | Page headers |
-| `sectionTitle` | 15 semibold | Sheet titles, card headers, large buttons |
-| `headline` | 13 semibold | Group headers, regular buttons |
-| `body` | 13 regular | Paragraphs, labels |
-| `rowTitle` | 13 medium | List rows, menu rows |
-| `callout` | 12 regular | Helper text, small buttons |
-| `metadata` / `metadataEmphasis` | 11 regular / medium | Sizes, dates, paths |
-| `micro` | 10 semibold | Badges, count pills |
+Text is set in [Onest](https://github.com/googlefonts/onest), bundled as `purge/Resources/Fonts/OnestText.ttf` under the SIL Open Font License (`Onest-OFL.txt`). The bundled copy has its digits removed, so a number inside ordinary text, such as "Last used 6 months ago", is drawn by the system font. `AppFonts.register()` runs at launch and registers a copy kept in Application Support, because CoreText reads a registered font from its path again while the app runs, and the bundle's path dies when Xcode cleans a build or the user moves Purge to Applications.
 
-SF Rounded is for result numbers and titles only. Size numbers use `.monospacedDigit()`.
+| Style | Spec | Tracking | Use for |
+| --- | --- | --- | --- |
+| `display` | SF Rounded 56 bold | 0 | Freed bytes on the celebration |
+| `displaySmall` | SF Rounded 36 bold | 0 | Large totals |
+| `title` | Onest 26 semibold | 0 | Onboarding and empty-state headings |
+| `pageTitle` | Onest 20 semibold | 0 | Page headers |
+| `sectionTitle` | Onest 15 semibold | +0.1 | Sheet titles, card headers, large buttons |
+| `headline` | Onest 13 semibold | +0.15 | Group headers, regular buttons |
+| `body` | Onest 13 regular | +0.15 | Paragraphs, labels |
+| `rowTitle` | Onest 13 medium | +0.15 | List rows, menu rows |
+| `callout` | Onest 12 regular | +0.25 | Helper text, small buttons |
+| `metadata` / `metadataEmphasis` | Onest 11 regular / medium | +0.3 | Sizes, dates, paths |
+| `micro` | Onest 10 semibold | +0.4 | Badges, count pills |
+| `iconLabel` | Onest 8 semibold | +0.45 | File-type labels over a row icon |
+
+Tracking is letter spacing in points, and each style carries its own. Onest has no optical sizes, so small text gets a little air and text from 20 pt up gets none. SF Rounded adjusts itself at every size and takes none. `.font(style)` sets the font and the tracking together; never add `.tracking` or `.kerning` to a view, the design lint fails on it.
+
+Sizes, units and percentages are set in SF Rounded: add `.numbers` to the style, as in `.font(AppStyle.Typography.metadata.numbers)`, and keep `.monospacedDigit()` so figures don't shift as they change. When a line is mostly a figure, such as "285.9 GB used of 494.4 GB", the whole line takes `.numbers`. Paths and commands take `.monospaced()`, the system monospaced font at the style's size.
 
 ## Shape and spacing
 
@@ -102,7 +107,7 @@ mark. The default tile is 28pt. Use this shape for fills, rims, image clipping,
 and the dashed Free outline so every tile shares the same corners. App artwork
 is scaled to fill the tile before clipping its transparent outer padding.
 
-Spacing: `xxSmall` 4, `xSmall` 8, `small` 12, `medium` 16, `large` 24, `xLarge` 32.
+Spacing: `xxxSmall` 2, `xxSmall` 4, `xxSmallPlus` 6, `xSmall` 8, `small` 12, `medium` 16, `large` 24, `xLarge` 32. A title sits `xxxSmall` above its subtitle, and an icon sits `xxSmallPlus` from its label.
 
 App Caches, Dev Tools and Large Files share `ScanListRowInsets.standard`: `xxSmall`
 above and below each card and `medium` on either side, inside the native List's

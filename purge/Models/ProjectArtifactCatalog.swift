@@ -202,10 +202,16 @@ nonisolated enum ProjectArtifactCatalog {
         // MARK: Android
 
         .init(kind: .dotGradle, projectType: .androidGradle, folder: ".gradle",
-              rootMarkers: ["build.gradle", "build.gradle.kts", "settings.gradle",
-                            "settings.gradle.kts", "android/build.gradle", "android/build.gradle.kts"],
-              rebuildMarkers: ["build.gradle", "build.gradle.kts", "settings.gradle",
-                               "settings.gradle.kts", "android/build.gradle", "android/build.gradle.kts"],
+              rootMarkers: ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"],
+              rebuildMarkers: ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"],
+              reinstall: .guidance("Run your usual project build so Android or Java tools fetch what they need again.")),
+        // React Native and Flutter keep their Gradle build in `android/`, and Gradle
+        // writes `.gradle` beside the build it runs, so the folder is
+        // `android/.gradle`. The project walk never enters `android/`, so only this
+        // rule finds it.
+        .init(kind: .dotGradle, projectType: .androidGradle, folder: "android/.gradle",
+              rootMarkers: ["android/build.gradle", "android/build.gradle.kts"],
+              rebuildMarkers: ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"],
               reinstall: .guidance("Run your usual project build so Android or Java tools fetch what they need again.")),
 
         // MARK: Xcode / CocoaPods
@@ -332,15 +338,8 @@ nonisolated enum ProjectArtifactCatalog {
 
     // MARK: - Lookups
 
-    private nonisolated static let rulesByType: [ProjectType: [ProjectArtifactRule]] =
-        Dictionary(grouping: rules, by: \.projectType)
-
     private nonisolated static let rulesByKind: [DeletableArtifactKind: [ProjectArtifactRule]] =
         Dictionary(grouping: rules, by: \.kind)
-
-    nonisolated static func rules(for type: ProjectType) -> [ProjectArtifactRule] {
-        rulesByType[type] ?? []
-    }
 
     nonisolated static func rules(forKind kind: DeletableArtifactKind) -> [ProjectArtifactRule] {
         rulesByKind[kind] ?? []

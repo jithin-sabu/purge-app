@@ -16,16 +16,7 @@ final class CleanupHistoryStore: ObservableObject {
     }
 
     nonisolated static func fileURL() -> URL {
-        let baseDir: URL
-        if TestHost.isActive() {
-            // Tests run inside a hosted copy of the app. A clean a test drives must
-            // never reach the user's History, so they get a scratch folder (#171).
-            baseDir = TestHost.supportDirectory()
-        } else {
-            baseDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("io.getpurge.app", isDirectory: true)
-                ?? FileManager.default.temporaryDirectory
-        }
+        let baseDir = AppSupportFolder.url()
         if !FileManager.default.fileExists(atPath: baseDir.path) {
             try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
         }
@@ -54,7 +45,9 @@ final class CleanupHistoryStore: ObservableObject {
     }
 
     /// The entry a clean's report becomes. Each item keeps whether it went to the
-    /// Trash, so History never lists a simulator as moved there (#170).
+    /// Trash, so History never lists a simulator as moved there (#170), and the
+    /// failed items keep why, so a clean where everything failed is not an empty
+    /// entry (#303).
     static func entry(id: UUID, trigger: CleanupTrigger, report: DeletionReport) -> CleanupHistoryEntry {
         let items = report.deletedItems.map {
             CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes, movedToTrash: $0.movedToTrash)
@@ -62,6 +55,10 @@ final class CleanupHistoryStore: ObservableObject {
 
         let skipped = report.skippedItems.map {
             CleanupHistorySkippedItemDTO(path: $0.path, reason: $0.reason, isUserVisible: $0.isUserVisible)
+        }
+
+        let failed = report.failedItems.map {
+            CleanupHistoryFailedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes, reason: $0.reason)
         }
 
         // Reclaimed is recorded only when the volume actually moved. A clean that only
@@ -74,7 +71,8 @@ final class CleanupHistoryStore: ObservableObject {
             bytesMovedToTrash: report.bytesMovedToTrash,
             bytesReclaimedOnVolume: report.reportableBytesReclaimedOnVolume,
             deletedItems: items,
-            skippedItems: skipped
+            skippedItems: skipped,
+            failedItems: failed
         )
     }
 
@@ -98,6 +96,26 @@ final class CleanupHistoryStore: ObservableObject {
             bytesReclaimedOnVolume: freedShownBytes,
             deletedItems: items,
             kind: .appleIntelligenceModels
+        )
+        archive.append(entry, maxEntries: maxEntries)
+        persist()
+    }
+
+    /// A Remove Download run (#106). Nothing went to the Trash: the items are the
+    /// files whose downloads went, each with the space it freed here, and the
+    /// skipped ones with why. Every file is still in iCloud.
+    func appendICloudDownloadRemoval(_ report: ICloudDownloadReport) {
+        let entry = CleanupHistoryEntry(
+            date: report.date,
+            trigger: .manual,
+            bytesMovedToTrash: 0,
+            deletedItems: report.removed.map {
+                CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.bytesFreed, movedToTrash: false)
+            },
+            skippedItems: report.skipped.map {
+                CleanupHistorySkippedItemDTO(path: $0.path, reason: $0.reasonKey, isUserVisible: true)
+            },
+            kind: .iCloudDownloadsRemoved
         )
         archive.append(entry, maxEntries: maxEntries)
         persist()

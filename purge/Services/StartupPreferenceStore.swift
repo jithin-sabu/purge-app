@@ -6,6 +6,9 @@ import Foundation
 @MainActor
 protocol LoginItemControlling {
     var isRegistered: Bool { get }
+    /// Enabled, or still awaiting approval in System Settings: either is a
+    /// login item that leaving the menu bar mode has to remove (#177).
+    var isRegisteredOrAwaitingApproval: Bool { get }
     @discardableResult func register() -> Bool
     func unregister()
 }
@@ -16,6 +19,8 @@ struct SystemLoginItem: LoginItemControlling {
     nonisolated init() {}
 
     var isRegistered: Bool { LoginItemRegistrar.isRegistered }
+
+    var isRegisteredOrAwaitingApproval: Bool { LoginItemRegistrar.isRegisteredOrAwaitingApproval }
 
     @discardableResult
     func register() -> Bool { LoginItemRegistrar.register() }
@@ -105,8 +110,10 @@ final class StartupPreferenceStore: ObservableObject {
         guard shown != showsMenuBarIcon else { return true }
         if !shown {
             // Re-read rather than trusting `launchesAtLogin`: the user may have
-            // added Purge in System Settings since Settings last refreshed.
-            if loginItem.isRegistered, !setLaunchesAtLogin(false) {
+            // added Purge in System Settings since Settings last refreshed. An
+            // item still awaiting approval there counts too: left behind, it
+            // would open a window at every login once approved (#177).
+            if loginItem.isRegisteredOrAwaitingApproval, !setLaunchesAtLogin(false) {
                 return false
             }
             if hidesDockIcon {
@@ -142,7 +149,8 @@ final class StartupPreferenceStore: ObservableObject {
             loginItem.unregister()
         }
         launchesAtLogin = loginItem.isRegistered
-        return launchesAtLogin == enabled
+        // Off also means nothing is left awaiting approval (#177).
+        return enabled ? launchesAtLogin : !loginItem.isRegisteredOrAwaitingApproval
     }
 
     /// The persisted preference, readable before any store exists.

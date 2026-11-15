@@ -28,7 +28,17 @@ enum PurgeAssetWorkerMain {
         do {
             reply(["ok": true, "result": try perform(op, input)])
         } catch {
-            reply(["ok": false, "error": describe(error)])
+            var failure: [String: Any] = ["ok": false, "error": describe(error)]
+            // The domain and code go apart from the text, so Purge can put the
+            // well-known ones in plain words and keep the whole text for the
+            // details (#343). The worker's own refusals have neither.
+            if !(error is UnifiedAssetCalls.CallError) {
+                let nsError = error as NSError
+                failure["errorDomain"] = nsError.domain
+                failure["errorCode"] = nsError.code
+                failure["errorSummary"] = summary(nsError)
+            }
+            reply(failure)
         }
     }
 
@@ -40,10 +50,15 @@ enum PurgeAssetWorkerMain {
         FileHandle.standardOutput.write(data)
     }
 
+    /// The error without its userInfo: short enough for one line.
+    private static func summary(_ error: NSError) -> String {
+        "\(error.domain) \(error.code): \(error.localizedDescription)"
+    }
+
     private static func describe(_ error: Error) -> String {
         if let failure = error as? UnifiedAssetCalls.CallError { return failure.description }
         let nsError = error as NSError
-        var parts = ["\(nsError.domain) \(nsError.code): \(nsError.localizedDescription)"]
+        var parts = [summary(nsError)]
         if let reason = nsError.localizedFailureReason { parts.append(reason) }
         for (key, value) in nsError.userInfo
         where key != NSLocalizedDescriptionKey && key != NSLocalizedFailureReasonErrorKey {

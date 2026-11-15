@@ -64,17 +64,33 @@ struct TrashPendingAccountingTests {
         #expect(real.reportableBytesReclaimedOnVolume == 5_000_000_000)
     }
 
-    /// Simulators go through `simctl delete` and never reach the trash, so their bytes
-    /// must not inflate the pending-in-trash figure.
-    @Test func directRemovalsAreNotCountedAsPendingInTrash() {
-        let mixed = report(
-            movedToTrash: 1_000,
-            removedDirectly: 9_000,
-            availableBefore: nil,
-            availableAfter: nil
+    /// Simulator runtimes go through `simctl` and never reach the trash, so their bytes
+    /// must not inflate the pending-in-trash figure. The engine builds the report here,
+    /// from one cache folder it moves and one runtime it removes outright. The folder
+    /// is never made, and the fake Trash moves nothing.
+    @Test func directRemovalsAreNotCountedAsPendingInTrash() async throws {
+        let cache = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/PurgeTrashPendingTests-\(UUID().uuidString)", isDirectory: true)
+        let runtime = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_TEST1", isDirectory: true)
+        let cacheKey = cache.standardizedFileURL.path
+        let runtimeKey = runtime.standardizedFileURL.path
+        let trash = FakeTrash()
+        let deleter = FileDeleter(
+            simulatorRuntimeRemover: { _ in .removed(freed: .unknown, download: .notKept, isLegacyImage: false) },
+            trash: trash.trash
         )
+
+        let mixed = try await deleter.deleteItems(
+            at: [cache, runtime],
+            pathToExpectedSizeBytes: [cacheKey: 1_000, runtimeKey: 9_000],
+            simulatorRuntimeIDsByPath: [runtimeKey: "7AE1D6B6-5524-4FAD-B793-1D1C911E5269"]
+        )
+
+        #expect(trash.trashedPaths == [cacheKey])
         #expect(mixed.bytesMovedToTrash == 1_000)
         #expect(mixed.bytesRemovedDirectly == 9_000)
+        #expect(mixed.movedToTrashCount == 1)
+        #expect(mixed.deletedItems.map(\.movedToTrash) == [true, false])
     }
 
     /// The hero is a ceiling, so its formatter must never round up past the truth.

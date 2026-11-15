@@ -53,11 +53,12 @@ struct CustomCleaningIntervalSheet: View {
             HStack(spacing: AppStyle.Spacing.small) {
                 TextField("", text: $amountText)
                     .textFieldStyle(.plain)
-                    .font(AppStyle.Typography.body.monospacedDigit())
+                    .font(AppStyle.Typography.body.numbers)
+                    .monospacedDigit()
                     .multilineTextAlignment(.center)
                     .focused($amountFieldFocused)
                     .frame(width: 34)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, AppStyle.Spacing.xSmall)
                     .frame(height: AppStyle.Control.height)
                     .background(
                         AppColors.surfaceRaised,

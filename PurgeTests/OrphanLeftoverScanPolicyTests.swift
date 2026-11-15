@@ -105,6 +105,19 @@ struct OrphanLeftoverScanPolicyTests {
         #expect(!degraded.looksComplete)
     }
 
+    /// Remembered drive apps own their leftovers, but they don't make a sparse
+    /// view of the disk look complete (#99).
+    @Test
+    func rememberedDriveAppsDoNotCountTowardCompleteness() {
+        let sparse = OrphanLeftoverScanPolicy.InstalledAppIndex(
+            diskBundleIDs: Set(["a.b", "c.d", "drive.one", "drive.two", "drive.three"]),
+            evidence: InstalledCodeEvidence(),
+            onDiskAppCount: 2
+        )
+        #expect(!sparse.looksComplete)
+        #expect(sparse.owns(bundleID: "drive.one"))
+    }
+
     // MARK: Bundle-id extraction
 
     @Test

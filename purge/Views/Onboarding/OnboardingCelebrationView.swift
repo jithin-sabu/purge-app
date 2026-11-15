@@ -19,7 +19,7 @@ struct OnboardingCelebrationView: View {
       VStack(spacing: AppStyle.Spacing.small) {
         if bytesMovedToTrash > 0 {
           Text(formatBytes(Int64(animatedMovedBytes)))
-            .font(AppStyle.Typography.display)
+            .font(AppStyle.Typography.display.numbers)
             .contentTransition(.numericText())
             .monospacedDigit()
             .accessibilityLabel("\(formatBytes(bytesMovedToTrash)) moved to trash, not yet reclaimed")

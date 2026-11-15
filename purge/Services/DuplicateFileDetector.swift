@@ -93,6 +93,7 @@ nonisolated final class DuplicateFileDetector {
     /// two models legitimately sharing blobs are not duplicates of each other.
     private static func bucketBySize(_ files: [LargeFile]) -> [(Int64, [Candidate])] {
         var bySize: [Int64: [Candidate]] = [:]
+        var seenFiles = Set<FileIdentity>()
 
         for file in files {
             if Task.isCancelled { return [] }
@@ -121,6 +122,14 @@ nonisolated final class DuplicateFileDetector {
             // the folders Large Files scans, and overstating recoverable space is
             // the failure this feature cannot afford.
             guard linkCount(for: url) == 1 else { continue }
+
+            // One file can still have two rows when a folder on the way is a
+            // symlink: one inode by two paths, each with a link count of 1. They
+            // are one file, not two copies, and trashing the "extra copy" would
+            // trash the only one. The first row stands for the file (#273).
+            if let identity = FileIdentity(path: url.path), !seenFiles.insert(identity).inserted {
+                continue
+            }
 
             bySize[size, default: []].append(Candidate(fileID: file.id, url: url))
         }

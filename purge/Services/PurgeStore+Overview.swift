@@ -20,6 +20,8 @@ struct OverviewBreakdownKey: Equatable {
     let freeBytes: Int64
     let phases: [OverviewCategoryPhase]
     let records: [OverviewCategory: ScanRecord]
+    /// A saved Large Files figure counts only while these still match its own.
+    let largeFileFilter: LargeFileFilterSnapshot
 }
 
 extension PurgeStore {
@@ -48,6 +50,10 @@ extension PurgeStore {
         scanQueue.active == .leftovers || scanQueue.isQueued(.leftovers) || isScanningOrphans
     }
 
+    var isCommandLineToolsScanPending: Bool {
+        scanQueue.active == .commandLineTools || scanQueue.isQueued(.commandLineTools) || isScanningCommandLineTools
+    }
+
     /// The safe-to-clean share of App Caches or Dev Tools. Nil for the categories
     /// Purge never cleans on its own.
     func safeCleanupBytes(for category: OverviewCategory) -> Int64? {
@@ -67,7 +73,8 @@ extension PurgeStore {
             totalBytes: totalBytes,
             freeBytes: freeBytes,
             phases: phases,
-            records: scanRecords
+            records: scanRecords,
+            largeFileFilter: largeFileFilter
         )
         if let cached = overviewBreakdownCache, cached.key == key {
             return cached.breakdown
@@ -85,11 +92,23 @@ extension PurgeStore {
     /// `overviewSource` without building the item lists, since rows and the sidebar ask
     /// on every render.
     func isShowingRecordedFigure(for category: OverviewCategory) -> Bool {
-        guard scanRecords[category] != nil else { return false }
+        guard applicableRecord(for: category) != nil else { return false }
         switch overviewPhase(for: category) {
-        case .notScanned: return true
-        case .needsAccess, .waiting, .scanning, .ready: return false
+        case .notScanned, .waiting, .scanning: return true
+        case .needsAccess, .ready: return false
         }
+    }
+
+    /// The saved record the Overview may show for the category. A Large Files
+    /// record counted under other filters than today's is left out: its figure
+    /// would be read against a filter it never used (#279). A record saved before
+    /// filters were stored is shown as it was.
+    func applicableRecord(for category: OverviewCategory) -> ScanRecord? {
+        guard let record = scanRecords[category] else { return nil }
+        if category == .largeFiles, let filter = record.largeFileFilter, filter != largeFileFilter {
+            return nil
+        }
+        return record
     }
 
     /// The five categories' live items in claim order, for the Everything else
@@ -113,22 +132,25 @@ extension PurgeStore {
         }
     }
 
-    /// A scan in progress shows what it has found so far. A category waiting for its
-    /// turn shows nothing: it is about to be measured again, so the old figure would
-    /// only be replaced. One not scanned this session shows its saved figure.
+    /// Until a category's scan finishes this session, it shows its saved figure from
+    /// the last one, dimmed and dated, while it waits and while it scans (#283). The
+    /// live figure takes over when the scan is done, so a reopen never shows a page of
+    /// blanks or a total that climbs from zero. A category with no saved figure shows
+    /// what its scan has found so far.
     private func overviewSource(
         for category: OverviewCategory,
         phase: OverviewCategoryPhase
     ) -> OverviewCategorySource {
-        let record = scanRecords[category]
+        let record = applicableRecord(for: category)
         switch phase {
         case .needsAccess:
             return .none
-        case .scanning, .ready:
+        case .ready:
             return .live(overviewItems(for: category))
-        case .waiting:
-            return .none
-        case .notScanned:
+        case .scanning:
+            if let record { return .recorded(record.bytes) }
+            return .live(overviewItems(for: category))
+        case .waiting, .notScanned:
             if let record { return .recorded(record.bytes) }
             return .none
         }
@@ -186,20 +208,37 @@ extension PurgeStore {
             for runtime in simulatorRuntimes where runtime.safetyInfo.level != .unknown {
                 items.append(OverviewSizedItem(path: runtime.locationURL.path, bytes: runtime.sizeBytes))
             }
+            for component in xcodeComponents where component.safetyInfo.level != .unknown {
+                items.append(OverviewSizedItem(path: component.assetURL.path, bytes: component.sizeBytes))
+            }
             for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
                 items.append(OverviewSizedItem(path: artifact.path.path, bytes: artifact.sizeBytes))
             }
             return items
         case .largeFiles:
-            return largeFiles.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
+            return Self.overviewItems(forLargeFiles: largeFiles)
         case .apps:
-            return installedApps.flatMap { app in
+            return Self.onThisDisk(installedApps.flatMap { app in
                 appFootprintItemsByAppID[app.id]
                     ?? [OverviewSizedItem(path: app.bundleURL.path, bytes: app.bundleSizeBytes)]
-            }
+            })
         case .leftovers:
             return orphanLeftovers.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
         }
+    }
+
+    /// The Large Files rows on this disk, which is all the bar shows. A home
+    /// folder linked to another drive lists its files there by their
+    /// `/Volumes/…` path (#273), and counted they would push the bar past the
+    /// used space. String work only, like `OverviewSizedItem.normalized`.
+    nonisolated static func overviewItems(forLargeFiles files: [LargeFile]) -> [OverviewSizedItem] {
+        onThisDisk(files.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) })
+    }
+
+    /// Leaves out what sits on another drive. An app on a drive (#99) counts its
+    /// leftovers, which are in `~/Library` on this disk, and not its bundle.
+    nonisolated static func onThisDisk(_ items: [OverviewSizedItem]) -> [OverviewSizedItem] {
+        items.filter { !$0.path.hasPrefix("/Volumes/") }
     }
 
     /// A tool can span several folders. Each gets its own measured size where known;

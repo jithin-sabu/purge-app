@@ -218,7 +218,7 @@ nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     let lastModified: Date
     var isSelected: Bool
     /// Initial SafetyInfo headline comes from explanations; reinstall command varies by artifact.
-    /// Mutable so manual user overrides and recategorize results can update it in place.
+    /// Mutable so a reset to automatic can update it in place.
     var safetyInfo: SafetyInfo
 
     /// Filled asynchronously after filesystem scan completes.
@@ -228,7 +228,7 @@ nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     var gitStatus: GitWorktreeStatus
 
     /// Why the scan held this artifact at Check First, if it did. Kept so a reset
-    /// or recategorize lands on Check First again instead of Safe.
+    /// lands on Check First again instead of Safe.
     var checkFirstReason: ProjectCheckFirstReason?
 
     var formattedSize: String { formatBytes(sizeBytes) }

@@ -176,7 +176,7 @@ nonisolated final class OrphanLeftoverScanner {
             )
         }
 
-        let sizes = FolderSizing.directorySizes(at: candidates.map(\.url))
+        let sizes = FolderSizing.directorySizes(at: candidates.map(\.url), split: .spread)
 
         for candidate in candidates {
             if Task.isCancelled { break }

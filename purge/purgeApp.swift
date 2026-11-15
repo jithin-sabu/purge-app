@@ -17,6 +17,8 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         LaunchContext.captureLaunchKind()
+        // Before the first paint, so no label shows the system font first.
+        AppFonts.register()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -49,6 +51,17 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
+    }
+
+    /// Writes the last scan's pending changes and waits for the file, so a clean
+    /// just before quitting is already in it at the next launch (#283).
+    func applicationWillTerminate(_ notification: Notification) {
+        // After Uninstall Purge moved the data to the Trash, writing the last scan
+        // would make the folder again.
+        if !SelfUninstallState.clearsDefaultsOnQuit {
+            AppEnvironment.store.flushLastScanWrites()
+        }
+        SelfUninstallState.finishQuit()
     }
 
     /// Always `false`, in both modes. In the menu bar mode closing the window is
@@ -139,6 +152,9 @@ struct PurgeApp: App {
         // Before the Dock policy below reads the preference it may repair.
         StartupPreferenceStore.resolvePersistedModes(isFreshInstall: firstRun == .freshInstall)
         LargeFileFilterDefaults.register()
+        if !TestHost.isActive() {
+            LargeFileFilterDefaults.removeLegacyCategory()
+        }
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
         // As early as the app can act, so a login launch with the Dock icon hidden
         // never flashes into the Dock before hiding itself again.
@@ -201,6 +217,8 @@ struct PurgeCommands: Commands {
         }
         CommandGroup(replacing: .appSettings) {
             SettingsMenuItem(store: store)
+            Divider()
+            UninstallPurgeMenuItem(store: store)
         }
         CommandGroup(after: .newItem) {
             Button("Scan Everything") {
@@ -250,6 +268,21 @@ private struct SettingsMenuItem: View {
     }
 }
 
+/// Purge > Uninstall Purge… (#330), in its own section below Settings. Brings
+/// the window back first and waits for onboarding, the same as Settings…
+private struct UninstallPurgeMenuItem: View {
+    @ObservedObject var store: PurgeStore
+    @AppStorage(FirstRunGate.onboardingCompletedKey) private var hasCompletedOnboarding = false
+
+    var body: some View {
+        Button("Uninstall Purge…") {
+            IntentRouter.revealWindow()
+            store.presentSelfUninstall()
+        }
+        .disabled(!hasCompletedOnboarding || store.isAnotherSheetOpen || store.isSelfUninstallPresented || store.isPreparingSelfUninstall)
+    }
+}
+
 /// View > Overview … App Uninstaller on ⌘1 … ⌘5. Brings the window back first
 /// and waits for onboarding, the same as Settings…
 private struct TabMenuItems: View {
@@ -258,7 +291,7 @@ private struct TabMenuItems: View {
 
     var body: some View {
         ForEach(Array(PurgeStore.Tab.keyboardTabs.enumerated()), id: \.element) { index, tab in
-            Button(tab.rawValue) {
+            Button(tab.displayName) {
                 IntentRouter.revealWindow()
                 store.selectedTab = tab
             }

@@ -132,16 +132,3 @@ struct CleanFailureReasonTests {
     }
 }
 
-@Suite("TimeTagline fact part")
-struct TimeTaglineFactPartTests {
-    @Test func selectionExposesFactAndQuip() {
-        let suite = ThrowawayDefaults()
-        defer { suite.remove() }
-        let defaults = suite.defaults
-
-        let selection = TimeTagline.select(for: 2, defaults: defaults)
-        #expect(selection.factPart == "done in 2 seconds")
-        #expect(selection.line == "\(selection.factPart) · \(selection.quip)")
-        #expect(TimeTagline.quips(for: 2).contains(selection.quip))
-    }
-}

@@ -12,10 +12,7 @@ struct LargeFilesView: View {
     /// view — counts the same rows the list is actually showing. With the query
     /// private to this view the header kept advertising the full unfiltered scan.
     @Binding var searchQuery: String
-    var showsPageHeader = true
-    var usesExternalScrollContainer = false
 
-    @AppStorage(LargeFileFilterDefaults.categoryKey) private var categoryFilterRaw = LargeFileCategoryFilter.all
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
     @AppStorage(LargeFileAgeThreshold.userDefaultsKey) private var minAgeDays: Int = LargeFileAgeThreshold.defaultOption.rawValue
@@ -32,9 +29,19 @@ struct LargeFilesView: View {
     /// the index exactly once per pass, so this fires exactly once.
     @State private var duplicateIndex: DuplicateIndex = .empty
 
-    /// Pseudo-category shared with the real category chips via `categoryFilterRaw`,
-    /// so chip selection stays single-select without a second piece of state.
+    /// Pseudo-category shared with the real category chips via
+    /// `store.largeFileCategoryFilter`, so chip selection stays single-select
+    /// without a second piece of state.
     private static let duplicatesFilterID = LargeFileCategoryFilter.duplicates
+
+    /// The chip the list filters on and lights. The store holds the one the user
+    /// picked; this is All once that chip has no rows and is no longer drawn, so
+    /// the list never filters on a chip the user can't see (#277).
+    private var activeCategoryFilter: String {
+        LargeFileCategoryFilter.activeRawValue(
+            rawValue: store.largeFileCategoryFilter, files: store.largeFiles, duplicates: duplicateIndex
+        )
+    }
 
     private var currentSort: SortOption {
         SortOption(rawValue: sortRaw) ?? .sizeDesc
@@ -74,14 +81,24 @@ struct LargeFilesView: View {
     }
 
     /// Whether the Duplicates chip is the active filter *and* has something to
-    /// show. The two come apart within a session: a fresh Scan empties the index
-    /// while the chip is still selected, and without this guard the list would
-    /// show nothing until the duplicate pass finished. Across launches the filter
-    /// is reset in `LargeFileFilterDefaults.register()` instead.
+    /// show. The two come apart when the last copies leave the list while the
+    /// chip is selected; `activeCategoryFilter` then reads All.
     private var isDuplicatesFilterActive: Bool {
         LargeFileCategoryFilter.isDuplicatesActive(
-            rawValue: categoryFilterRaw, duplicates: duplicateIndex
+            rawValue: activeCategoryFilter, duplicates: duplicateIndex
         )
+    }
+
+    /// Whether the iCloud chip is on and has files under it (#106). Keep Only in
+    /// iCloud is offered here and nowhere else in the bar, so its meaning is
+    /// plain from where it sits.
+    private var isICloudFilterActive: Bool {
+        LargeFileCategoryFilter.isICloudActive(rawValue: activeCategoryFilter, files: store.largeFiles)
+    }
+
+    /// The synced files matching the search, for the iCloud chip's count.
+    private var iCloudMatches: [LargeFile] {
+        searchMatches.filter(\.canRemoveDownload)
     }
 
     /// The groups the list draws as containers, each holding its copies.
@@ -142,7 +159,7 @@ struct LargeFilesView: View {
     private var visibleIndices: [Int] {
         let files = store.largeFiles
         let filtered = LargeFileCategoryFilter.visibleIndices(
-            in: files, rawValue: categoryFilterRaw, query: searchQuery, duplicates: duplicateIndex
+            in: files, rawValue: activeCategoryFilter, query: searchQuery, duplicates: duplicateIndex
         )
 
         // Under the Duplicates chip the rows are laid out group by group, which
@@ -163,12 +180,17 @@ struct LargeFilesView: View {
     }
 
     var body: some View {
-        Group {
-            if usesExternalScrollContainer {
-                externalScrollBody
-            } else {
-                standardBody
+        // Controls and the Select All row sit above the list as opaque chrome; the
+        // list cuts off cleanly at its own edge with no scroll-edge blur, matching
+        // the App Uninstaller tab. Every macOS version gets the Select All row:
+        // before macOS 26 it was left out, and with it Select All, the sort menu
+        // and Delete extra copies (#183).
+        VStack(spacing: 0) {
+            if !isAwaitingFirstScan {
+                controlsChrome
+                selectAllRowChrome
             }
+            listStack
         }
         .background(AppColors.surfaceBase)
         .onReceive(store.largeFileDuplicates.indexPublisher) { index in
@@ -176,59 +198,34 @@ struct LargeFilesView: View {
         }
     }
 
-    private var standardBody: some View {
-        VStack(spacing: 0) {
-            if showsPageHeader {
-                AppSectionPageHeader(title: String(localized: "Large Files"), subtitle: pageSubtitle) {
-                    headerActions
-                }
-            }
-
-            controlsChrome
-            listStack
-        }
+    /// No scan has finished this session and nothing has streamed in yet: the
+    /// filters, search and Select All have nothing to act on, so the tab shows
+    /// only its status.
+    private var isAwaitingFirstScan: Bool {
+        store.isAwaitingFirstLargeFileScan
     }
 
-    private var externalScrollBody: some View {
-        // Controls and the Select All row sit above the list as opaque chrome; the
-        // list cuts off cleanly at its own edge with no scroll-edge blur, matching
-        // the App Uninstaller tab.
-        VStack(spacing: 0) {
-            controlsChrome
-            selectAllRowChrome
-            listStack
-        }
-    }
-
-    private var headerActions: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Button(action: onScan) {
-                CleaningButtonLabel(
-                    title: isLoading ? "Scanning..." : "Scan",
-                    systemImage: isLoading ? nil : "arrow.clockwise",
-                    isCleaning: isLoading
-                )
-            }
-            .buttonStyle(.purge(.secondary))
-            .disabled(isLoading)
-
-            LargeFileDeleteButton(selection: store.largeFileSelection)
-        }
-        .fixedSize()
+    private var scanWaitStatus: ScanWaitStatus {
+        store.scanWaitStatus(for: .largeFiles, isScanning: isLoading)
     }
 
     private var controlsChrome: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
                 thresholdMenu
                 ageMenu
-                Spacer(minLength: 12)
-                LargeFileSearchField(query: $searchQuery)
+                Spacer(minLength: AppStyle.Spacing.small)
+                CapsuleSearchField(
+                    query: $searchQuery,
+                    prompt: "Search",
+                    accessibilityLabel: "Search large files by name",
+                    width: 220
+                )
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
                     // Counts are search-filtered but not category-filtered, so the
                     // chips answer "where did my matches land?" while a query is
                     // active instead of advertising rows the query already hid.
@@ -261,6 +258,18 @@ struct LargeFilesView: View {
                         )
                     }
 
+                    // The synced files that also use space here, where Keep Only
+                    // in iCloud lives (#106). Like Duplicates it cuts across every
+                    // category, so it sits with it, before them.
+                    if store.hasRemovableDownloads {
+                        categoryChip(
+                            id: LargeFileCategoryFilter.iCloud,
+                            title: String(localized: "iCloud"),
+                            systemImage: "icloud",
+                            count: iCloudMatches.count
+                        )
+                    }
+
                     LargeFileDuplicateStatus(duplicates: store.largeFileDuplicates)
 
                     ForEach(availableCategories) { category in
@@ -272,7 +281,7 @@ struct LargeFilesView: View {
                         )
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -330,7 +339,7 @@ struct LargeFilesView: View {
         count: Int,
         tier: FilterChipTier = .neutral
     ) -> some View {
-        let isOn = categoryFilterRaw == id
+        let isOn = activeCategoryFilter == id
         return Button {
             selectCategory(id)
         } label: {
@@ -344,14 +353,15 @@ struct LargeFilesView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private func selectCategory(_ id: String) {
         if reduceMotion {
-            categoryFilterRaw = id
+            store.largeFileCategoryFilter = id
         } else {
             withAnimation(.easeInOut(duration: 0.15)) {
-                categoryFilterRaw = id
+                store.largeFileCategoryFilter = id
             }
         }
     }
@@ -366,7 +376,10 @@ struct LargeFilesView: View {
             sort: sortOptionBinding,
             onToggleAll: toggleSelectAll,
             onKeepOneOfEach: isDuplicatesFilterActive
-                ? { store.requestDuplicateCleanup() }
+                ? { store.requestDuplicateCleanup(searchQuery: searchQuery) }
+                : nil,
+            onRemoveDownload: isICloudFilterActive
+                ? { store.requestRemoveDownloads() }
                 : nil
         )
     }
@@ -380,13 +393,31 @@ struct LargeFilesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The last scan's glass lifts as the first file lands (#283).
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: store.largeFilesLastScan == nil)
+    }
+
+    /// Large Files keeps only its total between launches, never the file list
+    /// (#283), so while it scans again the wait says what it found last time.
+    private var lastScanLine: String? {
+        guard let record = store.applicableRecord(for: .largeFiles), record.count > 0 else { return nil }
+        let size = formatBytes(record.bytes)
+        let age = compactAgoText(from: record.completedAt, to: Date())
+        return record.count == 1
+            ? String(localized: "Last scan found 1 file, \(size), \(age)")
+            : String(localized: "Last scan found \(record.count) files, \(size), \(age)")
     }
 
     @ViewBuilder
     private var listOrPlaceholder: some View {
         if store.largeFiles.isEmpty {
-            if isLoading {
-                scanningPlaceholder
+            if isAwaitingFirstScan || scanWaitStatus == .scanning {
+                if let lastScan = store.largeFilesLastScan {
+                    LargeFilesLastScanGlass(lastScan: lastScan, status: scanWaitStatus)
+                        .transition(.opacity)
+                } else {
+                    ScanStatusPlaceholder(status: scanWaitStatus, copy: .largeFiles, lastScanLine: lastScanLine)
+                }
             } else {
                 emptyState
             }
@@ -460,7 +491,8 @@ struct LargeFilesView: View {
                         duplicateCopyCount: duplicateIndex.copyCount(forFileID: file.id),
                         onToggle: { toggleSelection(forFileID: file.id) },
                         onExclude: { store.excludeLargeFileFromScans(file) },
-                        onExcludeFolder: { store.excludeLargeFileFolderFromScans(file) }
+                        onExcludeFolder: { store.excludeLargeFileFolderFromScans(file) },
+                        onRemoveDownload: { store.requestRemoveDownloads(for: file) }
                     )
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
@@ -469,10 +501,10 @@ struct LargeFilesView: View {
                 }
             }
 
-            // The same bar under the rows when the scan skipped something, so a
-            // short list on a cloud-heavy Mac still says where the rest went.
-            if let summary = store.largeFileScanSummary, summary.hasSkippedSomething {
-                summaryCard(summary, forEmptyList: false)
+            // A folder the scan couldn't read still gets its warning under the
+            // rows: without it a partial list looks complete.
+            if let summary = store.largeFileScanSummary, !summary.unreadableRoots.isEmpty {
+                LargeFileScanSummaryCard(summary: summary, includesCloud: false)
                     .padding(.top, AppStyle.Spacing.xSmall)
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
@@ -500,7 +532,7 @@ struct LargeFilesView: View {
     private static let summaryCardWidth: CGFloat = 540
 
     /// The next size filter down from the current one, for the "Try 50 MB"
-    /// footer. Nil at the lowest step, where the button is left out.
+    /// button. Nil at the lowest step, where the button is left out.
     private var lowerSizeThreshold: LargeFileSizeThreshold? {
         LargeFileSizeThreshold.allCases.last { $0.rawValue < sizeThreshold.rawValue }
     }
@@ -511,27 +543,9 @@ struct LargeFilesView: View {
         onScan()
     }
 
-    /// What the scan skipped, as a card. With an empty list it carries the
-    /// heading's case and the filter and folder footers; under a list with rows
-    /// it is the bar alone.
-    private func summaryCard(_ summary: LargeFileScanSummary, forEmptyList: Bool) -> some View {
-        LargeFileScanSummaryCard(
-            summary: summary,
-            onThisMacCount: store.largeFiles.count,
-            onThisMacBytes: store.largeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes },
-            emptyListFooters: forEmptyList
-                ? .init(
-                    ageLabel: ageThreshold.menuButtonLabel,
-                    lowerThreshold: lowerSizeThreshold,
-                    onTryLowerThreshold: tryLowerThreshold
-                )
-                : nil
-        )
-    }
-
-    /// An empty list after a finished scan says why, in the Overview's bar
-    /// (#230). Before any scan has finished there is no summary, so the old hint
-    /// stands in.
+    /// An empty list after a finished scan says why, in a card with a row per
+    /// place the files went (#230). Before any scan has finished there is no
+    /// summary, so the old hint stands in.
     private var emptyState: some View {
         let summary = store.largeFileScanSummary
         let state = LargeFileEmptyState.resolve(summary)
@@ -540,7 +554,7 @@ struct LargeFilesView: View {
         return GeometryReader { geometry in
             ScrollView {
                 VStack(spacing: AppStyle.Spacing.medium) {
-                    VStack(spacing: 10) {
+                    VStack(spacing: AppStyle.Spacing.small) {
                         Image(systemName: state.symbol)
                             .font(.system(size: 38))
                             .foregroundStyle(state.symbolColor)
@@ -549,10 +563,18 @@ struct LargeFilesView: View {
                         if summary == nil {
                             Text("Try a lower size threshold or a shorter last-used window.")
                                 .foregroundStyle(AppColors.textSecondary)
+                        } else if let lower = lowerSizeThreshold {
+                            Button(action: tryLowerThreshold) {
+                                Text(
+                                    figures: String(localized: "Try \(lower.label)"),
+                                    style: AppStyle.Typography.callout.weight(.semibold)
+                                )
+                            }
+                            .buttonStyle(.purge(.secondary, size: .small))
                         }
                     }
-                    if let summary {
-                        summaryCard(summary, forEmptyList: true)
+                    if let summary, LargeFileScanSummaryCard.hasRows(summary) {
+                        LargeFileScanSummaryCard(summary: summary)
                             .frame(width: Self.summaryCardWidth)
                     }
                 }
@@ -564,7 +586,7 @@ struct LargeFilesView: View {
     }
 
     private var emptyFilterState: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             // Name the query when there is one: with a search field in the chrome the
@@ -587,14 +609,7 @@ struct LargeFilesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
-    }
-
-    private var scanningPlaceholder: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Scanning large files")
+        .padding(.horizontal, AppStyle.Spacing.large)
     }
 
     private func toggleSelection(forFileID id: String) {
@@ -612,13 +627,6 @@ struct LargeFilesView: View {
         store.setAllLargeFilesSelected(!allOn, ids: ids)
     }
 
-    private var pageSubtitle: String {
-        let count = visibleFiles.count
-        let bytes = visibleFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let itemLabel = count == 1 ? String(localized: "file") : String(localized: "files")
-        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) to review")
-    }
-
 }
 
 private extension View {
@@ -633,40 +641,34 @@ private extension View {
             self
         }
     }
-
-    /// Suppresses the system focus ring on the search field (macOS 14+); a no-op on
-    /// older systems. The field draws its own capsule border on focus, and the ring
-    /// drawn on top of it stayed after the field lost focus.
-    @ViewBuilder
-    func focusEffectDisabledIfAvailable() -> some View {
-        if #available(macOS 14.0, *) {
-            focusEffectDisabled()
-        } else {
-            self
-        }
-    }
-
 }
 
-/// Delete button extracted so its count/label/enabled state observe the selection
-/// object directly — updating on selection without re-rendering the results List.
-private struct LargeFileDeleteButton: View {
+/// Keep Only in iCloud for the selected synced files (#106). It sits beside
+/// Select All under the iCloud chip only, where every row is a synced file, so
+/// it never reads as a second way to delete. Its own view observing the
+/// selection, so a tick never re-renders the List.
+private struct LargeFileRemoveDownloadButton: View {
     @EnvironmentObject private var store: PurgeStore
     @ObservedObject var selection: LargeFileSelection
+    let action: () -> Void
 
     var body: some View {
-        Button {
-            store.presentLargeFileDeletionSheet()
-        } label: {
+        let files = store.selectedRemovableDownloads
+        Button(action: action) {
+            // The same label as Delete Selected, so the size uses the rounded
+            // number font and counts the way that one does.
             AnimatedDeleteActionLabel(
-                inactiveTitle: String(localized: "Delete Selected"),
-                activeTitle: String(localized: "Delete Selected"),
-                selectedCount: store.selectedLargeFileCount,
-                selectedBytes: store.selectedLargeFileBytes
+                inactiveTitle: String(localized: "Keep Only in iCloud"),
+                activeTitle: String(localized: "Keep Only in iCloud"),
+                selectedCount: files.count,
+                selectedBytes: files.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                systemImage: "icloud"
             )
         }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedLargeFileCount == 0 || store.isDeleting)
+        .buttonStyle(.purge(.secondary))
+        .fixedSize()
+        .disabled(files.isEmpty || store.isDeleting)
+        .help("Free the space on this Mac and keep the selected files in iCloud Drive")
     }
 }
 
@@ -684,7 +686,7 @@ private struct LargeFileDuplicateStatus: View {
     var body: some View {
         Group {
             if duplicates.isChecking {
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.7)
@@ -694,7 +696,7 @@ private struct LargeFileDuplicateStatus: View {
                         .foregroundStyle(AppColors.textTertiary)
                         .lineLimit(1)
                 }
-                .padding(.leading, 4)
+                .padding(.leading, AppStyle.Spacing.xxSmall)
                 .transition(.opacity)
                 .accessibilityElement(children: .combine)
             }
@@ -714,6 +716,9 @@ private struct LargeFileSelectAllBar: View {
     /// Shown only under the Duplicates filter: selects every copy but one per group
     /// and opens the delete confirmation. nil elsewhere.
     var onKeepOneOfEach: (() -> Void)?
+    /// Shown when the scan found a file whose iCloud download can be removed
+    /// (#106). nil otherwise, so a Mac without iCloud Drive never sees it.
+    var onRemoveDownload: (() -> Void)?
 
     private var state: SelectAllTriState {
         guard !visibleIDs.isEmpty else { return .none }
@@ -732,6 +737,10 @@ private struct LargeFileSelectAllBar: View {
             .disabled(visibleIDs.isEmpty)
 
             Spacer()
+
+            if let onRemoveDownload {
+                LargeFileRemoveDownloadButton(selection: selection, action: onRemoveDownload)
+            }
 
             if let onKeepOneOfEach {
                 // Sits with the sort control, not beside "Select All": both are
@@ -763,134 +772,6 @@ private struct LargeFileSelectAllBar: View {
 /// look on each of the two containers `LargeFilesView` renders into. Geometry and
 /// tokens here are copied from `FilterChip` so it reads as one control family with
 /// the size and last-used menus sitting beside it.
-private struct LargeFileSearchField: View {
-    @Binding var query: String
-
-    @FocusState private var isFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Local mouse-down monitor installed only while the field is focused; see
-    /// `installOutsideClickResign`.
-    @State private var outsideClickMonitor: Any?
-    /// Set by Edit > Find when the field was not focused: the selection has to wait
-    /// for `isFocused` to land, or it would run before AppKit has a field editor.
-    @State private var selectsAllOnFocus = false
-
-    /// Matches FilterChip's metrics so the row's controls share a baseline.
-    private static let horizontalPadding: CGFloat = 10
-    private static let verticalPadding: CGFloat = 5
-
-    private var hasText: Bool { !query.isEmpty }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .imageScale(.small)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(width: 14, height: 14)
-                .accessibilityHidden(true)
-
-            TextField("Search", text: $query)
-                .textFieldStyle(.plain)
-                .font(AppStyle.Typography.body)
-                .foregroundStyle(AppColors.textPrimary)
-                .focused($isFocused)
-                .focusEffectDisabledIfAvailable()
-                .accessibilityLabel("Search large files by name")
-                // Escape clears rather than just unfocusing: an emptied field is the
-                // state the user wants back, and it's the one AppKit search fields
-                // give them.
-                .onExitCommand {
-                    if hasText {
-                        query = ""
-                    } else {
-                        isFocused = false
-                    }
-                }
-
-            // A real Button is fine here — unlike the result rows, this field lives
-            // in the controls chrome and never inside the List, so it can't trigger
-            // the scroll-to-clicked-row behaviour that forces rows to use tap gestures.
-            if hasText {
-                Button {
-                    query = ""
-                    isFocused = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(AppColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .help("Clear search")
-                .accessibilityLabel("Clear search")
-                .transition(.opacity)
-            }
-        }
-        .padding(.horizontal, Self.horizontalPadding)
-        .padding(.vertical, Self.verticalPadding)
-        .frame(width: 220)
-        .background {
-            Capsule(style: .continuous)
-                .fill(AppColors.fillSecondary)
-        }
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(
-                    isFocused ? AppColors.actionPrimary : AppColors.borderSubtle,
-                    lineWidth: 1
-                )
-        }
-        .contentShape(Capsule(style: .continuous))
-        // Clicking anywhere in the capsule focuses the field, not just the glyph-width
-        // of text already typed.
-        .onTapGesture { isFocused = true }
-        .focusedSceneValue(\.findAction, FindAction {
-            if isFocused {
-                FindAction.selectAllInFieldEditor()
-            } else {
-                selectsAllOnFocus = true
-                isFocused = true
-            }
-        })
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
-        .onChange(of: isFocused) { focused in
-            if focused {
-                installOutsideClickResign()
-                if selectsAllOnFocus { FindAction.selectAllInFieldEditor() }
-            } else {
-                removeOutsideClickResign()
-            }
-            selectsAllOnFocus = false
-        }
-        .onDisappear { removeOutsideClickResign() }
-    }
-
-    /// Clicks outside this capsule must drop focus, but SwiftUI leaves a focused
-    /// TextField's first responder in place when the click lands on anything
-    /// non-focusable — list rows, buttons, empty space — which is why the capsule
-    /// border used to stick around. While focused, a local monitor resigns first
-    /// responder for any mouse-down that didn't land on the field editor itself.
-    private func installOutsideClickResign() {
-        guard outsideClickMonitor == nil else { return }
-        outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            guard let window = event.window,
-                  let hitView = window.contentView?.hitTest(event.locationInWindow),
-                  hitView !== window.firstResponder
-            else { return event }
-            window.makeFirstResponder(nil)
-            return event
-        }
-    }
-
-    private func removeOutsideClickResign() {
-        if let monitor = outsideClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            outsideClickMonitor = nil
-        }
-    }
-}
-
 /// One duplicate group drawn as a container holding its copies.
 ///
 /// This is a single List row, not a Section: the copies are the *contents* of one
@@ -911,8 +792,8 @@ private struct DuplicateGroupCard: View {
     let onExcludeFolder: (LargeFile) -> Void
 
     private static let headerHeight: CGFloat = 20
-    private static let innerSpacing: CGFloat = 6
-    private static let padding: CGFloat = 10
+    private static let innerSpacing: CGFloat = AppStyle.Spacing.xxSmallPlus
+    private static let padding: CGFloat = AppStyle.Spacing.small
 
     /// Explicit, because the macOS List estimating this row's height is what
     /// makes a click scroll the list — the estimate/actual drift accumulates over
@@ -962,7 +843,7 @@ private struct DuplicateGroupCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             // Same colour as the title beside it: this marks the card as a group,
             // it isn't a warning, so it shouldn't pull the eye the way the yellow
             // check tint did.
@@ -982,7 +863,164 @@ private struct DuplicateGroupCard: View {
         .font(AppStyle.Typography.metadataEmphasis)
         .lineLimit(1)
         .frame(height: Self.headerHeight)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, AppStyle.Spacing.xxSmall)
+    }
+}
+
+/// Large Files while it waits for its scan, with a saved last scan (#283): the
+/// page as it was, faded. The chips carry the last scan's counts and the
+/// rows keep the exact shape of real ones, without names, since Large Files never
+/// saves them. The first file to land replaces it with the list.
+private struct LargeFilesLastScanGlass: View {
+    let lastScan: LargeFilesLastScan
+    let status: ScanWaitStatus
+
+    /// Title widths for the nameless rows, so they read as a list, not a pattern.
+    private static let titleWidths: [CGFloat] = [190, 150, 220, 170, 200, 140, 180, 160]
+
+    /// Enough rows to fill the page, never more than the scan found.
+    private var rowCount: Int { min(lastScan.count, Self.titleWidths.count) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            chips
+            ZStack {
+                rows
+                glass
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .padding(.top, AppStyle.Spacing.xSmall)
+    }
+
+    /// The last scan's chips, to look at: there is nothing to filter until files land.
+    private var chips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
+                FilterChip(
+                    style: .tab,
+                    label: String(localized: "All"),
+                    isSelected: true,
+                    leadingSystemImage: "square.grid.2x2",
+                    count: lastScan.count
+                )
+                ForEach(lastScan.kinds, id: \.category) { kind in
+                    FilterChip(
+                        style: .tab,
+                        label: kind.category.displayName,
+                        leadingSystemImage: kind.category.symbolName,
+                        count: kind.count
+                    )
+                }
+            }
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
+        }
+        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .opacity(0.55)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rows: some View {
+        VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
+            ForEach(0..<rowCount, id: \.self) { index in
+                LargeFileSkeletonRow(titleWidth: Self.titleWidths[index])
+            }
+        }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .opacity(0.4)
+        .accessibilityHidden(true)
+    }
+
+    /// The rows fade into the page itself, not under a material: a material
+    /// lightens what it covers, so the page read a shade lighter than the header
+    /// above it.
+    private var glass: some View {
+        capsule
+            .accessibilityElement(children: .combine)
+    }
+
+    private var capsule: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            icon
+                .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                Text(title)
+                    .font(AppStyle.Typography.headline)
+                Text(subtitle)
+                    .font(AppStyle.Typography.metadata.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.vertical, AppStyle.Spacing.small)
+        .padding(.leading, AppStyle.Spacing.small)
+        .padding(.trailing, AppStyle.Spacing.large)
+        .background(Capsule(style: .continuous).fill(AppColors.surfaceRaised))
+        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderStrong, lineWidth: 0.5))
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch status {
+        case .scanning, .waiting:
+            ProgressView()
+                .controlSize(.small)
+        case .notScanned:
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppColors.textTertiary)
+        }
+    }
+
+    private var title: String {
+        switch status {
+        case .scanning:
+            return String(localized: "Looking for large files again")
+        case .waiting(let behind):
+            guard let behind, behind != .largeFiles else { return String(localized: "Starting…") }
+            return String(localized: "Up next, after \(behind.displayName)")
+        case .notScanned:
+            return String(localized: "Use Scan to look again")
+        }
+    }
+
+    private var subtitle: String {
+        let size = formatBytes(lastScan.bytes)
+        let age = compactAgoText(from: lastScan.scannedAt, to: Date())
+        return lastScan.count == 1
+            ? String(localized: "Last scan: 1 file, \(size), \(age)")
+            : String(localized: "Last scan: \(lastScan.count) files, \(size), \(age)")
+    }
+}
+
+/// A Large Files row with no file in it: the same card, checkbox, thumbnail and
+/// size slots at the same height, so the list that replaces it doesn't move.
+private struct LargeFileSkeletonRow: View {
+    let titleWidth: CGFloat
+
+    var body: some View {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
+                .frame(width: 14, height: 14)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
+                .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
+                SkeletonBar(width: titleWidth, height: 10)
+                SkeletonBar(width: titleWidth * 0.6, height: 8)
+            }
+            Spacer(minLength: AppStyle.Spacing.small)
+            SkeletonBar(width: 56, height: 10)
+        }
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
+        .frame(height: LargeFileRow.contentHeight)
+        .modifier(ScanRowCardChrome())
+        .shimmering()
     }
 }
 
@@ -1003,6 +1041,9 @@ private struct LargeFileRow: View {
     let onToggle: () -> Void
     let onExclude: () -> Void
     let onExcludeFolder: () -> Void
+    /// Opens Remove Download for this file alone. Only offered when the scan
+    /// found its download removable (#106).
+    var onRemoveDownload: (() -> Void)?
 
     @State private var isContextMenuActive = false
 
@@ -1019,7 +1060,12 @@ private struct LargeFileRow: View {
 
     /// Built on right-click, not during `body` — see `ScanRowContextMenu.entries`.
     private func contextMenuEntries() -> [ScanRowMenuEntry] {
-        var entries: [ScanRowMenuEntry] = [.action(title: String(localized: "Exclude from scans"), handler: onExclude)]
+        var entries: [ScanRowMenuEntry] = []
+        if file.canRemoveDownload, let onRemoveDownload {
+            entries.append(.action(title: String(localized: "Keep Only in iCloud…"), handler: onRemoveDownload))
+            entries.append(.separator)
+        }
+        entries.append(.action(title: String(localized: "Exclude from scans"), handler: onExclude))
         if canExcludeFolder {
             entries.append(.action(title: String(localized: "Exclude folder \u{201C}\(folderName)\u{201D} from scans"), handler: onExcludeFolder))
         }
@@ -1077,19 +1123,19 @@ private struct LargeFileRow: View {
         // row selection, which also scrolls the row in — so the tap must blanket
         // the entire row. The thumbnail/location gestures inside rowMainContent
         // still win at their own hit points.
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             checkboxVisual
 
             rowMainContent
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             Text(file.formattedSize)
-                .font(AppStyle.Typography.metadata.weight(.medium))
+                .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                 .foregroundStyle(AppColors.textPrimary)
                 .monospacedDigit()
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .frame(height: Self.contentHeight)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -1135,32 +1181,26 @@ private struct LargeFileRow: View {
     }
 
     private var rowMainContent: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             // Tap gesture rather than a Button: a Button in a macOS List row makes
             // the List scroll the clicked row into view on click, shifting the list.
             LargeFileThumbnailIcon(file: file)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: quickLook)
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
+                .modifier(PointingHandOnHover())
                 .help("Quick Look")
                 .accessibilityLabel("Quick Look \(file.displayName)")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction(.default, quickLook)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text(file.displayName)
                     .font(AppStyle.Typography.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(file.locationLabel)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -1194,11 +1234,10 @@ private struct LargeFileRow: View {
                     }
 
                     if let otherCopyCount {
-                        let noun = otherCopyCount == 1 ? String(localized: "copy") : String(localized: "copies")
-                        AppBadge(text: String(localized: "\(otherCopyCount) other \(noun)"), tone: .warning)
+                        AppBadge(text: String(localized: "\(otherCopyCount) other copies"), tone: .warning)
                             .fixedSize()
                             .help("\(otherCopyCount + 1) files in this scan have identical contents, including this one.")
-                            .accessibilityLabel("\(otherCopyCount) other identical \(noun) found")
+                            .accessibilityLabel("\(otherCopyCount) other identical copies found")
                     }
                 }
                 .font(AppStyle.Typography.metadata)
@@ -1226,6 +1265,30 @@ private struct ExcludeFolderAccessibilityAction: ViewModifier {
 /// otherwise the category icon with a small extension badge. The fallback renders immediately so
 /// scrolling never blocks; the thumbnail loads off the main thread and fades in once ready, and
 /// `.task` cancels in-flight generation when the row scrolls off-screen.
+/// Shows the pointing hand over the view. A row the List rebuilds while the
+/// pointer is on it never gets its hover-out, so a bare push and pop left the
+/// hand on screen everywhere (#183). This pops on the way out too, and pushes
+/// at most once, as the Overview rows do.
+private struct PointingHandOnHover: ViewModifier {
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover(perform: setHovering)
+            .onDisappear { setHovering(false) }
+    }
+
+    private func setHovering(_ hovering: Bool) {
+        guard hovering != isHovering else { return }
+        isHovering = hovering
+        if hovering {
+            NSCursor.pointingHand.push()
+        } else {
+            NSCursor.pop()
+        }
+    }
+}
+
 private struct LargeFileThumbnailIcon: View {
     let file: LargeFile
 
@@ -1235,7 +1298,7 @@ private struct LargeFileThumbnailIcon: View {
     @State private var thumbnail: NSImage?
 
     private let slotSize = AppStyle.Row.listIconFrameSize
-    private let cornerRadius: CGFloat = 6
+    private let cornerRadius: CGFloat = AppStyle.Radius.sm
 
     private var cacheKey: String {
         LargeFileThumbnailService.cacheKey(path: file.id, modified: file.lastUsed)
@@ -1280,25 +1343,28 @@ private struct LargeFileThumbnailIcon: View {
             }
     }
 
-    /// The label sits over the icon at its natural width, so a long extension
-    /// (`.prlupd-part`, `.crdownload`) would spill onto the checkbox. Five
-    /// characters fit; anything longer is cut short.
+    /// The label sits over the icon and must stay inside it, or a long extension
+    /// (`.mlmodelc`, `.crdownload`) spills onto the checkbox. Four characters
+    /// fit; anything longer is cut short.
     private var extensionLabel: String {
-        fileExtension.count > 5 ? ".\(fileExtension.prefix(4))…" : ".\(fileExtension)"
+        fileExtension.count > 4 ? ".\(fileExtension.prefix(3))…" : ".\(fileExtension)"
     }
 
     @ViewBuilder
     private var extensionBadge: some View {
         if !fileExtension.isEmpty {
             Text(verbatim: extensionLabel)
-                .font(AppStyle.Typography.micro)
+                .font(AppStyle.Typography.iconLabel)
                 .lineLimit(1)
+                // A wide glyph run (`.www…`) shrinks a little rather than spill.
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(AppColors.textSecondary)
-                .padding(.horizontal, 3)
-                .padding(.vertical, 1)
+                .padding(.horizontal, AppStyle.Spacing.xxSmall)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
                 .background(Capsule(style: .continuous).fill(.regularMaterial))
                 .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 0.5))
-                .fixedSize()
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: slotSize, alignment: .trailing)
         }
     }
 
@@ -1322,43 +1388,6 @@ private struct LargeFileThumbnailIcon: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
             thumbnail = image
         }
-    }
-}
-
-struct LargeFilesHeaderActions: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    private var isQueued: Bool {
-        !store.isScanningLargeFiles && store.isScanQueued(.largeFiles)
-    }
-
-    private var isBusy: Bool {
-        store.isScanningLargeFiles || isQueued
-    }
-
-    private var scanTitle: String {
-        if isQueued { return ScanQueueLabels.queued }
-        return store.isScanningLargeFiles ? "Scanning..." : String(localized: "Scan")
-    }
-
-    var body: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Button {
-                store.requestScan(.largeFiles)
-            } label: {
-                CleaningButtonLabel(
-                    title: scanTitle,
-                    systemImage: isBusy ? nil : "arrow.clockwise",
-                    isCleaning: isBusy
-                )
-            }
-            .buttonStyle(.purge(.secondary))
-            .disabled(isBusy)
-            .keyboardShortcut("r", modifiers: [.command])
-
-            LargeFileDeleteButton(selection: store.largeFileSelection)
-        }
-        .fixedSize()
     }
 }
 
@@ -1418,7 +1447,7 @@ struct LargeFileDeletionConfirmSheet: View {
                         fileCard(file)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -1430,23 +1459,13 @@ struct LargeFileDeletionConfirmSheet: View {
                 LargeFileCautionNote { Text(iCloudWarning) }
             }
 
-            HStack(spacing: AppStyle.Spacing.small) {
-                Text("Freeing \(formatBytes(totalBytes))")
-                    .font(AppStyle.Typography.metadataEmphasis)
-                    .foregroundStyle(AppColors.textSecondary)
-
-                Spacer()
-
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(.purge(.secondary))
-                    .keyboardShortcut(.cancelAction)
-
-                Button("Move \(files.count) to Trash") {
-                    onConfirm()
-                }
-                .buttonStyle(.purge(.destructive))
-                .keyboardShortcut(.defaultAction)
-            }
+            RemovalSheetFooter(
+                sizeLine: RemovalSizeLine.text(toTrash: totalBytes),
+                confirmTitle: String(localized: "Move \(files.count) to Trash"),
+                itemCount: files.count,
+                onCancel: onCancel,
+                onConfirm: onConfirm
+            )
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 580, minHeight: 500)
@@ -1462,13 +1481,13 @@ struct LargeFileDeletionConfirmSheet: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(file.displayName)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(file.path.deletingLastPathComponent().path)
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textSecondary)
@@ -1491,7 +1510,7 @@ struct LargeFileDeletionConfirmSheet: View {
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
             Text(file.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
@@ -1526,7 +1545,7 @@ struct LargeFileDeletionConfirmSheet: View {
     /// thing to want. It just shouldn't happen by accident after a Select All.
     private var allCopiesWarning: some View {
         LargeFileCautionNote {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 ForEach(namedConsumedGroups) { group in
                     Text("You're deleting all \(group.copyCount) copies of \(groupLabel(group)). No copy will remain.")
                         .lineLimit(2)
@@ -1617,7 +1636,7 @@ struct DuplicateCleanupSheet: View {
                         setCard(set)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 280)
 
@@ -1626,7 +1645,7 @@ struct DuplicateCleanupSheet: View {
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
-                Text("Keeping \(request.sets.count), freeing \(formatBytes(reclaimedBytes))")
+                Text("Keeping \(request.sets.count), moving \(formatBytes(reclaimedBytes)) to Trash")
                     .font(AppStyle.Typography.metadataEmphasis)
                     .foregroundStyle(AppColors.textSecondary)
 
@@ -1660,11 +1679,11 @@ struct DuplicateCleanupSheet: View {
                     .truncationMode(.middle)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
                 Text("\(formatBytes(set.copies.first?.sizeBytes ?? 0)) each")
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .foregroundStyle(AppColors.textSecondary)
             }
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+            .padding(.vertical, AppStyle.Spacing.small)
 
             ForEach(Array(set.copies.enumerated()), id: \.element.id) { index, file in
                 if index > 0 {
@@ -1708,7 +1727,7 @@ struct DuplicateCleanupSheet: View {
             statusTag(isKeeper: isKeeper)
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+        .padding(.vertical, AppStyle.Spacing.small)
         .contentShape(Rectangle())
         .onTapGesture { keeperByGroup[set.id] = file.id }
         .accessibilityElement(children: .combine)
@@ -1727,7 +1746,7 @@ struct DuplicateCleanupSheet: View {
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(isKeeper ? AppColors.statusSafeText : AppColors.statusDangerText)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
             .background(
                 Capsule(style: .continuous)
                     .fill(isKeeper ? AppColors.statusSafeFill : AppColors.statusDangerFill)
@@ -1738,7 +1757,7 @@ struct DuplicateCleanupSheet: View {
 /// The cloud on a synced file, in the scan list and on both trash sheets. Gray,
 /// like Finder's: with Desktop & Documents syncing, most rows from those folders
 /// carry it, so it stays quiet.
-fileprivate struct LargeFileICloudMark: View {
+struct LargeFileICloudMark: View {
     var body: some View {
         Image(systemName: "icloud")
             .font(AppStyle.Typography.metadata)
@@ -1750,11 +1769,11 @@ fileprivate struct LargeFileICloudMark: View {
 
 /// The caution box on the large-file trash sheets: the all-copies note and the
 /// iCloud note. A warning, not a blocker.
-fileprivate struct LargeFileCautionNote<Content: View>: View {
+struct LargeFileCautionNote<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
@@ -1764,7 +1783,7 @@ fileprivate struct LargeFileCautionNote<Content: View>: View {
                 .foregroundStyle(AppColors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(10)
+        .padding(AppStyle.Spacing.small)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                 .fill(AppColors.statusCheckFill)

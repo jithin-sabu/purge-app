@@ -22,7 +22,7 @@ final class SettingsGuidePanel {
     private var onCancel: (() -> Void)?
 
     private static let width: CGFloat = 300
-    private static let gap: CGFloat = 14
+    private static let gap: CGFloat = AppStyle.Spacing.medium
     private static let systemSettingsBundleID = "com.apple.systempreferences"
 
     func show(_ guide: Guide, onCancel: @escaping () -> Void) {
@@ -148,7 +148,7 @@ struct SettingsGuideView: View {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                     HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
                         Text("\(index + 1).")
-                            .font(AppStyle.Typography.callout.weight(.semibold))
+                            .font(AppStyle.Typography.callout.weight(.semibold).numbers)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
                         Text(step)
@@ -185,13 +185,13 @@ struct SettingsGuideView: View {
         switch guide {
         case .installProfile:
             return [
-                String(localized: "In System Settings, double-click \"Purge: Apple Intelligence models removed\" under Downloaded."),
+                String(localized: "In System Settings, double-click \"\(AppleIntelligenceDownloadBlock.profileDisplayName)\" under Downloaded."),
                 String(localized: "Click Install…, then Install again when macOS asks."),
                 String(localized: "Enter your password if it asks for one."),
             ]
         case .removeProfile:
             return [
-                String(localized: "In System Settings, select \"Purge: Apple Intelligence models removed\"."),
+                String(localized: "In System Settings, select \"\(AppleIntelligenceDownloadBlock.profileDisplayName)\"."),
                 String(localized: "Click the minus button below the list, then Remove."),
                 String(localized: "Enter your password if it asks for one."),
             ]

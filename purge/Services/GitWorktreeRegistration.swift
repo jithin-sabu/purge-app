@@ -54,7 +54,7 @@ nonisolated enum GitWorktreeRegistration {
 
         // Compared by file identity, so `/var` vs `/private/var` or a linked home
         // cannot make the same `.git` look like two.
-        guard let ours = fileIdentity(at: dotGit.path) else { return .unknown }
+        guard let ours = FileIdentity(path: dotGit.path) else { return .unknown }
         switch entryKind(at: recordedPath, followingLinks: true) {
         case .missing:
             // The entry names a path that no longer exists: this folder was most likely
@@ -63,7 +63,7 @@ nonisolated enum GitWorktreeRegistration {
         case .unreadable:
             return .unknown
         case .regularFile, .directory, .other:
-            guard let theirs = fileIdentity(at: recordedPath) else { return .unknown }
+            guard let theirs = FileIdentity(path: recordedPath) else { return .unknown }
             // The entry belongs to another live checkout; this folder is a stray copy.
             return theirs == ours ? .registered : .orphaned
         }
@@ -80,11 +80,6 @@ nonisolated enum GitWorktreeRegistration {
         case unreadable
     }
 
-    private struct FileIdentity: Equatable {
-        let device: dev_t
-        let inode: ino_t
-    }
-
     private static func entryKind(at path: String, followingLinks: Bool) -> EntryKind {
         var info = stat()
         let result = followingLinks ? stat(path, &info) : lstat(path, &info)
@@ -96,12 +91,6 @@ nonisolated enum GitWorktreeRegistration {
         case S_IFDIR: return .directory
         default: return .other
         }
-    }
-
-    private static func fileIdentity(at path: String) -> FileIdentity? {
-        var info = stat()
-        guard stat(path, &info) == 0 else { return nil }
-        return FileIdentity(device: info.st_dev, inode: info.st_ino)
     }
 
     /// `/Volumes/<name>/…` whose volume is not there right now.

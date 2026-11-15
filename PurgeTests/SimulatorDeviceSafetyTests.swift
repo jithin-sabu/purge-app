@@ -65,14 +65,12 @@ struct SimulatorDeviceSafetyTests {
             for lastUsedAt in dates {
                 for deviceCount in [nil, 0, 1, 3] as [Int?] {
                     for isXcodeDefault in [nil, true, false] as [Bool?] {
-                        for isLegacyImage in [true, false] {
-                            let runtime = SimulatorRuntime.safetyInfo(
-                                platformName: "iOS", version: "18.4", state: state, sizeBytes: 8_000_000_000,
-                                lastUsedAt: lastUsedAt, deviceCount: deviceCount,
-                                isXcodeDefault: isXcodeDefault, isLegacyImage: isLegacyImage
-                            )
-                            #expect(runtime.level == .medium)
-                        }
+                        let runtime = SimulatorRuntime.safetyInfo(
+                            platformName: "iOS", version: "18.4", state: state, sizeBytes: 8_000_000_000,
+                            lastUsedAt: lastUsedAt, deviceCount: deviceCount,
+                            isXcodeDefault: isXcodeDefault
+                        )
+                        #expect(runtime.level == .medium)
                     }
                 }
             }

@@ -44,7 +44,7 @@ nonisolated struct AppleIntelligenceModelSet: Equatable, Sendable, Identifiable 
     let recovery: AppleIntelligenceRecovery
 
     var id: String { name }
-    var folderName: String { assetType.replacingOccurrences(of: ".", with: "_") }
+    var folderName: String { AppleIntelligenceModelReader.folderName(for: assetType) }
 }
 
 /// The five asset sets behind Apple Intelligence. Names, types and recovery
@@ -136,13 +136,15 @@ nonisolated enum AppleIntelligenceFolderState: String, Sendable {
 /// One set as read from MobileAsset's records.
 nonisolated struct AppleIntelligenceSetReading: Equatable, Sendable {
     let set: AppleIntelligenceModelSet
-    /// Records whose descriptor says the files are on the filesystem.
+    /// Records whose asset folder is on disk, or that couldn't be checked.
+    /// A record left from a purged version doesn't count (#305).
     let recordsOnDisk: Int
     /// Records macOS is removing right now.
     let eliminating: Int
     /// Apple's own byte count, newest version of each model only. Several
     /// versions of one model can be on the filesystem at once, and summing them
-    /// all overstates what a removal frees. Nil when a record had no readable size.
+    /// all overstates what a removal frees. Nil when a record had no readable
+    /// size or its asset folder couldn't be checked.
     let latestBytes: Int64?
     let folder: AppleIntelligenceFolderState
 
@@ -192,14 +194,26 @@ nonisolated enum AppleIntelligenceOutcome: Equatable, Sendable {
     /// before versus after: as System Settings shows it, and in raw blocks.
     /// Either is nil unless it cleared the noise floor.
     case removed(sets: Int, freedShownBytes: Int64?, freedRawBytes: Int64?)
-    case someLeft(removed: Int, left: Int, reason: String)
+    /// `reason` is short enough for the row. `details` is everything macOS
+    /// answered, for the Details button; nil when Purge has no more to say (#343).
+    case someLeft(removed: Int, left: Int, reason: String, details: String?)
     /// The profile was never installed, so nothing was released.
     case profileNotInstalled
-    case notReady(String)
+    case notReady(String, details: String?)
     case downloadRequested
     /// Download Again was accepted, but nothing arrived while Purge watched.
     case downloadNotStarted
     /// The profile is still installed, so downloads stay blocked.
     case profileStillInstalled
-    case downloadRequestFailed(String)
+    case downloadRequestFailed(String, details: String?)
+
+    /// What macOS answered when the action failed, for the row's Details button.
+    var details: String? {
+        switch self {
+        case .someLeft(_, _, _, let details), .notReady(_, let details), .downloadRequestFailed(_, let details):
+            return details
+        case .removed, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled:
+            return nil
+        }
+    }
 }

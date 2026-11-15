@@ -25,6 +25,67 @@ enum CacheDiscoveryPaths {
         "Crashpad/completed"
     ]
 
+    // Crashpad, the crash reporter in Chromium and Electron, keeps its reports in
+    // a `Crashpad` folder. It writes each report in `new`, renames it into
+    // `pending` once it is finished, and into `completed` once it is sent or the
+    // app skips sending it. Every time the app starts, Crashpad makes `new`,
+    // `pending`, `completed` and `settings.dat` again if they are missing. A
+    // report in `new` is still being written, so `new` is never offered.
+
+    nonisolated static let crashpadFolderName = "Crashpad"
+
+    /// The report folders Purge offers inside a Crashpad folder.
+    nonisolated static let crashpadCompletedName = "completed"
+    nonisolated static let crashpadPendingName = "pending"
+
+    /// Classification name for every `Crashpad/pending` folder: finished crash
+    /// reports an app has not sent yet (#367). They share one Check First row, so
+    /// they never make an app's own cache row Check First, and Clean Safe Items
+    /// and scheduled cleans never take them.
+    nonisolated static let crashpadPendingKey = "Unsent Crash Reports"
+
+    /// How many folders may sit between an app's Application Support folder and
+    /// its `Crashpad` folder: none for `Codex/Crashpad`, one for
+    /// `com.openai.codex/web/Crashpad`, two for `Figma/DesktopProfile/v43/Crashpad`.
+    nonisolated static let crashpadMaxDepth = 2
+
+    /// A Crashpad report database: a real, visible `Crashpad` folder with
+    /// Crashpad's `settings.dat` file and its `new` folder inside. A folder that
+    /// is merely named Crashpad has neither.
+    nonisolated static func isCrashpadDatabase(_ folder: URL) -> Bool {
+        guard folder.lastPathComponent == crashpadFolderName, isVisibleRealDirectory(folder) else { return false }
+        let settings = folder.appendingPathComponent("settings.dat", isDirectory: false)
+        return (try? settings.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+            && isRealDirectory(folder.appendingPathComponent("new", isDirectory: true))
+    }
+
+    /// A `Crashpad/pending` folder, by its last two names. Sorts it onto the
+    /// Unsent Crash Reports row and its Check First tier. Never a reason to offer it.
+    nonisolated static func isCrashpadPendingFolder(_ url: URL) -> Bool {
+        url.lastPathComponent == crashpadPendingName
+            && url.deletingLastPathComponent().lastPathComponent == crashpadFolderName
+    }
+
+    /// Whether `parts`, a path inside the Application Support folder `appRoot`, is
+    /// the `pending` or `completed` folder of a Crashpad database at most
+    /// `crashpadMaxDepth` folders down. The app folder, every folder on the way and
+    /// the report folder must be real, visible folders, as discovery walks them:
+    /// a link as the app folder would send the move outside Application Support.
+    /// The plain `Crashpad/completed` in `applicationSupportRelativeCachePaths` is
+    /// allowed by its name and needs none of this.
+    nonisolated static func isCrashpadReportsPath(_ parts: [String], appRoot: URL) -> Bool {
+        guard (2...(crashpadMaxDepth + 2)).contains(parts.count),
+              [crashpadPendingName, crashpadCompletedName].contains(parts[parts.count - 1]),
+              !appRoot.lastPathComponent.hasPrefix("."), isVisibleRealDirectory(appRoot) else { return false }
+        var folder = appRoot
+        for part in parts.dropLast() {
+            folder = folder.appendingPathComponent(part, isDirectory: true)
+            guard !part.hasPrefix("."), isVisibleRealDirectory(folder) else { return false }
+        }
+        return isCrashpadDatabase(folder)
+            && isVisibleRealDirectory(folder.appendingPathComponent(parts[parts.count - 1], isDirectory: true))
+    }
+
     /// Cache folder names under Chromium `User Data/<profile>/`.
     nonisolated static let chromiumProfileCacheNames: Set<String> = [
         "GPUCache",
@@ -37,11 +98,12 @@ enum CacheDiscoveryPaths {
         "GraphiteDawnCache"
     ]
 
-    /// Relative paths under a Chromium profile directory.
-    nonisolated static let chromiumProfileRelativePaths: [String] = [
-        "Service Worker/CacheStorage",
-        "Service Worker/ScriptCache"
-    ]
+    // Nothing in a `Service Worker` folder is offered, in any of these shapes.
+    // `ScriptCache` holds each site's worker scripts, and Chromium deletes a
+    // registration whose script it can't read, with the site's web push
+    // subscription. `CacheStorage` holds installed web apps' offline content.
+    // Browsers keep their profiles in these shapes too (`Google/Chrome Beta/Default`,
+    // `Dia/User Data/Default`), and the user must visit each site again.
 
     /// Application Support roots that are not app caches (handled elsewhere or sensitive).
     nonisolated static let excludedApplicationSupportRoots: Set<String> = [
@@ -84,38 +146,142 @@ enum CacheDiscoveryPaths {
 
     /// Whether `parts`, a path inside the Application Support folder `appRoot`,
     /// is a cache Purge offers there: a cache directly in an Electron app's
-    /// folder, a cache in its Chromium `User Data` folder, or `Crashpad/completed`.
+    /// folder, a cache in its Chromium `User Data` folder, a cache in a Chromium
+    /// storage folder one or two levels down, `Crashpad/completed`, or the
+    /// `pending` or `completed` folder of a Crashpad database up to two levels
+    /// down. Never a `Service Worker` cache.
     /// The name is never enough by itself. The folder it sits in must be a
     /// Chromium data folder, and `Cache` needs Chromium's layout inside.
     /// `applicationSupportCacheURLs` lists exactly these paths, and
     /// `DeletionSafetyPolicy` allows exactly these.
     nonisolated static func isApplicationSupportCachePath(_ parts: [String], appRoot: URL) -> Bool {
         if applicationSupportRelativeCachePaths.contains(parts.joined(separator: "/")) { return true }
+        if isCrashpadReportsPath(parts, appRoot: appRoot) { return true }
         if parts.count == 1 {
             return isChromiumDataFolder(appRoot)
                 && isChromiumCacheFolder(appRoot.appendingPathComponent(parts[0], isDirectory: true),
                                          names: applicationSupportDirectCacheNames)
         }
-        guard parts.first == "User Data" else { return false }
-        return isChromiumUserDataCachePath(
-            Array(parts.dropFirst()),
-            userData: appRoot.appendingPathComponent("User Data", isDirectory: true)
-        )
+        if parts.first == "User Data",
+           isChromiumUserDataCachePath(
+               Array(parts.dropFirst()),
+               userData: appRoot.appendingPathComponent("User Data", isDirectory: true)
+           ) {
+            return true
+        }
+        return isNestedChromiumStorageCachePath(parts, appRoot: appRoot)
+    }
+
+    /// How far below an app's Application Support folder a Chromium storage folder
+    /// is looked for. Chrome keeps its data in `Google/Chrome Beta` and its profiles
+    /// in `Google/Chrome Beta/Default`, Figma in `Figma/DesktopProfile/v43`, and
+    /// Electron apps keep one per session in `Partitions/<name>` (#323).
+    nonisolated static let nestedChromiumStorageMaxDepth = 2
+
+    /// Whether `parts` is a cache in a Chromium storage folder at most
+    /// `nestedChromiumStorageMaxDepth` folders below `appRoot`. A storage folder
+    /// holds Chromium's `Local State` or `Network Persistent State`, and only the
+    /// cache names directly in it count. Every folder on the way down must be a
+    /// real folder, not a link, and hidden folders are skipped, as discovery
+    /// skips them.
+    nonisolated static func isNestedChromiumStorageCachePath(_ parts: [String], appRoot: URL) -> Bool {
+        let depth = parts.count - 1
+        guard (1...nestedChromiumStorageMaxDepth).contains(depth) else { return false }
+        var storage = appRoot
+        for part in parts.prefix(depth) {
+            storage = storage.appendingPathComponent(part, isDirectory: true)
+            guard !part.hasPrefix("."), isRealDirectory(storage) else { return false }
+        }
+        return isChromiumDataFolder(storage)
+            && isChromiumCacheFolder(storage.appendingPathComponent(parts[depth], isDirectory: true),
+                                     names: applicationSupportDirectCacheNames)
+    }
+
+    /// A folder that is not a link. `isDirectoryKey` is false for a link to a folder.
+    private nonisolated static func isRealDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// A real folder Finder shows: no leading dot and no hidden flag. The walk
+    /// skips hidden folders, but a name Purge builds itself, like `Crashpad`,
+    /// needs the check made here.
+    private nonisolated static func isVisibleRealDirectory(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isHiddenKey]) else { return false }
+        return values.isDirectory == true && values.isHidden != true
+    }
+
+    /// Readable, non-hidden folders one and two levels below `appRoot`, links
+    /// left out. Both nested walks share it: Chromium storage folders and
+    /// Crashpad databases are looked for at the same depths.
+    nonisolated static func subfoldersBelow(_ appRoot: URL, access: ScanAccess = .full) -> [URL] {
+        /// Readable, non-hidden folders directly in `folder`, links left out.
+        func subfolders(of folder: URL) -> [URL] {
+            guard let children = try? FileManager.default.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { return [] }
+            return children.filter {
+                ProtectedLocations.isReadable($0, access: access) && isRealDirectory($0)
+            }
+        }
+
+        var results: [URL] = []
+        var level = [appRoot]
+        for _ in 1...max(nestedChromiumStorageMaxDepth, crashpadMaxDepth) {
+            level = level.flatMap(subfolders(of:))
+            results += level
+        }
+        return results
+    }
+
+    /// Chromium storage folders one and two levels below `appRoot`, in the shape
+    /// `isNestedChromiumStorageCachePath` accepts. Links are never followed.
+    nonisolated static func nestedChromiumStorageFolders(
+        in appRoot: URL,
+        access: ScanAccess = .full,
+        subfolders: [URL]? = nil
+    ) -> [URL] {
+        (subfolders ?? subfoldersBelow(appRoot, access: access))
+            .filter { isChromiumDataFolder($0, access: access) }
+    }
+
+    /// The `pending` and `completed` folders of every Crashpad database in
+    /// `appRoot` or up to `crashpadMaxDepth` folders below it, in the shape
+    /// `isCrashpadReportsPath` accepts. `subfolders` is `subfoldersBelow(appRoot)`.
+    nonisolated static func crashpadReportFolders(
+        in appRoot: URL,
+        access: ScanAccess = .full,
+        subfolders: [URL]? = nil
+    ) -> [URL] {
+        var results: [URL] = []
+        for parent in [appRoot] + (subfolders ?? subfoldersBelow(appRoot, access: access)) {
+            let crashpad = parent.appendingPathComponent(crashpadFolderName, isDirectory: true)
+            guard ProtectedLocations.isReadable(crashpad, access: access), isCrashpadDatabase(crashpad) else {
+                continue
+            }
+            for name in [crashpadCompletedName, crashpadPendingName] {
+                let folder = crashpad.appendingPathComponent(name, isDirectory: true)
+                guard ProtectedLocations.isReadable(folder, access: access), isVisibleRealDirectory(folder) else {
+                    continue
+                }
+                results.append(folder)
+            }
+        }
+        return results
     }
 
     /// Whether `parts`, a path inside a Chromium `User Data` folder, is a cache
-    /// at its root, a cache in one of its profiles, or a profile's Service Worker
-    /// cache. Never the folder itself, a profile, or anything else in it.
+    /// at its root or a cache in one of its profiles. Never the folder itself, a
+    /// profile, its `Service Worker` folder, or anything else in it.
     nonisolated static func isChromiumUserDataCachePath(_ parts: [String], userData: URL) -> Bool {
-        guard !parts.isEmpty, parts.count <= 3, isChromiumDataFolder(userData) else { return false }
+        guard !parts.isEmpty, parts.count <= 2, isChromiumDataFolder(userData) else { return false }
         let url = parts.reduce(userData) { $0.appendingPathComponent($1, isDirectory: true) }
         switch parts.count {
         case 1:
             return isChromiumCacheFolder(url, names: applicationSupportDirectCacheNames)
-        case 2:
-            return isChromiumCacheFolder(url, names: chromiumProfileCacheNames)
         default:
-            return chromiumProfileRelativePaths.contains("\(parts[1])/\(parts[2])")
+            return isChromiumCacheFolder(url, names: chromiumProfileCacheNames)
         }
     }
 
@@ -174,6 +340,22 @@ enum CacheDiscoveryPaths {
             appendIfExists(url)
         }
 
+        // Every storage folder further down: a browser's data folder and its
+        // profiles, a versioned Figma profile, an Electron session partition (#323).
+        let subfolders = subfoldersBelow(appRoot, access: access)
+        for storage in nestedChromiumStorageFolders(in: appRoot, access: access, subfolders: subfolders) {
+            for name in applicationSupportDirectCacheNames.sorted() {
+                appendIfExists(storage.appendingPathComponent(name, isDirectory: true),
+                               cacheNames: applicationSupportDirectCacheNames)
+            }
+        }
+
+        // Crash reports in every Crashpad database, also further down:
+        // `com.openai.codex/web/Crashpad`, `Figma/DesktopProfile/v43/Crashpad` (#367).
+        for folder in crashpadReportFolders(in: appRoot, access: access, subfolders: subfolders) {
+            appendIfExists(folder)
+        }
+
         return results
     }
 
@@ -227,9 +409,6 @@ enum CacheDiscoveryPaths {
             }
             for name in chromiumProfileCacheNames {
                 appendIfExists(profileDir.appendingPathComponent(name, isDirectory: true), chromiumProfileCacheNames)
-            }
-            for relative in chromiumProfileRelativePaths {
-                appendIfExists(profileDir.appendingPathComponent(relative, isDirectory: true), nil)
             }
         }
     }
@@ -478,6 +657,23 @@ enum CacheDiscoveryPaths {
         return frameworks
             .appendingPathComponent(name, isDirectory: true)
             .appendingPathComponent("Versions", isDirectory: true)
+    }
+
+    /// The browser a framework version folder belongs to, `Google Chrome` for
+    /// `…/Google Chrome.app/Contents/Frameworks/…/Versions/155.0`. Walks up to the
+    /// `.app` rather than counting folders, so a row never reads "Contents Old Version".
+    nonisolated static func chromiumBrowserAppName(forFrameworkVersion versionURL: URL) -> String {
+        var url = versionURL.standardizedFileURL
+        while url.pathComponents.count > 1 {
+            url = url.deletingLastPathComponent()
+            if url.pathExtension == "app" {
+                return url.deletingPathExtension().lastPathComponent
+            }
+        }
+        // Not inside a bundle: name the framework instead of a folder like `Contents`.
+        let framework = versionURL.deletingLastPathComponent().deletingLastPathComponent()
+        return framework.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: " Framework", with: "")
     }
 
     /// Stale Chromium framework versions inside `.app` bundles (not the `Current` symlink target).

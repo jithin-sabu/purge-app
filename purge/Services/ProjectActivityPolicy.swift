@@ -43,9 +43,13 @@ nonisolated enum ProjectActivityPolicy {
         access: ScanAccess,
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> Bool {
-        let spellings = pathSpellings(of: projectRoot, access: access, home: home)
+        // Ignores case, like the default APFS volume: a shell in `~/developer/app`
+        // is working in `~/Developer/app` (#175). On a case-sensitive volume this
+        // only errs toward hiding a project.
+        let spellings = pathSpellings(of: projectRoot, access: access, home: home).map { $0.lowercased() }
         let hasProcessInside = live.workingDirectories.contains { directory in
-            spellings.contains { directory == $0 || directory.hasPrefix($0 + "/") }
+            let directory = directory.lowercased()
+            return spellings.contains { PathContainment.isSameOrInside(directory, $0) }
         }
         if hasProcessInside { return true }
 
@@ -163,7 +167,7 @@ nonisolated enum ProjectActivityPolicy {
     static func gitDirectory(forProject projectRoot: URL, access: ScanAccess, home: URL) -> URL? {
         let homePath = home.path
         var candidate = projectRoot
-        while candidate.path.hasPrefix(homePath + "/") {
+        while PathContainment.isInside(candidate.path, homePath) {
             let dotGit = candidate.appendingPathComponent(".git", isDirectory: false)
             if modificationDate(dotGit) != nil {
                 guard ProtectedLocations.isReadable(dotGit, access: access, home: home),

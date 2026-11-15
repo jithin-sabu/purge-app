@@ -15,17 +15,25 @@ nonisolated struct PermissionChecker {
             home.appendingPathComponent("Library/Application Support", isDirectory: true)
         ]
 
-        for url in probes {
-            do {
-                _ = try FileManager.default.contentsOfDirectory(
-                    at: url,
-                    includingPropertiesForKeys: nil,
-                    options: [.skipsSubdirectoryDescendants]
-                )
-            } catch {
-                return false
-            }
+        return probes.allSatisfy(Self.canList)
+    }
+
+    /// Reads the first entry rather than the whole listing (#190). macOS refuses a
+    /// protected folder on opening it, so the answer is the same, and Containers
+    /// alone holds hundreds of entries. An empty folder passes and a missing one
+    /// fails, as they did with the full listing.
+    static func canList(_ url: URL) -> Bool {
+        var failed = false
+        let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [],
+            options: [.skipsSubdirectoryDescendants]
+        ) { _, _ in
+            failed = true
+            return false
         }
-        return true
+        guard let enumerator else { return false }
+        _ = enumerator.nextObject()
+        return !failed
     }
 }

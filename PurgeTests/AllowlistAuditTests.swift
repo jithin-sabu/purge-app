@@ -94,7 +94,7 @@ struct AllowlistNoLongerSafeTests {
 
     @Test(arguments: [
         "Maven Cache", "Gradle Cache", "NuGet Packages", "Cabal Packages",
-        "SBT Cache", "Playwright Browsers",
+        "SBT Cache", "Unused Playwright Browsers",
     ])
     func bigDownloadStoresAreCheckFirst(label: String) {
         let info = DevScanner.automaticSafetyInfo(forDevToolLabel: label, primaryPath: nil)
@@ -156,6 +156,37 @@ struct EditorWorkspaceStoragePolicyTests {
         let inDocuments = URL(fileURLWithPath: "\(AuditPaths.home)/Documents/purge-test-\(UUID().uuidString)")
         let entry = try makeEntry(in: root, json: #"{"folder":"\#(inDocuments.absoluteString)"}"#)
         #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited))
+    }
+
+    /// Records every path it is asked about.
+    private final class SpyFileManager: FileManager, @unchecked Sendable {
+        private(set) var paths: [String] = []
+        override func fileExists(atPath path: String) -> Bool {
+            paths.append(path)
+            return super.fileExists(atPath: path)
+        }
+        override func fileExists(atPath path: String, isDirectory: UnsafeMutablePointer<ObjCBool>?) -> Bool {
+            paths.append(path)
+            return super.fileExists(atPath: path, isDirectory: isDirectory)
+        }
+        override func destinationOfSymbolicLink(atPath path: String) throws -> String {
+            paths.append(path)
+            return try super.destinationOfSymbolicLink(atPath: path)
+        }
+    }
+
+    /// Looking at a removable or network volume can ask for permission, so a
+    /// limited scan never looks under `/Volumes` (#183).
+    @Test
+    func aLimitedScanNeverLooksAtAVolume() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let entry = try makeEntry(in: root, json: #"{"folder":"file:///Volumes/Purge-Test-\#(UUID().uuidString)/app"}"#)
+        let spy = SpyFileManager()
+
+        #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited, fileManager: spy))
+        #expect(!spy.paths.contains { $0.hasPrefix("/Volumes") })
     }
 }
 
@@ -235,10 +266,21 @@ struct AllowlistExplanationDataTests {
     }
 
     /// These names belong to folders that are not caches: installed Homebrew
-    /// packages, committed git hooks, and installed tool versions.
-    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices"])
+    /// packages, committed git hooks, installed tool versions, and tool folders
+    /// that keep config or the tool itself next to a cache (`.moon`, `.nx`,
+    /// `~/.hex`) (#184).
+    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices", ".moon", ".nx", ".hex"])
     func nonCacheFolderNamesHaveNoEntry(name: String) {
         #expect(ExplanationDatabase.matchBundledDatabase(folderName: name) == nil)
+    }
+
+    /// A sandboxed app can keep SwiftPM's cache in its own container, and the
+    /// container scan looks that folder up by its name, so the entry stays even
+    /// though Dev Tools owns `~/Library/Caches/org.swift.swiftpm` (#184).
+    @Test
+    func containerSwiftPMCacheKeepsItsEntry() {
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "org.swift.swiftpm") == "swiftpm")
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "org.swift.swiftpm")?.safetyLevel == .safe)
     }
 
     @Test
@@ -252,9 +294,66 @@ struct AllowlistExplanationDataTests {
         #expect(AuditPaths.evaluate(".flutter") != .allow)
     }
 
+    /// Dev Tools listed `~/.git/worktrees` once, but the allowlist never let it
+    /// through, so the row was removed (#184).
+    @Test
+    func gitWorktreeRecordsAreNotOffered() {
+        #expect(AuditPaths.evaluate(".git/worktrees") != .allow)
+    }
+
     @Test
     func containerManagerCacheIsNeverOffered() {
         #expect(AuditPaths.evaluate("Library/Caches/com.apple.containermanagerd") == .blockedNeverDelete)
+    }
+
+    /// The row is Safe, and its text once said Mise would have to download every
+    /// tool again. The cache holds version lists; installs live elsewhere (#191).
+    @Test
+    func miseTextMatchesItsSafeTag() throws {
+        let record = try #require(ExplanationDatabase.record(forKey: "mise-cache"))
+        #expect(record.tag == "safe")
+        #expect(record.explanation.contains("Installed tools stay"))
+        #expect(!record.explanation.contains("re-download any tools"))
+    }
+
+    @Test(arguments: ["dotnet-bin", "dotnet-obj"])
+    func dotNetNamesKeepTheirDot(key: String) {
+        #expect(ExplanationDatabase.record(forKey: key)?.displayName.hasPrefix(".NET ") == true)
+    }
+
+    /// "Comet" is the Comet browser's own folder name. As an alias of the
+    /// updater entry it gave the browser's caches the updater's name and tier (#183).
+    @Test
+    func cometBrowserIsNotTheUpdater() {
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "Comet") != "perplexity-updater")
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "ai.perplexity.CometUpdater") == "perplexity-updater")
+    }
+
+    /// The rows picked the "newest" extension by folder name alone and never
+    /// resolved to a tier, so they were sized on every scan and never shown (#183).
+    @Test(arguments: ["obsolete-cursor-extension", "obsolete-vscode-extension"])
+    func obsoleteExtensionEntriesAreGone(key: String) {
+        #expect(ExplanationDatabase.record(forKey: key) == nil)
+    }
+
+    /// Their allow rule went too. It let through any folder directly inside the
+    /// extensions folder, installed extensions included, and its tier rule
+    /// called them Safe (#183).
+    @Test(arguments: [".vscode/extensions/ms-python.python-2026.1.0", ".cursor/extensions/esbenp.prettier-vscode-11.0.0"])
+    func installedExtensionsAreNeverAllowed(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow)
+        #expect(SafetyTierList.evaluate(folderName: (relative as NSString).lastPathComponent, path: AuditPaths.url(relative)) != .safe)
+    }
+
+    /// Go's build cache is `~/Library/Caches/go-build` on macOS. Dev Tools listed
+    /// only `~/.cache/go-build`, so the real one showed again under App Caches (#183).
+    @Test
+    func goBuildCacheIsOneDevToolsRow() {
+        let path = AuditPaths.url("Library/Caches/go-build").standardizedFileURL.path
+        #expect(DevScanner.claimedGlobalCachePaths().contains(path))
+        #expect(AuditPaths.evaluate("Library/Caches/go-build") == .allow)
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Go Module Cache", primaryPath: nil)
+        #expect(info.level == .safe)
     }
 }
 
@@ -450,6 +549,10 @@ struct AllowlistAdditionTests {
         ".expo/state.json",
         ".pyenv/versions",
         ".rbenv/versions",
+        // Mise's installs, which the Safe Mise row's text promises stay (#191).
+        ".local/share/mise",
+        ".local/share/mise/installs",
+        ".local/share/mise/installs/node/22.11.0",
         ".conda/envs",
         "miniforge3/envs",
         "Library/Messages/chat.db",
@@ -462,6 +565,9 @@ struct AllowlistAdditionTests {
         "Downloads/X.crdownload/inner.bin",
         ".oh-my-zsh/custom",
         "Movies/My Film.mov",
+        // Gradle's own folder, which a stray `~/settings.gradle` made a project
+        // artifact (#190). Its caches are separate rows.
+        ".gradle",
     ])
     func neighboursStayOut(relative: String) {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
@@ -488,6 +594,73 @@ struct AllowlistAdditionTests {
         #expect(info.level == level, "\(label) is \(info.level)")
     }
 
+    @Test
+    func prekCacheDefaultsToCheckFirstAndKeepsRecoveryPatches() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-audit-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let claimed = DevScanner.claimedGlobalCachePaths(home: home)
+        for folder in ["repos", "hooks", "tools", "cache"] {
+            let path = ".cache/prek/\(folder)"
+            #expect(claimed.contains(home.appendingPathComponent(path).standardizedFileURL.path))
+            #expect(AuditPaths.evaluate(path) == .allow)
+        }
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "prek Cache", primaryPath: nil).level == .medium)
+        for path in [".cache", ".cache/prek", ".cache/prek/patches", ".cache/prek/patches/123-456.patch",
+                     ".cache/prek/repos-backup", ".cache/prek-backup/repos", ".config/prek"] {
+            #expect(!claimed.contains(home.appendingPathComponent(path).standardizedFileURL.path))
+            #expect(AuditPaths.evaluate(path) != .allow)
+        }
+    }
+
+    @Test(arguments: ["tools", "tools/rust/1.90/bin/cargo"])
+    func keptPrekHooksKeepTheirManagedTools(relative: String) {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-\(UUID().uuidString)", isDirectory: true)
+        let root = home.appendingPathComponent(".cache/prek", isDirectory: true)
+        let path = root.appendingPathComponent(relative)
+        let hooks = root.appendingPathComponent("hooks", isDirectory: true)
+        var hooksExcluded = false
+        let isExcluded: (URL) -> Bool = { hooksExcluded && $0 == hooks }
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+        hooksExcluded = true
+        #expect(DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+        hooksExcluded = false
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+    }
+
+    @Test(arguments: ["repos", "hooks", "cache", "patches", "tools-backup", "../prek-backup/tools"])
+    func prekToolsDependencyGuardLeavesOtherPathsAlone(relative: String) {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-\(UUID().uuidString)", isDirectory: true)
+        let path = home.appendingPathComponent(".cache/prek/\(relative)")
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: { _ in true }))
+    }
+
+    // The allowlist accepts `.cache/prek/repos` by its text, so a store that is a link
+    // to another folder is caught only by this recheck.
+    @Test(arguments: [true, false])
+    func prekStoreReachedThroughALinkIsRefused(storeIsLink: Bool) throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("prek-link-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let store = home.appendingPathComponent(".cache/prek", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        let folders = ["repos", "hooks", "tools", "cache"]
+        if storeIsLink {
+            try fm.createDirectory(at: home.appendingPathComponent(".cache", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: store, withDestinationURL: elsewhere)
+        }
+        for folder in folders {
+            try fm.createDirectory(at: (storeIsLink ? elsewhere : store).appendingPathComponent(folder, isDirectory: true),
+                                   withIntermediateDirectories: true)
+        }
+        for folder in folders {
+            let url = store.appendingPathComponent(folder, isDirectory: true)
+            #expect(fm.fileExists(atPath: url.path))
+            #expect(DeletionSafetyPolicy.prekStoreLinkRefusesDeletion(url, home: home.path) == storeIsLink, "\(folder)")
+        }
+    }
+
     @Test(arguments: [
         ("Device Software Updates", SafetyLevel.safe),
         ("CacheClip", .safe),
@@ -496,6 +669,7 @@ struct AllowlistAdditionTests {
         ("Mail Downloads", .medium),
         ("Unfinished Downloads", .medium),
         ("Electron Updater Downloads", .safe),
+        ("Unsent Crash Reports", .medium),
         ("node-gyp", .safe),
         ("typescript", .safe),
         ("claude-cli-nodejs", .safe),
@@ -728,8 +902,32 @@ struct EverythingElseCacheAuditTests {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
     }
 
+    /// A browser profile's Service Worker caches are refused wherever the
+    /// browser keeps them. Losing `ScriptCache` makes Chromium delete each
+    /// site's registration and its web push subscription, and `CacheStorage`
+    /// holds installed web apps' offline content. On a Mac with these browsers
+    /// the shape rules see the real folders; elsewhere they are missing.
+    @Test(arguments: [
+        "Library/Application Support/Google/Chrome/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Google/Chrome Beta/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Google/Chrome Beta/Default/Service Worker/CacheStorage",
+        "Library/Application Support/BraveSoftware/Brave-Browser/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Microsoft Edge/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Dia/User Data/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Dia/User Data/Default/Service Worker/CacheStorage",
+        "Library/Application Support/Arc/User Data/Default/Service Worker/CacheStorage",
+        ".gemini/antigravity-browser-profile/Default/Service Worker/CacheStorage",
+    ])
+    func browserServiceWorkerCachesAreRefused(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+        #expect(AuditPaths.evaluate(relative + "/index") != .allow, "\(relative)")
+        let tier = SafetyTierList.evaluate(folderName: "Dia", path: AuditPaths.url(relative))
+        #expect(tier != .safe, "\(relative)")
+    }
+
     /// Discovery lists the same shape the policy allows: the cache folders at the
-    /// root and in each profile, never a profile or the files beside the caches.
+    /// root and in each profile, never a profile, its Service Worker caches, or
+    /// the files beside the caches.
     @Test
     func chromiumUserDataDiscoveryListsOnlyCaches() throws {
         let fm = FileManager.default
@@ -738,7 +936,8 @@ struct EverythingElseCacheAuditTests {
         defer { try? fm.removeItem(at: base) }
         for folder in [
             "Default/Cache/Cache_Data", "Default/Code Cache/js", "Default/Service Worker/CacheStorage",
-            "Default/Service Worker/Database", "Default/Extensions", "Default/IndexedDB",
+            "Default/Service Worker/ScriptCache", "Default/Service Worker/Database", "Default/Extensions",
+            "Default/IndexedDB",
             "Profile 1/GPUCache", "Profile 1/Cache", "component_crx_cache", "Safe Browsing", "GraphiteDawnCache",
             "Profile 1/DawnGraphiteCache",
         ] {
@@ -755,7 +954,6 @@ struct EverythingElseCacheAuditTests {
         #expect(found == [
             "Default/Cache",
             "Default/Code Cache",
-            "Default/Service Worker/CacheStorage",
             "GraphiteDawnCache",
             "Profile 1/DawnGraphiteCache",
             "Profile 1/GPUCache",
@@ -791,12 +989,14 @@ struct EverythingElseCacheAuditTests {
         try Data().write(to: profile.appendingPathComponent("Local State"))
         for relative in [
             "Default/Cache", "Default/Cache/Cache_Data/index", "Default/Code Cache", "Default/GPUCache",
-            "Default/ShaderCache", "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache",
-            "component_crx_cache", "ShaderCache", "GraphiteDawnCache",
+            "Default/ShaderCache", "component_crx_cache", "ShaderCache", "GraphiteDawnCache",
         ] {
             #expect(allowed(relative), "\(relative)")
         }
-        for relative in ["Default", "Local State", "Default/Login Data", "Default/Service Worker", "Profile 1/Cache"] {
+        for relative in [
+            "Default", "Local State", "Default/Login Data", "Default/Service Worker",
+            "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache", "Profile 1/Cache",
+        ] {
             #expect(!allowed(relative), "\(relative)")
         }
     }
@@ -808,5 +1008,78 @@ struct EverythingElseCacheAuditTests {
         #expect(stores.map(\.relative) == [".gemini/antigravity-browser-profile"])
         #expect(stores.map(\.label) == ["Antigravity Browser Cache"])
         #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "Antigravity Browser Cache", primaryPath: nil).level == .safe)
+    }
+}
+
+// MARK: - uv's package cache
+
+@Suite("uv cache (#345): offered, never Safe")
+struct UVCacheTests {
+    @Test(arguments: [
+        ".cache/uv",
+        ".cache/uv/archive-v0/1a2b3c/numpy/__init__.py",
+        ".cache/uv/wheels-v7/pypi/numpy",
+        ".cache/uv/environments-v2/ruff-0a1b2c",
+    ])
+    func cacheIsOffered(relative: String) {
+        #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+    }
+
+    /// The Dev Tools scan lists the folder, so it is a row and not only allowed.
+    @Test
+    func devToolsScanListsTheFolder() {
+        #expect(DevScanner.claimedGlobalCachePaths().contains(AuditPaths.url(".cache/uv").standardizedFileURL.path))
+    }
+
+    /// A tool started with `uvx` runs from an environment inside the cache, and
+    /// with `link-mode = "symlink"` an environment's packages are links into it.
+    /// uv does not put either back by itself, so Clean Safe Items and scheduled
+    /// cleans must not take the folder.
+    @Test
+    func rowIsNeverSafe() {
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "uv Package Cache", primaryPath: nil).level == .medium)
+        #expect(bundledLevel("uv-cache") == .medium)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "uv")?.safetyLevel == .medium)
+    }
+
+    /// Tools from `uv tool install`, uv's Python versions and its settings.
+    @Test(arguments: [
+        ".local/share/uv",
+        ".local/share/uv/tools",
+        ".local/share/uv/tools/ruff",
+        ".local/share/uv/python/cpython-3.13.1-macos-aarch64-none",
+        ".config/uv",
+        ".config/uv/uv.toml",
+        ".cache",
+    ])
+    func installsAndSettingsStayOut(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+}
+
+// MARK: - The list itself
+
+@Suite("Allowlist audit: one entry per place")
+struct AllowlistEntryShapeTests {
+    /// A second copy, or an entry inside another, changes nothing `evaluate`
+    /// decides, so it only hides what the list really allows (#185).
+    @Test
+    func noEntryRepeatsOrSitsInsideAnother() {
+        let entries = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: AuditPaths.home)
+        #expect(Set(entries).count == entries.count)
+        for entry in entries {
+            let outer = entries.filter { $0 != entry && PathContainment.isInside(entry, $0) }
+            #expect(outer.isEmpty, "\(entry) is inside \(outer)")
+        }
+    }
+
+    @Test
+    func droppedEntriesAreStillAllowedThroughTheirParent() {
+        for relative in [
+            ".npm/_npx", ".npm/_logs", ".zcompdump", "Library/Caches/org.swift.swiftpm",
+            "Library/Logs/DiagnosticReports", "Library/Caches/Zed", "Library/Caches/ms-playwright",
+        ] {
+            #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+        }
     }
 }

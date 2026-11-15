@@ -188,13 +188,22 @@ nonisolated enum AIModelScanPolicy {
 
     /// Store roots that sit inside a folder the Large Files walk covers. The
     /// walk skips them, so a model there is one row and not a file per weight.
+    /// A home folder that is a link is walked where it leads (#273), so a root
+    /// counts by its real path too, such as `HF_HUB_CACHE` set to the real path
+    /// of a moved Documents folder.
     nonisolated static func rootsInsideLargeFileScan(
         home: URL,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [URL] {
-        let scanRoots = LargeFileScanPolicy.scanRoots(home: home).map { $0.standardizedFileURL.path + "/" }
+        let scanRoots = LargeFileScanPolicy.scanRoots(home: home)
+        let spelled = scanRoots.map { $0.standardizedFileURL.path + "/" }
+        let walked = scanRoots
+            .compactMap { LargeFileScanPolicy.walkedFolder(for: $0, home: home) }
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path + "/" }
         return allRoots(home: home, environment: environment).filter { root in
-            scanRoots.contains { root.path.hasPrefix($0) }
+            if spelled.contains(where: { root.path.hasPrefix($0) }) { return true }
+            let real = root.resolvingSymlinksInPath().standardizedFileURL.path
+            return walked.contains { real.hasPrefix($0) }
         }
     }
 
@@ -206,7 +215,7 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static func isAppModelCachePath(_ path: String, home: String) -> Bool {
         let folder = "\(home)/Library/Caches/huggingface".lowercased()
         let path = path.lowercased()
-        return path == folder || path.hasPrefix(folder + "/")
+        return PathContainment.isSameOrInside(path, folder)
     }
 
     // MARK: - Loose weights
@@ -357,7 +366,7 @@ nonisolated enum AIModelScanPolicy {
         // real folder behind it pass as a model.
         guard !hasLinkInPath(standardized) else { return false }
 
-        func isInside(_ root: URL) -> Bool { path.hasPrefix(root.path + "/") }
+        func isInside(_ root: URL) -> Bool { PathContainment.isInside(path, root.path) }
 
         // Ollama: a manifest, or a blob the manifest names. Both are plain
         // files the scanner picked out of the store.
@@ -414,7 +423,7 @@ nonisolated enum AIModelScanPolicy {
         sizeFloor: Int64 = looseWeightSizeFloorBytes
     ) -> Bool {
         let path = url.path
-        guard let root = looseWeightRoots(home: home).first(where: { path.hasPrefix($0.path + "/") })
+        guard let root = looseWeightRoots(home: home).first(where: { PathContainment.isInside(path, $0.path) })
         else { return false }
 
         let relative = path.dropFirst(root.path.count + 1).split(separator: "/").map(String.init)

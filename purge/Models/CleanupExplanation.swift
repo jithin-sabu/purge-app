@@ -3,12 +3,14 @@ import Foundation
 extension SafetyInfo {
     /// Local `explanations.json` only (no live AI). Used for dev tool rows.
     /// When `path` is supplied, a manual user override at that exact path
-    /// takes priority and is returned instead.
+    /// takes priority and is returned instead. `bundle` is for tests, which
+    /// read the Chinese text the English test host would not show.
     nonisolated static func fromExplanationDatabase(
         key: String,
         friendlyFallback: String? = nil,
         reinstallCommand: String? = nil,
-        path: URL? = nil
+        path: URL? = nil,
+        bundle: Bundle = .main
     ) -> SafetyInfo {
         let fallback = friendlyFallback ?? key
 
@@ -25,7 +27,7 @@ extension SafetyInfo {
         }
 
         if let record = ExplanationDatabase.matchBundledDatabase(folderName: key) {
-            return ExplanationDatabase.safetyInfo(from: record, reinstallCommand: reinstallCommand)
+            return ExplanationDatabase.safetyInfo(from: record, reinstallCommand: reinstallCommand, bundle: bundle)
         }
         let unknown = ExplanationDatabase.safetyInfoForUnknownBundledLookup(friendlyFallback: fallback)
         return SafetyInfo(

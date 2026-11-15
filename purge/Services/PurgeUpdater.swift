@@ -43,8 +43,12 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     override init() {
         super.init()
+        // Not started in the unit-test host (#181): a started updater reads and
+        // writes the real Sparkle defaults and can check for updates on the
+        // developer's Mac in the middle of a test run. Unstarted, Sparkle leaves
+        // `canCheckForUpdates` false, so the menu items stay disabled there.
         controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: Self.startsUpdater(environment: ProcessInfo.processInfo.environment),
             updaterDelegate: self,
             userDriverDelegate: nil
         )
@@ -55,6 +59,12 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
             .assign(to: &$automaticallyDownloadsUpdates)
         controller.updater.publisher(for: \.allowsAutomaticUpdates)
             .assign(to: &$allowsAutomaticUpdates)
+    }
+
+    /// False only in the unit-test host. A build run from Xcode checks for
+    /// updates like an installed one.
+    nonisolated static func startsUpdater(environment: [String: String]) -> Bool {
+        !TestHost.isActive(environment: environment)
     }
 
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {

@@ -22,13 +22,27 @@ patient, but safety reports get priority over everything else.
 
 - **Trash by default.** Files and folders are moved to the macOS Trash, so
   you can put them back until you empty it yourself. Purge has no button that
-  empties the Trash. Three removals are for good. iOS simulators
-  and simulator runtimes go through Xcode's `simctl`. Time Machine local
+  empties the Trash. Some removals are for good. iOS simulators
+  and simulator runtimes go through Xcode's `simctl`. Xcode's optional Metal
+  Toolchain goes through `xcodebuild -deleteComponent`, and Xcode downloads it
+  again when a project needs it. Time Machine local
   snapshots go through `tmutil deletelocalsnapshots`; Purge asks first and
   keeps the newest snapshot and the one from your last backup. The Apple
   Intelligence models on macOS 27 are released through Apple's own asset
-  service and can be downloaded again; see below. Docker Desktop's data folder
-  goes to the Trash. Purge does not run `docker system prune`.
+  service and can be downloaded again; see below. Command-line tools and
+  Homebrew cask apps you tick for removal through their package manager are
+  uninstalled by that manager (`brew uninstall`, `npm uninstall -g`, and so
+  on), which deletes them permanently and, for a cask, runs its own uninstall
+  steps (services, helper tools, installer receipts) permanently too; the
+  review sheet says so, and a cask app has a Move All to Trash button to take
+  the Trash route instead. Docker Desktop's data
+  folder goes to the Trash. Purge does not run `docker system prune`.
+  Keep Only in iCloud in Large Files (Finder's Remove Download) deletes
+  nothing: it drops the copy of an iCloud file on this Mac through
+  `FileManager.evictUbiquitousItem(at:)`, and the file stays in iCloud and in
+  its folder. Purge does it only for a file you picked that is fully
+  uploaded, has no sync conflict, is not set to Keep Downloaded, has not
+  changed for five minutes and is not open in an app.
 - **Allowlist-based deletion.** Only paths that match an explicit safety
   allowlist are ever eligible for cleanup. Anything not on the list is never
   touched.
@@ -64,21 +78,39 @@ Items.
 The helper does one thing: it moves an approved path into your Trash and hands
 ownership of it back to you. It never deletes anything. The code is
 in [`PurgeHelper/HelperService.swift`](PurgeHelper/HelperService.swift), and
-it checks every request four ways:
+it checks every request five ways:
 
 - **Only the real Purge app can connect.** macOS checks each connection
   through `NSXPCConnection.setCodeSigningRequirement` and refuses any caller
   that is not the notarized Purge app signed by the same Apple developer team
   ([`PurgeHelper/HelperListenerDelegate.swift`](PurgeHelper/HelperListenerDelegate.swift)).
   The app runs the same check in reverse before it trusts the helper.
-- **Only administrators.** A standard account is refused, even through a
-  genuine copy of Purge.
+- **Only with an administrator.** An administrator's own request goes ahead.
+  A standard account's goes ahead only after an administrator types their name
+  and password into the macOS dialog the helper asks for, once per request, as
+  Finder does. The helper asks for its own authorization right, which needs an
+  administrator, is not shared with other apps, and expires at once. It writes
+  that rule itself, as root, before every check, so another program can't
+  define the right first with a rule that asks for nothing
+  (`removalRightDefinition` in
+  [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift)).
+  The dialog can stay open for minutes, so the helper checks every path again
+  once it closes.
 - **Only known locations.** The helper checks every path itself instead of
   trusting the app. It accepts an app bundle in `/Applications` or
   `~/Applications` at any depth, never inside another bundle or package, or a
   direct child of a folder the uninstaller scans for leftovers, such as
   `~/Library/Application Support` or `/Library/LaunchDaemons`. The full list is in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
+  macOS keeps its own files in three of those folders, `/Library/Caches`,
+  `/Library/Preferences` and `/Library/Logs`. There the helper accepts only a
+  name shaped like a bundle identifier, so never `DiagnosticReports` or
+  `SystemConfiguration`. It refuses hidden entries, Apple's own
+  (`com.apple.…`), the printing system's (`org.cups.…`) and bare `.log` files,
+  and in `/Library/Preferences` it accepts only a `.plist` that is a regular
+  file. It never accepts a real app bundle in a leftover folder.
+  The uninstaller also lists apps on drives and in folders the user adds, but
+  the app never sends those to the helper, and the helper would refuse them.
   It also accepts a direct child of `macOS Install Data`, never `Locked Files`,
   and only while that folder and everything in it are older than the moment the
   running macOS was installed, from `/Library/Receipts/InstallHistory.plist`.
@@ -91,6 +123,11 @@ it checks every request four ways:
   a `.` or `..` part is refused, not resolved. Folders on the way are opened
   only to pass through, never to list, so the helper does not read your Trash
   ([`purge/PrivilegedHelper/HelperSupport.swift`](purge/PrivilegedHelper/HelperSupport.swift)).
+- **No hard-link tricks.** Any account can give a root-owned file, such as a
+  LaunchDaemon's plist, a second name in a folder it owns. The helper never
+  moves a file that has a second name, never changes the owner of one inside a
+  folder it moves, and only moves an app that is a folder (`HelperLinkPolicy` in
+  the same file).
 
 The helper also runs only while it is needed. It quits after 30 idle seconds,
 and macOS starts it again for the next request, so an update never leaves an
@@ -112,7 +149,8 @@ and the one change it makes that outlasts the app:
 - **One configuration profile**, which you install yourself in System
   Settings. It only points the model downloads at a dead local address so
   macOS does not fetch them again. It stays in Device Management until you
-  choose Download Again or remove it there; either brings the models back.
+  choose Download Again or remove it there. Download Again also asks macOS
+  for the models back.
 - **Nothing automatic.** Neither scheduled cleaning nor Clean Safe Items ever
   touches the models.
 

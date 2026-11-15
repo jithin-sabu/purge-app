@@ -72,4 +72,15 @@ struct CleaningQuitGuardTests {
         CleaningQuitGuard.isCleaningActive = { false }
         #expect(CleaningQuitGuard.shouldAllowTermination())
     }
+
+    /// Closing the window mid-clean asked "Quit Anyway" in the menu bar mode,
+    /// where the close quits nothing, and asked twice in on-demand mode, once
+    /// here and again at the quit (#183).
+    @Test("A window close asks only through the quit, and only when it quits")
+    func windowCloseAsksOnlyWhenItQuits() {
+        #expect(CleaningQuitGuard.windowCloseDecision(isCleaning: true, closeQuitsApp: false) == .close)
+        #expect(CleaningQuitGuard.windowCloseDecision(isCleaning: true, closeQuitsApp: true) == .quitThroughTerminate)
+        #expect(CleaningQuitGuard.windowCloseDecision(isCleaning: false, closeQuitsApp: true) == .close)
+        #expect(CleaningQuitGuard.windowCloseDecision(isCleaning: false, closeQuitsApp: false) == .close)
+    }
 }

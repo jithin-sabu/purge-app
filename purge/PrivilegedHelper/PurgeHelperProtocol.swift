@@ -21,7 +21,59 @@ enum PurgeHelperConstants {
     /// through a package, symlink, or hidden folder (#143).
     /// v6 also accepts the entries a finished macOS update left in `macOS Install
     /// Data`, and only while they are older than the installed system (#127).
-    static let version = "6"
+    /// v7 says why a move did not happen: a refusal for the whole request, and an
+    /// errno for each path that stayed (#299).
+    /// v8 moves for a standard account once an administrator types their name and
+    /// password into the macOS dialog the helper asks for, checks every path again
+    /// after the dialog, and never moves or hands back a file with a second name
+    /// (#314).
+    /// v9 also accepts leftovers in Application Scripts, Cookies and WebKit in the
+    /// user's Library, and in `/Library/Caches`, `/Library/Preferences` and
+    /// `/Library/Logs`, where it takes only a name shaped like a bundle
+    /// identifier and refuses Apple's own and hidden entries (#352).
+    static let version = "9"
+
+    /// The authorization right the helper asks for before it moves anything for a
+    /// standard account (#314). An administrator approves it in the macOS dialog.
+    static let removalRightName = "io.getpurge.helper.remove-admin-locked-app"
+
+    /// What `removalRightName` requires: an administrator's name and password, typed
+    /// for this request alone. `shared` false keeps a password typed elsewhere in the
+    /// session from counting, and a `timeout` of 0 makes every request ask again.
+    ///
+    /// Any process may add a right macOS doesn't know yet, so another process could
+    /// define this name first with a rule that asks for nothing. The helper therefore
+    /// writes this definition as root before every check, and changing a right that
+    /// exists takes an administrator or root.
+    ///
+    /// The prompt is not in the app's string catalog: the helper has no bundle, and
+    /// the authorization database takes its translations as a dictionary.
+    nonisolated static var removalRightDefinition: [String: Any] {
+        [
+            "class": "user",
+            "group": "admin",
+            "authenticate-user": true,
+            "shared": false,
+            "timeout": 0,
+            "allow-root": false,
+            "session-owner": false,
+            "tries": 10_000,
+            "comment": "Lets Purge move apps an administrator installed, and their files, to the Trash of a standard account.",
+            // A request can hold several apps, their leftovers in system folders, or
+            // a finished macOS update's files, so the prompt names no single app.
+            "default-prompt": [
+                "": "Purge wants to move apps or files an administrator installed to the Trash.",
+                "ru": "Purge хочет переместить в Корзину приложения или файлы, установленные администратором.",
+                "zh-Hans": "Purge 想要将管理员安装的应用或文件移到废纸篓。",
+                "zh_CN": "Purge 想要将管理员安装的应用或文件移到废纸篓。",
+                "tr": "Purge, bir yönetici tarafından yüklenen uygulamaları veya dosyaları Çöp Sepeti'ne taşımak istiyor."
+            ]
+        ]
+    }
+
+    /// The failure code for a path outside the places the helper may move from. Every
+    /// other code in a reply's `failureCodes` is an errno, which is never negative.
+    static let outsideAllowedLocationsCode = -1
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
     /// to `SMAppService.daemon(plistName:)`.
@@ -56,7 +108,10 @@ enum PurgeHelperConstants {
         "Library/Group Containers",
         "Library/Saved Application State",
         "Library/Logs",
-        "Library/LaunchAgents"
+        "Library/LaunchAgents",
+        "Library/Application Scripts",
+        "Library/Cookies",
+        "Library/WebKit"
     ]
 
     private static let systemLeftoverRoots = [
@@ -65,16 +120,79 @@ enum PurgeHelperConstants {
         "/Library/LaunchAgents"
     ]
 
-    /// Returns true only for locations the app-uninstall scanner can produce:
-    /// an app bundle in an Applications folder (at any depth, never through
-    /// another bundle or package), or one direct child of a known leftover
-    /// directory. Symlinks are rejected so an allowed-looking path cannot
-    /// redirect the root helper somewhere else between path components.
-    static func isAllowedUninstallLocation(_ url: URL, homeDirectory: URL) -> Bool {
-        let standardized = url.standardizedFileURL
-        let resolved = standardized.resolvingSymlinksInPath().standardizedFileURL
-        guard standardized.path == resolved.path else { return false }
+    /// `/Library` folders where macOS keeps its own files beside other apps'
+    /// (#352): network settings sit in `/Library/Preferences`, crash reports in
+    /// `/Library/Logs`. An entry there is a leftover only when
+    /// `isAllowedSharedSystemLeftover` accepts its name.
+    nonisolated static let sharedSystemLeftoverRoots = [
+        "/Library/Caches",
+        "/Library/Preferences",
+        "/Library/Logs"
+    ]
 
+    /// Identifier prefixes macOS itself uses in the shared system folders,
+    /// lowercased: Apple's own, and the printing system's
+    /// (`/Library/Preferences/org.cups.printers.plist`).
+    private nonisolated static let systemOwnedIdentifierPrefixes = ["com.apple", "org.cups"]
+
+    /// Whether an entry named `name`, directly inside the shared system folder
+    /// at `rootPath`, can be an app's leftover. The name must be shaped like a
+    /// bundle identifier, with at least two parts around a dot and no space,
+    /// which keeps out what macOS names in plain words (`DiagnosticReports`,
+    /// `CrashReporter`, `Bluetooth`, `SystemConfiguration`, `Desktop Pictures`,
+    /// `systemmigrationd.plist`). Never a hidden entry
+    /// (`.GlobalPreferences.plist`), never one of Apple's or the printing
+    /// system's, and never a bare log file (`MCXTools.log`). In
+    /// `/Library/Preferences` only a `.plist`, and the identifier is the name
+    /// without it. The app's gate and the helper both ask here, so neither can
+    /// accept an entry the other refuses.
+    nonisolated static func isAllowedSharedSystemLeftover(name: String, inRootAt rootPath: String) -> Bool {
+        let lower = name.lowercased()
+        guard !lower.hasPrefix("."), !lower.contains(" ") else { return false }
+        var identifier = lower
+        if rootPath == "/Library/Preferences" {
+            guard lower.hasSuffix(".plist") else { return false }
+            identifier = String(lower.dropLast(".plist".count))
+        } else if lower.hasSuffix(".log") {
+            return false
+        }
+        for prefix in systemOwnedIdentifierPrefixes where identifier == prefix || identifier.hasPrefix(prefix + ".") {
+            return false
+        }
+        let parts = identifier.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count >= 2 && !parts.contains { $0.isEmpty }
+    }
+
+    /// Whether the entry at `url`, directly inside the shared system folder at
+    /// `rootPath`, can be an app's leftover: its name passes
+    /// `isAllowedSharedSystemLeftover`, and in `/Library/Preferences` it is a
+    /// settings file, not a folder or a link named like one.
+    nonisolated static func isAllowedSharedSystemLeftoverEntry(_ url: URL, inRootAt rootPath: String) -> Bool {
+        guard isAllowedSharedSystemLeftover(name: url.lastPathComponent, inRootAt: rootPath) else { return false }
+        return rootPath != "/Library/Preferences" || isRegularFileOrMissing(url)
+    }
+
+    /// True for a regular file, read without following a link. Also true when
+    /// nothing is there, since there is then nothing to move. A folder, a link
+    /// or any other kind of entry is false.
+    nonisolated static func isRegularFileOrMissing(_ url: URL) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return errno == ENOENT }
+        return (info.st_mode & S_IFMT) == S_IFREG
+    }
+
+    /// A real application bundle, as opposed to a folder whose name ends in
+    /// `.app` because its bundle id does (`com.granola.app`). The app's gate
+    /// refuses one under a leftover root, so the helper does too.
+    nonisolated static func isRealAppBundle(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == "app"
+            && FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path)
+    }
+
+    /// Every leftover directory, the user's under `homeDirectory` first. A copy of
+    /// `AppUninstallScanPolicy.leftoverSearchRoots`, which the helper does not
+    /// compile; a test checks the two match (#189).
+    static func leftoverRoots(homeDirectory: URL) -> [URL] {
         let home = homeDirectory.standardizedFileURL
         let userRoots = userLeftoverRelativeRoots.map {
             home.appendingPathComponent($0, isDirectory: true).standardizedFileURL
@@ -82,9 +200,33 @@ enum PurgeHelperConstants {
         let machineRoots = systemLeftoverRoots.map {
             URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
         }
+        let sharedRoots = sharedSystemLeftoverRoots.map {
+            URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
+        }
+        return userRoots + machineRoots + sharedRoots
+    }
+
+    /// Returns true only for locations the app-uninstall scanner can produce:
+    /// an app bundle in an Applications folder (at any depth, never through
+    /// another bundle or package), or one direct child of a known leftover
+    /// directory, never a real application bundle. In a folder macOS shares
+    /// with other apps the child must also pass
+    /// `isAllowedSharedSystemLeftoverEntry`. Symlinks are rejected so an
+    /// allowed-looking path cannot redirect the root helper somewhere else
+    /// between path components.
+    static func isAllowedUninstallLocation(_ url: URL, homeDirectory: URL) -> Bool {
+        let standardized = url.standardizedFileURL
+        let resolved = standardized.resolvingSymlinksInPath().standardizedFileURL
+        guard standardized.path == resolved.path else { return false }
+
+        let home = homeDirectory.standardizedFileURL
         let parent = standardized.deletingLastPathComponent().path
-        if (userRoots + machineRoots).contains(where: { $0.path == parent }) {
-            return true
+        if sharedSystemLeftoverRoots.contains(parent) {
+            return isAllowedSharedSystemLeftoverEntry(standardized, inRootAt: parent)
+                && !isRealAppBundle(standardized)
+        }
+        if leftoverRoots(homeDirectory: homeDirectory).contains(where: { $0.path == parent }) {
+            return !isRealAppBundle(standardized)
         }
 
         let appRoots = [
@@ -127,6 +269,23 @@ enum PurgeHelperConstants {
     }
 }
 
+/// Why the helper refused a whole move request, sent as the raw value. Both targets
+/// compile this file, so the numbers can't drift apart (#299).
+nonisolated enum HelperMoveRefusal: Int, Sendable {
+    /// The helper took the request. Some paths may still have failed.
+    case accepted = 0
+    /// The connecting account is not an administrator (#182), and no administrator
+    /// approved this request: the dialog was cancelled, or the request had none (#314).
+    case notAdministrator = 1
+    /// The account's `~/.Trash` is missing, a symlink, or not its own.
+    case invalidTrash = 2
+    /// No connection to read the caller from, or the caller is root or has no home.
+    case invalidPeer = 3
+    /// The helper could not ask for an administrator's approval: it could not set up
+    /// its authorization right, or could not read the app's authorization (#314).
+    case approvalUnavailable = 4
+}
+
 /// The privileged operations the helper exposes over XPC. Deliberately tiny: the
 /// helper runs as root, so every method here is attack surface. It does exactly one
 /// thing — move already-chosen paths into a Trash directory and hand ownership back
@@ -151,6 +310,38 @@ enum PurgeHelperConstants {
     func moveToTrashReportingOwnership(
         paths: [String],
         withReply reply: @escaping (_ movedPaths: [String], _ ownershipIncompletePaths: [String]) -> Void
+    )
+
+    /// Same move as `moveToTrashReportingOwnership`, and the reply also says why
+    /// anything stayed. `refusal` is a `HelperMoveRefusal` raw value for the whole
+    /// request. `failureCodes` maps each path that was tried and stayed to its errno,
+    /// or to `PurgeHelperConstants.outsideAllowedLocationsCode` (#299). Only an app
+    /// that found a v7 helper calls this.
+    func moveToTrashReportingFailures(
+        paths: [String],
+        withReply reply: @escaping (
+            _ movedPaths: [String],
+            _ ownershipIncompletePaths: [String],
+            _ failureCodes: [String: Int],
+            _ refusal: Int
+        ) -> Void
+    )
+
+    /// Same move and reply as `moveToTrashReportingFailures`. When the connecting
+    /// account is not an administrator, the helper first asks for an administrator's
+    /// name and password, through `authorization`: the external form of an empty
+    /// `AuthorizationRef` the app made, which shows the dialog in the app's session.
+    /// An administrator's request never asks (#314). Only an app that found a v8
+    /// helper calls this.
+    func moveToTrashWithAuthorization(
+        paths: [String],
+        authorization: Data,
+        withReply reply: @escaping (
+            _ movedPaths: [String],
+            _ ownershipIncompletePaths: [String],
+            _ failureCodes: [String: Int],
+            _ refusal: Int
+        ) -> Void
     )
 
     /// Round-trips the helper's build version so the app can tell whether an older

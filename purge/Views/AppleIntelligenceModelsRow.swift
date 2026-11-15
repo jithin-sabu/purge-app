@@ -17,19 +17,20 @@ struct OverviewAppleIntelligenceRow: View {
     /// confirmation opens (#179).
     @State private var plan: AppleIntelligenceRemovalPlan?
     @State private var isShowingInfo = false
+    @State private var isShowingDetails = false
 
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "appleIntelligenceModels"
 
-    private static let info = String(localized: "Apple Intelligence keeps its models on this Mac, counted under System Data. Remove releases them through Apple's own asset service and installs a profile so macOS doesn't download them again. Download Again removes that profile and asks macOS for them back. The size shown is Apple's figure; macOS already treats part of it as available, so the disk gains less than that.")
+    private static let info = String(localized: "These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove has you install a profile that stops them downloading again, then asks macOS to delete them. Download Again has you remove the profile, then asks macOS to download them again. The size is Apple's number. You'll usually get back less than that.")
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             // Apple's own mark for the feature, as an icon image with its own
             // corners: the loop in blue and gold on a white tile.
             OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, imageName: "AppleIntelligenceMark")
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
                     Text("Apple Intelligence models")
                         .font(AppStyle.Typography.headline)
                     infoButton
@@ -37,13 +38,17 @@ struct OverviewAppleIntelligenceRow: View {
                 Text(detail)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
+                    // A failure gets a second line: its reason is the one thing
+                    // the row must not cut off (#343).
+                    .lineLimit(showsFailure ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(detail)
             }
             Spacer(minLength: AppStyle.Spacing.small)
             trailing
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .accessibilityElement(children: .contain)
         .task { await store.refreshAccounts() }
@@ -55,6 +60,32 @@ struct OverviewAppleIntelligenceRow: View {
                 await store.refresh()
             }
         }
+    }
+
+    /// The last action failed and the row is saying why.
+    private var showsFailure: Bool {
+        guard store.phase == .idle else { return false }
+        switch store.lastOutcome {
+        case .someLeft, .notReady, .downloadRequestFailed:
+            return true
+        case .removed, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled, nil:
+            return false
+        }
+    }
+
+    /// Everything macOS answered when the last action failed, when there is
+    /// more than the row's line says.
+    private var failureDetails: String? {
+        store.phase == .idle ? store.lastOutcome?.details : nil
+    }
+
+    private func detailsButton(_ details: String) -> some View {
+        Button("Details") { isShowingDetails = true }
+            .buttonStyle(.purge(.quiet, size: .small))
+            .help("Show everything macOS answered")
+            .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
+                AppleIntelligenceFailureDetails(details: details)
+            }
     }
 
     private var infoButton: some View {
@@ -99,6 +130,9 @@ struct OverviewAppleIntelligenceRow: View {
             .disabled(true)
         } else {
             HStack(spacing: AppStyle.Spacing.xSmall) {
+                if let failureDetails {
+                    detailsButton(failureDetails)
+                }
                 if store.offersDownloadAgain {
                     downloadButton
                 }
@@ -178,11 +212,11 @@ struct OverviewAppleIntelligenceRow: View {
             if let shown { return String(localized: "Removed, freed \(formatBytes(shown))") }
             if let raw { return String(localized: "Removed, \(formatBytes(raw)) freed on the disk that macOS already counted as available") }
             return String(localized: "Removed")
-        case .someLeft(let removed, let left, let reason):
+        case .someLeft(let removed, let left, let reason, _):
             return String(localized: "Removed \(removed), but \(left) stayed: \(reason)")
         case .profileNotInstalled:
             return String(localized: "The profile wasn't installed, so nothing was removed")
-        case .notReady(let reason):
+        case .notReady(let reason, _):
             return reason
         case .downloadRequested:
             if store.isDownloading {
@@ -196,7 +230,7 @@ struct OverviewAppleIntelligenceRow: View {
             return String(localized: "Download requested, but nothing has arrived yet")
         case .profileStillInstalled:
             return String(localized: "The profile is still installed, so downloads stay blocked")
-        case .downloadRequestFailed(let reason):
+        case .downloadRequestFailed(let reason, _):
             return String(localized: "macOS didn't accept the download request: \(reason)")
         case nil:
             break
@@ -209,7 +243,7 @@ struct OverviewAppleIntelligenceRow: View {
             // Apple's figure goes here rather than at the row's end, so it isn't
             // read as what removing them gives back.
             if let bytes = reading.latestBytes {
-                return String(localized: "\(formatStorageBytes(bytes)) by Apple's count; the disk gains less") + blocked
+                return String(localized: "About \(formatStorageBytes(bytes)) (Apple's number)") + blocked
             }
             return String(localized: "On this Mac, size unknown") + blocked
         }
@@ -259,12 +293,12 @@ struct AppleIntelligenceBreakdown: View {
                 .foregroundStyle(AppColors.textPrimary)
             Spacer(minLength: AppStyle.Spacing.small)
             Text(value)
-                .font(emphasized ? AppStyle.Typography.callout.weight(.semibold) : AppStyle.Typography.callout)
+                .font((emphasized ? AppStyle.Typography.callout.weight(.semibold) : AppStyle.Typography.callout).numbers)
                 .foregroundStyle(emphasized ? AppColors.textPrimary : AppColors.textSecondary)
                 .monospacedDigit()
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 7)
+        .padding(.vertical, AppStyle.Spacing.xSmall)
     }
 
     private func size(for set: AppleIntelligenceModelSet) -> String {
@@ -328,7 +362,7 @@ struct OverviewAppleIntelligenceConfirmation: View {
                 .foregroundStyle(AppColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("macOS will ask you to install a profile that stops the models downloading again. It stays in Device Management until you choose Download Again, which also brings the models back.")
+            Text("macOS will ask you to install a profile. It stops the models from downloading again. To get them back, click Download Again. The profile is listed in System Settings > General > Device Management.")
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -348,9 +382,9 @@ struct OverviewAppleIntelligenceConfirmation: View {
 
     private var sizeLine: String {
         guard let bytes = plan.bytes else {
-            return String(localized: "Apple's records don't say how much they take. Purge measures what the disk gives back.")
+            return String(localized: "Apple doesn't say how much space these take. Purge will show what you got back after removing them.")
         }
-        return String(localized: "Apple counts \(formatBytes(bytes)). macOS already treats part of that as available, so the disk gains less. Purge measures what it really gives back.")
+        return String(localized: "Apple says these take \(formatBytes(bytes)). You'll likely get back less, because macOS already counts some of it as free space. Purge will show what you actually got back.")
     }
 
     private var accountsLine: String {
@@ -362,5 +396,41 @@ struct OverviewAppleIntelligenceConfirmation: View {
             }
         }
         return String(localized: "The models are shared by every account on this Mac: \(names.joined(separator: ", ")).")
+    }
+}
+
+/// Everything macOS answered when a removal or a download request failed,
+/// with a button that copies it. The row has room for the short reason only,
+/// and a report with half an error code can't be acted on (#343).
+struct AppleIntelligenceFailureDetails: View {
+    /// The Purge and macOS versions, then one line per failed request, as the
+    /// service worded them.
+    let details: String
+
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            Text("This is everything macOS answered. If you report the problem, copy it into the report.")
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: details)
+                .font(AppStyle.Typography.metadata.monospaced())
+                .foregroundStyle(AppColors.textPrimary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Spacer()
+                Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
+                    FinderReveal.copyText(details)
+                    copied = true
+                }
+                .buttonStyle(.purge(.secondary, size: .small))
+            }
+        }
+        .padding(AppStyle.Spacing.medium)
+        .frame(width: 400)
     }
 }

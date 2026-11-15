@@ -178,8 +178,13 @@ private func snapshot(_ stamp: String) -> LocalSnapshot {
     LocalSnapshotReader.parse("com.apple.TimeMachine.\(stamp).local").all[0]
 }
 
+/// Gregorian, as `LocalSnapshotReader` reads stamps, in the time zone `parse` uses
+/// by default. `Calendar.current` follows the user's calendar: on a Mac set to the
+/// Buddhist or Japanese calendar, year 2026 is a different year (#189).
 private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int, _ second: Int) -> Date {
-    Calendar.current.date(from: DateComponents(
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    return calendar.date(from: DateComponents(
         year: year, month: month, day: day, hour: hour, minute: minute, second: second
     ))!
 }

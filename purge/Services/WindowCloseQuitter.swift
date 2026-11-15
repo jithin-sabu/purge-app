@@ -60,14 +60,20 @@ enum WindowCloseQuitter {
         !showsMenuBarIcon && !closedByPurge && closingIsOnScreenAppWindow && !otherAppWindowOnScreen
     }
 
-    private static func windowWillClose(_ window: NSWindow) {
-        let quits = shouldQuit(
+    /// Whether closing `window` now quits Purge. The window's own delegate asks
+    /// this before the close, to decide whether a clean in progress needs the
+    /// quit confirmation at all (#183).
+    static func closeWouldQuit(_ window: NSWindow) -> Bool {
+        shouldQuit(
             showsMenuBarIcon: StartupPreferenceStore.persistedShowsMenuBarIcon(),
             closedByPurge: purgeIsClosing,
             closingIsOnScreenAppWindow: isOnScreenAppWindow(window),
             otherAppWindowOnScreen: NSApp.windows.contains { $0 !== window && isOnScreenAppWindow($0) }
         )
-        guard quits else { return }
+    }
+
+    private static func windowWillClose(_ window: NSWindow) {
+        guard closeWouldQuit(window) else { return }
 
         // After the close finishes. Checked again in case something put a window
         // back up in between, such as a deleted-apps review arriving.

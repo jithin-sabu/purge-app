@@ -775,7 +775,6 @@ struct ScheduledCleanReviewHoldTests {
         )
         let states: [(String, (Bool) -> Void)] = [
             ("deletion sheet", { store.showDeletionSheet = $0 }),
-            ("Not Sure sheet", { store.pendingUnknownDeletion = $0 ? .init(candidates: []) : nil }),
             ("Large Files sheet", { store.showLargeFileDeletionSheet = $0 }),
             ("duplicate cleanup", { store.pendingDuplicateCleanup = $0 ? DuplicateCleanupRequest(sets: []) : nil }),
             ("uninstall review", { store.uninstallPlan = $0 ? UninstallPlan(id: "test", apps: []) : nil }),

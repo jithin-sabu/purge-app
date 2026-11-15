@@ -10,11 +10,16 @@ struct CleanupHistoryDetailView: View {
             sheetHeader
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
                     summarySection
-                    if entry.kind == .appleIntelligenceModels {
+                    switch entry.kind {
+                    case .appleIntelligenceModels?:
                         itemsSection(String(localized: "Released"), items: entry.deletedItems)
-                    } else {
+                    case .iCloudDownloadsRemoved?:
+                        // Not "Moved to Trash": the files are where they were, as
+                        // cloud placeholders, and the Trash has nothing of them (#106).
+                        itemsSection(String(localized: "Removed from this Mac, still in iCloud Drive"), items: entry.deletedItems)
+                    case nil:
                         // Simulators and runtimes never reach the Trash, so they get
                         // their own list instead of sitting under "Moved to Trash" (#170).
                         let permanent = entry.permanentlyDeletedItems
@@ -22,9 +27,14 @@ struct CleanupHistoryDetailView: View {
                         if !permanent.isEmpty {
                             itemsSection(String(localized: "Deleted permanently"), items: permanent)
                         }
-                        if !trashed.isEmpty || permanent.isEmpty {
+                        // A clean where everything failed lists only what failed,
+                        // not an empty "Moved to Trash" card (#303).
+                        if !trashed.isEmpty || (permanent.isEmpty && entry.failedItems.isEmpty) {
                             itemsSection(String(localized: "Moved to Trash"), items: trashed)
                         }
+                    }
+                    if !entry.failedItems.isEmpty {
+                        failedSection
                     }
                     if !entry.skippedItems.isEmpty {
                         skippedSection
@@ -32,7 +42,7 @@ struct CleanupHistoryDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-                .padding(.top, 16)
+                .padding(.top, AppStyle.Spacing.medium)
                 .padding(.bottom, AppDetailPageLayout.verticalPadding)
             }
             .scrollContentBackground(.hidden)
@@ -42,11 +52,11 @@ struct CleanupHistoryDetailView: View {
     }
 
     private var sheetHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             Text(CleanupHistorySummaryRow.title(for: entry))
                 .font(AppStyle.Typography.headline)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             Button("Done") {
                 dismiss()
@@ -54,47 +64,66 @@ struct CleanupHistoryDetailView: View {
             .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-        .padding(.top, 20)
-        .padding(.bottom, 12)
+        .padding(.top, AppStyle.Spacing.large)
+        .padding(.bottom, AppStyle.Spacing.small)
     }
 
     private var summarySection: some View {
-        historySectionCard {
+        InsetCard {
             CleanupHistorySummaryRow(entry: entry)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, AppStyle.Spacing.medium)
+                .padding(.vertical, AppStyle.Spacing.small)
         }
     }
 
     private func itemsSection(_ title: String, items: [CleanupHistoryDeletedItemDTO]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(title)
 
-            historySectionCard {
+            InsetCard {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         InsetCardDivider()
                     }
                     deletedItemRow(item)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, AppStyle.Spacing.medium)
+                        .padding(.vertical, AppStyle.Spacing.small)
+                }
+            }
+        }
+    }
+
+    /// What the clean tried and couldn't remove, each with why (#303). As of that
+    /// clean: a later Retry doesn't change the entry.
+    private var failedSection: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            sectionLabel(String(localized: "Not removed"))
+
+            InsetCard {
+                ForEach(Array(entry.failedItems.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        InsetCardDivider()
+                    }
+                    failedItemRow(item)
+                        .padding(.horizontal, AppStyle.Spacing.medium)
+                        .padding(.vertical, AppStyle.Spacing.small)
                 }
             }
         }
     }
 
     private var skippedSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(String(localized: "Skipped"))
 
-            historySectionCard {
+            InsetCard {
                 ForEach(Array(entry.skippedItems.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         InsetCardDivider()
                     }
                     skippedItemRow(item)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, AppStyle.Spacing.medium)
+                        .padding(.vertical, AppStyle.Spacing.small)
                 }
             }
         }
@@ -112,26 +141,26 @@ struct CleanupHistoryDetailView: View {
         let isModelSet = entry.kind == .appleIntelligenceModels
         let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
 
-        return HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(isModelSet ? item.path : fileURL.lastPathComponent)
+        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                Text(isModelSet ? item.path : itemName(fileURL))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 if !isModelSet {
-                    Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
+                    Text(locationText(for: fileURL))
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textTertiary)
                         .lineLimit(1)
                 }
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             if item.sizeBytes > 0 {
                 Text(formatBytes(item.sizeBytes))
-                    .font(AppStyle.Typography.rowTitle)
+                    .font(AppStyle.Typography.rowTitle.numbers)
                     .foregroundStyle(AppColors.textSecondary)
             }
         }
@@ -140,9 +169,9 @@ struct CleanupHistoryDetailView: View {
     private func skippedItemRow(_ item: CleanupHistorySkippedItemDTO) -> some View {
         let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
 
-        return HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(fileURL.lastPathComponent)
+        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                Text(itemName(fileURL))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -152,7 +181,7 @@ struct CleanupHistoryDetailView: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
+                Text(locationText(for: fileURL))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textTertiary)
                     .lineLimit(1)
@@ -162,18 +191,46 @@ struct CleanupHistoryDetailView: View {
         }
     }
 
-    private func historySectionCard<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
+    private func failedItemRow(_ item: CleanupHistoryFailedItemDTO) -> some View {
+        let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
+
+        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                Text(itemName(fileURL))
+                    .font(AppStyle.Typography.body)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text(item.failureReason.explanation)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(locationText(for: fileURL))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
             }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            if item.sizeBytes > 0 {
+                Text(formatBytes(item.sizeBytes))
+                    .font(AppStyle.Typography.rowTitle.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+        }
+    }
+
+    /// The file or folder's name. An Xcode component's asset folder is named by
+    /// a hash, so it shows as the component instead (#132).
+    private func itemName(_ fileURL: URL) -> String {
+        XcodeComponent.Kind(assetFolder: fileURL)?.displayName ?? fileURL.lastPathComponent
+    }
+
+    /// The item's folder, with iCloud Drive's own folder named as Finder names it.
+    private func locationText(for fileURL: URL) -> String {
+        let folder = fileURL.deletingLastPathComponent()
+        return LargeFile.iCloudDriveLocation(for: folder) ?? displayDirectoryPath(for: folder)
     }
 }

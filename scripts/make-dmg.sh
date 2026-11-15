@@ -30,6 +30,34 @@ if [ "$APP_VERSION" != "$VERSION" ]; then
   exit 1
 fi
 
+# Sparkle decides whether an update is newer by the build number
+# (CFBundleVersion, CURRENT_PROJECT_VERSION), not by the version above. A build
+# number that wasn't bumped means installed copies never see the update, or
+# see it again after every install. Each appcast item lists sparkle:version
+# just before sparkle:shortVersionString.
+APP_BUILD="$(defaults read "$APP/Contents/Info" CFBundleVersion)"
+case "$APP_BUILD" in
+  '' | *[!0-9]*)
+    echo "Build number '$APP_BUILD' is not a whole number." >&2
+    exit 1
+    ;;
+esac
+APPCAST_BUILDS="$(awk -F'[<>]' '
+  $2 == "sparkle:version" { build = $3 }
+  $2 == "sparkle:shortVersionString" { print $3, build }
+' "$REPO_ROOT/appcast.xml")"
+LISTED_BUILD="$(echo "$APPCAST_BUILDS" | awk -v v="$VERSION" '$1 == v && !seen++ { print $2 }')"
+SHIPPED_BUILD="$(echo "$APPCAST_BUILDS" | awk -v v="$VERSION" '$1 != v && $2 + 0 > max { max = $2 + 0 } END { print max + 0 }')"
+if [ -n "$LISTED_BUILD" ] && [ "$APP_BUILD" != "$LISTED_BUILD" ]; then
+  echo "Build mismatch: appcast.xml lists $VERSION as build $LISTED_BUILD, but the app is build $APP_BUILD." >&2
+  exit 1
+fi
+if [ "$APP_BUILD" -le "$SHIPPED_BUILD" ]; then
+  echo "Build mismatch: app is build $APP_BUILD, but appcast.xml already ships build $SHIPPED_BUILD." >&2
+  echo "Bump CURRENT_PROJECT_VERSION in both configs and re-archive." >&2
+  exit 1
+fi
+
 echo "==> Verifying the exported app is properly signed"
 # Older Xcode left Sparkle's nested binaries ad-hoc signed, which notarization
 # rejects. Recent Xcode does not. Check rather than re-sign blindly: re-signing
@@ -86,5 +114,6 @@ echo "==> Appcast values"
 # sign_update runs last: stapling changes the file size, and a stale length
 # breaks the update for everyone.
 "$REPO_ROOT/bin/sign_update" "$DMG"
+echo "sparkle:version: $APP_BUILD"
 echo "sha256: $(shasum -a 256 "$DMG" | awk '{print $1}')"
 echo "dmg:    $DMG"

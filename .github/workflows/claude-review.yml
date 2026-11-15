@@ -37,12 +37,13 @@ jobs:
       # from main. A manual run takes them from the branch it was started on,
       # so changes to the review can be tried before they merge. The pull
       # request's code goes in pr-head/.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: refs/pull/${{ github.event.pull_request.number || inputs.pr_number }}/head
           path: pr-head
@@ -55,7 +56,7 @@ jobs:
         run: rm -rf pr-head/.claude
 
       - name: Review with Claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

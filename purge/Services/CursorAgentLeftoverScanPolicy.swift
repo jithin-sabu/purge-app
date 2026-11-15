@@ -38,7 +38,12 @@ enum CursorAgentLeftoverScanPolicy {
         /// Whether `storage.json` was present and parsed. Missing or invalid
         /// data is unavailable, not "no windows".
         var windowsSnapshot: SnapshotStatus
+        /// `$TMPDIR`, where a `var-folders-…` namespace's workspace lives.
         var temporaryDirectory: URL
+        /// `/private/tmp`, where a `tmp-…` or `private-tmp-…` namespace's
+        /// workspace lives. Those were looked for in `$TMPDIR`, found missing,
+        /// and listed while the workspace was in use (#183).
+        var systemTemporaryDirectory = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
 
         nonisolated static func current(
             home: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -64,13 +69,9 @@ enum CursorAgentLeftoverScanPolicy {
     /// Whether Purge may trash this path. Unused-ness is a scan filter, not a
     /// delete-time check — once the user has picked a listed folder, the gate
     /// only proves it is a leftover *kind*, never `~/.cursor` itself.
-    nonisolated static func isEligibleForDeletion(_ url: URL, home: URL) -> Bool {
-        isWhitelistedPath(url.standardizedFileURL.path, home: home.standardizedFileURL.path)
-    }
-
     nonisolated static func isWhitelistedPath(_ path: String, home: String) -> Bool {
         let url = URL(fileURLWithPath: path, isDirectory: true)
-        guard !containsSymlinkComponent(url, home: home) else { return false }
+        guard !PathContainment.containsSymlinkComponent(url, home: home) else { return false }
         guard staysInsideIntendedCursorRoot(url, home: home) else { return false }
 
         let projectsRoot = "\(home)/.cursor/projects/"
@@ -124,6 +125,10 @@ enum CursorAgentLeftoverScanPolicy {
         live: LiveContext,
         fileManager: FileManager = .default
     ) -> [URL] {
+        // Without Cursor's working directories, a namespace an agent is working
+        // in looks unused. The snapshot's status was never read, so a failed one
+        // counted as no agent running anywhere (#183).
+        guard live.cursorProcessSnapshot == .available else { return [] }
         let root = home.appendingPathComponent(".cursor/projects", isDirectory: true)
         guard let entries = try? fileManager.contentsOfDirectory(
             at: root,
@@ -142,14 +147,18 @@ enum CursorAgentLeftoverScanPolicy {
                live.cursorIsRunning && live.windowsSnapshot != .available {
                 return nil
             }
-            guard !isLiveJunkProject(slug: slug, live: live) else { return nil }
+            guard !isLiveJunkProject(slug: slug, live: live, fileManager: fileManager) else { return nil }
             return url
         }
     }
 
     // MARK: - Live detection
 
-    nonisolated static func isLiveJunkProject(slug: String, live: LiveContext) -> Bool {
+    nonisolated static func isLiveJunkProject(
+        slug: String,
+        live: LiveContext,
+        fileManager: FileManager = .default
+    ) -> Bool {
         if live.emptyWindowBackupIDs.contains(slug) {
             return true
         }
@@ -157,7 +166,7 @@ enum CursorAgentLeftoverScanPolicy {
             return true
         }
         if let temp = resolvedTemporaryWorkspace(slug: slug, live: live),
-           FileManager.default.fileExists(atPath: temp.path) {
+           fileManager.fileExists(atPath: temp.path) {
             return true
         }
         if live.processWorkingDirectories.contains(where: { encodedProjectSlug(for: $0) == slug }) {
@@ -177,13 +186,17 @@ enum CursorAgentLeftoverScanPolicy {
             .replacingOccurrences(of: "_", with: "-")
     }
 
-    /// `var-folders-…-T-<uuid>` maps back onto `$TMPDIR/<uuid>` when the uuid
-    /// is still a real temp workspace. Other junk slugs have no source path.
+    /// The temp workspace a junk slug was made for: `var-folders-…-T-<uuid>`
+    /// is `$TMPDIR/<uuid>`, and `tmp-<uuid>` and `private-tmp-<uuid>` are
+    /// `/private/tmp/<uuid>`. Other junk slugs have no source path.
     nonisolated static func resolvedTemporaryWorkspace(slug: String, live: LiveContext) -> URL? {
         let uuid = uuidSuffix(in: slug)
         guard let uuid else { return nil }
-        if slug.hasPrefix("var-folders-") || slug.hasPrefix("tmp-") || slug.hasPrefix("private-tmp-") {
+        if slug.hasPrefix("var-folders-") {
             return live.temporaryDirectory.appendingPathComponent(uuid, isDirectory: true)
+        }
+        if slug.hasPrefix("tmp-") || slug.hasPrefix("private-tmp-") {
+            return live.systemTemporaryDirectory.appendingPathComponent(uuid, isDirectory: true)
         }
         return nil
     }
@@ -253,36 +266,10 @@ enum CursorAgentLeftoverScanPolicy {
         return readOpenWindows(from: support).status != .available
     }
 
-    nonisolated static func containsSymlinkComponent(_ url: URL, home: String) -> Bool {
-        let path = url.standardizedFileURL.path
-        guard path == home || path.hasPrefix(home + "/") else { return true }
-        var current = URL(fileURLWithPath: home, isDirectory: true)
-        let remainder = path.dropFirst(home.count)
-            .split(separator: "/", omittingEmptySubsequences: true)
-            .map(String.init)
-        for part in remainder {
-            current.appendPathComponent(part)
-            if isSymlink(current) { return true }
-        }
-        return false
-    }
-
     private nonisolated static func staysInsideIntendedCursorRoot(_ url: URL, home: String) -> Bool {
-        let path = url.standardizedFileURL.path
         let lexicalRoot = "\(home)/.cursor/projects"
-        guard path == lexicalRoot || path.hasPrefix(lexicalRoot + "/") else { return false }
-
-        let rootURL = URL(fileURLWithPath: lexicalRoot, isDirectory: true)
-        if containsSymlinkComponent(rootURL, home: home) { return false }
-
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
-        let resolvedRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
-        guard resolvedRoot == lexicalRoot else { return false }
-        return resolved == resolvedRoot || resolved.hasPrefix(resolvedRoot + "/")
-    }
-
-    private nonisolated static func isSymlink(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
+        guard PathContainment.isSameOrInside(url.standardizedFileURL.path, lexicalRoot) else { return false }
+        return PathContainment.staysInside(root: lexicalRoot, url: url, home: home, includingRoot: true)
     }
 
     private nonisolated static func path(fromFileURI uri: String) -> String? {

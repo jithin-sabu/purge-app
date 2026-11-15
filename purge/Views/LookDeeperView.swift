@@ -150,7 +150,7 @@ struct LookDeeperView: View {
       if findings.isWorthLeadingWith {
         VStack(spacing: 0) {
           Text(formatBytes(findings.bytes))
-            .font(AppStyle.Typography.display)
+            .font(AppStyle.Typography.display.numbers)
             .monospacedDigit()
           Text("more to clean, from places that were locked")
             .font(AppStyle.Typography.sectionTitle.weight(.medium))
@@ -224,7 +224,7 @@ struct LookDeeperView: View {
   /// In onboarding, "Show me" lands on the tab that holds most of what was found.
   private func finish(with findings: LockedPlacesFindings) {
     if case .onboarding = context, findings.isWorthLeadingWith {
-      store.selectedTab = findings.categories.first?.title == PurgeStore.devArtifactCategoryTitle
+      store.selectedTab = findings.categories.first?.kind == .devArtifacts
         ? .devTools
         : .appCaches
     }
@@ -331,7 +331,7 @@ struct LookDeeperSheet: View {
   /// The same width as the app's other sheets. The onboarding step is laid out for
   /// the whole window; over the main window it would read as oversized.
   static let width: CGFloat = 580
-  static let padding: CGFloat = 32
+  static let padding: CGFloat = AppStyle.Spacing.xLarge
 
   var body: some View {
     LookDeeperView(
@@ -348,6 +348,6 @@ struct LookDeeperSheet: View {
 #Preview {
   LookDeeperView(context: .onboarding(didClean: true), onNotNow: {}, onFinished: {})
     .environmentObject(PurgeStore())
-    .padding(40)
+    .padding(AppStyle.Spacing.xLarge)
     .frame(width: AppWindowLayout.width, height: AppWindowLayout.minHeight)
 }

@@ -8,6 +8,9 @@ enum RemovedAppReviewFiltering {
     /// app also claims. `appGroupClaims` holds the app groups the survivors list
     /// in their entitlements.
     ///
+    /// A row the scan left unticked stays unticked: a scripts folder with files
+    /// in it (#352), or a catalog dot folder.
+    ///
     /// Only identifier-anchored matches inside the home folder start ticked. This
     /// review opens unprompted from a record another process could have written, so
     /// anything outside home (`/Library/LaunchDaemons`, shared Application Support)
@@ -32,7 +35,8 @@ enum RemovedAppReviewFiltering {
             )
             guard sharedWith == nil else { return nil }
             var reviewed = item
-            reviewed.isSelected = item.matchReason.isHighConfidence
+            reviewed.isSelected = item.isSelected
+                && item.matchReason.isHighConfidence
                 && item.path.standardizedFileURL.path.hasPrefix(homePrefix)
             return reviewed
         }

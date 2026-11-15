@@ -41,7 +41,6 @@ struct EverythingElseNoDeleteTests {
         "DeletionSession",
         "showDeletionSheet",
         "showLargeFileDeletionSheet",
-        "pendingUnknownDeletion",
         "scanSelection",
         "largeFileSelection",
         "selectedAppIDs",
@@ -167,6 +166,8 @@ struct EverythingElseNoDeleteTests {
         }
 
         // Every store action the screens can call, short of opening another app.
+        store.performEverythingElseHint(.showInCommandLineTools)
+        #expect(store.uninstallSection == .commandLineTools)
         store.performEverythingElseHint(.showInDevTools)
         store.performEverythingElseHint(.showInLargeFiles)
         _ = store.everythingElseFolderHint(for: folder)
@@ -181,11 +182,11 @@ struct EverythingElseNoDeleteTests {
         #expect(!store.showDeletionSheet)
         #expect(!store.showLargeFileDeletionSheet)
         #expect(store.deletionSheetCandidates == nil)
-        #expect(store.pendingUnknownDeletion == nil)
         #expect(store.manualDeletionSession == nil)
         #expect(store.interactiveSafeCleanupSession == nil)
         #expect(store.uninstallPlan == nil)
         #expect(store.orphanCleanupPlan == nil)
+        #expect(store.commandLineToolRemovalPlan == nil)
         #expect(store.lastDeletionReport == nil)
         #expect(FileManager.default.fileExists(atPath: big.appendingPathComponent("keep.bin").path))
         #expect(FileManager.default.fileExists(atPath: small.path))
@@ -193,23 +194,5 @@ struct EverythingElseNoDeleteTests {
         #expect(ExcludedPathsStore.isExcluded(big))
         #expect(store.selectedTab == .largeFiles)
         fake.cleanUp()
-    }
-
-    /// Counts only the time this loop was running. On CI the test host can
-    /// stall for tens of seconds at the start of a run, with every suite
-    /// waiting on the main actor; a wall-clock deadline expires during the
-    /// stall through no fault of the condition. A gap between two turns of
-    /// the loop counts for at most a quarter of a second.
-    private func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        var waited: TimeInterval = 0
-        var last = Date()
-        while !condition() {
-            guard waited < timeout else { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-            let now = Date()
-            waited += min(now.timeIntervalSince(last), 0.25)
-            last = now
-        }
-        return true
     }
 }

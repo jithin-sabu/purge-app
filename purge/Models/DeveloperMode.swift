@@ -8,9 +8,4 @@ enum DeveloperMode {
 
     /// Number of taps on the About icon required to toggle developer mode.
     static let unlockTapCount = 5
-
-    /// Whether developer mode is currently enabled.
-    static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: userDefaultsKey)
-    }
 }

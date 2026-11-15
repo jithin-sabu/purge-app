@@ -8,10 +8,19 @@ import Foundation
 /// Xcode.app is trashed, and so do the simulator runtimes it manages. Someone who
 /// deleted Xcode to free space is exactly who still has 25 GB of runtimes, so the
 /// framework copy is the fallback whenever `xcrun` cannot find the tool.
+///
+/// `/usr/bin/xcrun` is a shim that exists on every Mac. Run with no developer
+/// directory, it shows macOS's "install the command line developer tools" dialog
+/// instead of failing (#298), so it is only run once `DeveloperDirectory` says
+/// there is one.
 nonisolated enum Simctl {
     static let xcrunPath = "/usr/bin/xcrun"
-    static let frameworkPath =
-        "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl"
+    static let frameworkDirectoryPath = "/Library/Developer/PrivateFrameworks/CoreSimulator.framework"
+    static let frameworkPath = frameworkDirectoryPath + "/Resources/bin/simctl"
+    /// Where CoreSimulator keeps the runtime images it manages.
+    static let runtimeStorePath = "/Library/Developer/CoreSimulator"
+    /// Where CoreSimulator keeps this user's devices and caches.
+    static let userFolderRelativePath = "Library/Developer/CoreSimulator"
 
     /// How `simctl` is reached on this Mac.
     enum Launcher: Equatable {
@@ -36,33 +45,72 @@ nonisolated enum Simctl {
         launcherLock.lock()
         if case .resolved(let cached) = resolution {
             launcherLock.unlock()
-            return cached
+            return stillUsable(
+                cached,
+                developerDirectoryExists: { DeveloperDirectory.exists },
+                isExecutable: { fileManager.isExecutableFile(atPath: $0) }
+            )
         }
         launcherLock.unlock()
 
         // Resolved outside the lock: `xcrun --find` is a child process, and the
         // scanner and the deleter may both ask on cold start.
-        let resolved = resolveLauncher(fileManager: fileManager)
+        let resolved = resolveLauncher(
+            developerDirectoryExists: { DeveloperDirectory.exists },
+            launch: { ProcessRunner.run(executablePath: $0, arguments: $1, timeout: $2) },
+            isExecutable: { fileManager.isExecutableFile(atPath: $0) }
+        )
         launcherLock.lock()
         resolution = .resolved(resolved)
         launcherLock.unlock()
         return resolved
     }
 
-    private static func resolveLauncher(fileManager: FileManager) -> Launcher? {
-        if fileManager.isExecutableFile(atPath: xcrunPath),
-           let found = ProcessRunner.run(
-               executablePath: xcrunPath,
-               arguments: ["--find", "simctl"],
-               timeout: findTimeout
-           ),
+    /// `launcher` with the developer directory check, the process launch and the
+    /// executable check handed in, so tests can check that `xcrun` is never run
+    /// on a Mac without developer tools.
+    static func resolveLauncher(
+        developerDirectoryExists: () -> Bool,
+        launch: (_ executablePath: String, _ arguments: [String], _ timeout: TimeInterval) -> ProcessRunner.Output?,
+        isExecutable: (_ path: String) -> Bool
+    ) -> Launcher? {
+        // `isExecutableFile` on `xcrunPath` is no guard: the shim is always there.
+        if developerDirectoryExists(),
+           let found = launch(xcrunPath, ["--find", "simctl"], findTimeout),
            found.succeeded {
             return .xcrun
         }
-        if fileManager.isExecutableFile(atPath: frameworkPath) {
+        if isExecutable(frameworkPath) {
             return .framework
         }
         return nil
+    }
+
+    /// A cached `.xcrun` after the developer directory went away. Purge's own
+    /// uninstaller can trash Xcode while Purge runs, and `xcrun` would then show
+    /// the install prompt for the path left behind. The framework copy stands in,
+    /// as it does at the first resolution; the cache is left alone so a put-back
+    /// Xcode is found again. The developer directory check is a stat once it is
+    /// resolved, so this costs nothing on a Mac that keeps its tools.
+    static func stillUsable(
+        _ cached: Launcher?,
+        developerDirectoryExists: () -> Bool,
+        isExecutable: (_ path: String) -> Bool
+    ) -> Launcher? {
+        guard cached == .xcrun, !developerDirectoryExists() else { return cached }
+        return isExecutable(frameworkPath) ? .framework : nil
+    }
+
+    /// `false` when nothing CoreSimulator has ever been installed or run for this
+    /// user: no framework, no runtime store, no devices folder. Then there are no
+    /// runtimes to list, and the scan need not launch anything to find that out.
+    static func coreSimulatorPresent(
+        fileManager: FileManager = .default,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        systemFolders: [String] = [Simctl.frameworkDirectoryPath, Simctl.runtimeStorePath]
+    ) -> Bool {
+        let userFolder = home.appendingPathComponent(userFolderRelativePath, isDirectory: true).path
+        return (systemFolders + [userFolder]).contains { fileManager.fileExists(atPath: $0) }
     }
 
     /// The shape of `run`, so tests can hand in a fake `simctl`.

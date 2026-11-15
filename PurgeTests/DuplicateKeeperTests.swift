@@ -30,13 +30,50 @@ struct DuplicateKeeperTests {
     }
 
     @Test
-    func keepsTheRealHomeOverABuildArtifact() {
+    func keepsTheRealHomeOverATemporaryOrCachedCopy() {
         let keeper = suggested([
-            "/Users/x/Documents/grocery/App/Resources/snapshot.sqlite",
-            "/Users/x/Documents/grocery/DerivedData/Build/snapshot.sqlite",
-            "/Users/x/Documents/grocery/App/node_modules/pkg/snapshot.sqlite",
+            "/Users/x/Documents/models/whisper/large.pt",
+            "/Users/x/Documents/a/tmp/large.pt",
+            "/Users/x/.cache/whisper/large.pt",
         ])
-        #expect(keeper == "/Users/x/Documents/grocery/App/Resources/snapshot.sqlite")
+        #expect(keeper == "/Users/x/Documents/models/whisper/large.pt")
+    }
+
+    /// A marker for a folder no duplicate can come from would never fire, and
+    /// would read as a signal the keeper uses when it isn't (#190). Each one
+    /// must sit where the Large Files walk goes or under an AI model root.
+    @Test(arguments: DuplicateKeeper.disposableFolders)
+    func everyDisposableFolderCanHoldARow(marker: String) {
+        let home = URL(fileURLWithPath: "/Users/x", isDirectory: true)
+        let walked = home.appendingPathComponent("Documents" + marker + "file.bin")
+        let modelRoots = AIModelScanPolicy.looseWeightRoots(home: home)
+            + AIModelScanPolicy.allRoots(home: home, environment: [:])
+        let underModelRoot = modelRoots.contains { ($0.path + "/").lowercased().contains(marker) }
+        #expect(!LargeFileScanPolicy.isInsideExcludedDirectory(walked) || underModelRoot)
+    }
+
+    /// Finder names a duplicate in the Mac's language, so `Bericht Kopie.pdf` on
+    /// a German Mac is as much a copy as `report copy.pdf`.
+    @Test(arguments: DuplicateKeeper.finderCopyNames)
+    func keepsTheOriginalOverAFinderCopy(template: String) {
+        let copy = template.replacingOccurrences(of: "{name}", with: "report")
+            .replacingOccurrences(of: "{n}", with: "2")
+        let keeper = suggested([
+            "/Users/x/Documents/\(copy).pdf",
+            "/Users/x/Documents/report.pdf",
+        ])
+        #expect(keeper == "/Users/x/Documents/report.pdf", "\(copy) was not read as a copy")
+    }
+
+    /// Names on disk can be decomposed, with an accent stored as its own character.
+    @Test
+    func readsADecomposedCopyName() {
+        let copy = "report - cópia".decomposedStringWithCanonicalMapping
+        let keeper = suggested([
+            "/Users/x/Documents/\(copy).pdf",
+            "/Users/x/Documents/report.pdf",
+        ])
+        #expect(keeper == "/Users/x/Documents/report.pdf")
     }
 
     @Test

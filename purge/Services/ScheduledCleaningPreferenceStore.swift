@@ -83,10 +83,7 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
     /// when the frequency is `.custom`, the preset otherwise. Single source of
     /// truth consumed by `ScheduledCleaningRegistrar.dueDate`.
     var effectiveRepeatIntervalSeconds: TimeInterval {
-        if frequency == .custom {
-            return TimeInterval(customIntervalAmount) * customIntervalUnit.seconds
-        }
-        return frequency.repeatIntervalSeconds
+        frequency.repeatIntervalSeconds ?? TimeInterval(customIntervalAmount) * customIntervalUnit.seconds
     }
 
     func setEnabled(_ enabled: Bool, animation: Animation? = nil) async {

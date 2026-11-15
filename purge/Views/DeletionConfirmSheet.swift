@@ -8,8 +8,13 @@ struct DeletionConfirmSheet: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
-    private var totalBytes: Int64 {
-        candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    /// Only the simulators and runtimes are freed straight away. The rest waits
+    /// in the Trash until it is emptied (#191).
+    var sizeLine: String {
+        RemovalSizeLine.text(
+            toTrash: RemovalSizeLine.total(trashCandidates, \.sizeBytes),
+            permanently: RemovalSizeLine.total(permanentCandidates, \.sizeBytes)
+        )
     }
 
     /// Simulators and runtimes. `simctl` deletes them, so they never reach the
@@ -116,7 +121,7 @@ struct DeletionConfirmSheet: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -165,7 +170,7 @@ struct DeletionConfirmSheet: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -229,7 +234,7 @@ struct DeletionConfirmSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
             HStack(spacing: AppStyle.Spacing.small) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                     Text(item.title)
                         .font(AppStyle.Typography.rowTitle)
                         .foregroundStyle(AppColors.textPrimary)
@@ -253,10 +258,10 @@ struct DeletionConfirmSheet: View {
 
                 VStack(alignment: .trailing, spacing: AppStyle.Spacing.xxSmall) {
                     Text(item.formattedSize)
-                        .font(AppStyle.Typography.metadataEmphasis)
+                        .font(AppStyle.Typography.metadataEmphasis.numbers)
                         .foregroundStyle(AppColors.textSecondary)
                         .monospacedDigit()
-                    safetyTag(for: item.safetyInfo.level)
+                    AppBadge(level: item.safetyInfo.level)
                 }
             }
 
@@ -281,49 +286,13 @@ struct DeletionConfirmSheet: View {
         )
     }
 
-    private func safetyTag(for level: SafetyLevel) -> some View {
-        let text: String
-        let fg: Color
-        let bg: Color
-        switch level {
-        case .safe:
-            text = "Safe"
-            fg = AppColors.statusSafeText
-            bg = AppColors.statusSafeFill
-        case .medium:
-            text = "Check first"
-            fg = AppColors.statusCheckText
-            bg = AppColors.statusCheckFill
-        case .unknown:
-            text = "Not sure"
-            fg = AppColors.statusDangerText
-            bg = AppColors.statusDangerFill
-        }
-        return Text(LocalizedStringKey(text))
-            .font(AppStyle.Typography.metadataEmphasis)
-            .foregroundStyle(fg)
-            .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .padding(.vertical, 2)
-            .background(Capsule(style: .continuous).fill(bg))
-    }
-
     private func footer(primaryTitle: String) -> some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text("Freeing \(formatBytes(totalBytes))")
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
-
-            Spacer()
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            Button(primaryTitle) {
-                onConfirm()
-            }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-        }
+        RemovalSheetFooter(
+            sizeLine: sizeLine,
+            confirmTitle: primaryTitle,
+            itemCount: candidates.count,
+            onCancel: onCancel,
+            onConfirm: onConfirm
+        )
     }
 }

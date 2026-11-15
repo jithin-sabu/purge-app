@@ -16,9 +16,16 @@ enum AppBootstrapper {
     private static var hasBootstrapped = false
 
     /// Idempotent: safe to call from more than one launch path.
+    ///
+    /// Does nothing in the unit-test host (#181). It shares the user's real
+    /// defaults and files, so the launch scan would walk the real disk, the
+    /// registrar would rewrite the real reminders, and the quit guard and
+    /// Shortcuts list would act on a test run. A test that needs one of these
+    /// attaches it to throwaway defaults itself.
     static func bootstrapOnce() {
         guard !hasBootstrapped else { return }
         hasBootstrapped = true
+        guard runsAtLaunch(environment: ProcessInfo.processInfo.environment) else { return }
 
         let env = AppEnvironment.self
 
@@ -26,7 +33,14 @@ enum AppBootstrapper {
         // `DiskSummaryRefreshModifier` refreshes again when the window appears.
         // A third read would put the expensive APFS capacity key on the path to
         // first paint for a value that cannot have changed since init.
-        env.menuModel.attach(store: env.store)
+        //
+        // A Purge the deleted-apps watcher started windowless shows one review
+        // and quits, so it skips the launch scan (#177). The menu bar scans on
+        // its first open instead, and a window the user opens scans as usual.
+        // The last scan's rows, shown dimmed while this launch scans again (#283).
+        // Started first so they are up before the menu bar's launch scan lands.
+        Task { await env.store.loadLastScan() }
+        env.menuModel.attach(store: env.store, scansAtLaunch: !RemovedAppMonitor.startsWindowless)
         MenuScanNotifier.configure()
         ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel = env.menuModel] in
             menuModel?.performCleanFromNotification()
@@ -38,6 +52,7 @@ enum AppBootstrapper {
             })
         }
         RemovedAppMonitor.shared.attach(store: env.store)
+        env.store.startWatchingAppFolderDrives()
         CleaningQuitGuard.isCleaningActive = { [weak store = env.store] in
             store?.isAnyCleanInProgress ?? false
         }
@@ -64,5 +79,11 @@ enum AppBootstrapper {
             await PrivilegedHelperManager.shared.reconcileVersion()
             helperPreferences.refresh()
         }
+    }
+
+    /// False only in the unit-test host. A build run from Xcode is a real launch
+    /// and bootstraps like an installed one.
+    nonisolated static func runsAtLaunch(environment: [String: String]) -> Bool {
+        !TestHost.isActive(environment: environment)
     }
 }

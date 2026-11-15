@@ -123,23 +123,27 @@ struct ProcessRunnerTests {
         #expect(results.allSatisfy { $0 == bytes }, "some children did not drain: \(results)")
     }
 
+    /// The child waits for a file that only a main-actor task makes. If `runAsync` held
+    /// the main actor until the child exited, that task could not run, and the child
+    /// would wait until its timeout. The debug precondition in `run` also fails if the
+    /// wait happens on the main queue.
     @Test("runAsync leaves the main actor free while the child runs")
     @MainActor
     func asyncVariantDoesNotBlockMainActor() async throws {
-        // Fails the debug precondition in `run` if the wait happens on the main queue, and
-        // deadlocks the flag below if `runAsync` blocks the main actor instead of suspending.
-        var mainActorRanDuringChild = false
-        async let child = ProcessRunner.runAsync(
-            executablePath: "/bin/sleep",
-            arguments: ["1"],
+        let signal = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-runasync-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: signal) }
+
+        Task { @MainActor in
+            FileManager.default.createFile(atPath: signal.path, contents: nil)
+        }
+        let result = try #require(await ProcessRunner.runAsync(
+            executablePath: "/bin/sh",
+            arguments: ["-c", "while [ ! -e \"$1\" ]; do /bin/sleep 0.05; done", "sh", signal.path],
             timeout: 10
-        )
+        ))
 
-        await Task.yield()
-        mainActorRanDuringChild = true
-
-        let result = try #require(await child)
         #expect(!result.timedOut)
-        #expect(mainActorRanDuringChild)
+        #expect(result.status == 0)
     }
 }

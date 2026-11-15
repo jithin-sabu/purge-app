@@ -40,6 +40,35 @@ nonisolated enum HelperDirectory {
     }
 }
 
+/// What the root helper may move and hand back to the user, judged from the item's
+/// own `stat`. Both the app and the helper compile this file, so the app's tests
+/// cover the exact rule the helper runs.
+///
+/// A hard link is not a symlink, so `O_NOFOLLOW` does not stop one. Any account can
+/// hard-link a root-owned file it can read, such as a plist in
+/// `/Library/LaunchDaemons`, into a folder it owns. Moved and handed back as root,
+/// that link would give the account the original file, and with it root at the
+/// next boot. So the helper never moves a file with a second name, and never
+/// changes the owner of one inside a folder it moves (#314).
+nonisolated enum HelperLinkPolicy {
+    /// The errno to refuse a move source with, or `nil` when it may move. A source
+    /// must be a folder or a regular file with one name, and a `.app` must be a folder.
+    static func refusal(forSourceMode mode: mode_t, linkCount: nlink_t, isAppBundlePath: Bool) -> Int32? {
+        let type = mode & S_IFMT
+        guard type == S_IFDIR || type == S_IFREG else { return EFTYPE }
+        if isAppBundlePath, type != S_IFDIR { return EFTYPE }
+        if type == S_IFREG, linkCount > 1 { return EMLINK }
+        return nil
+    }
+
+    /// Whether the helper may hand this item to the user. A folder's link count
+    /// counts its subfolders, so only a non-folder with a second name is kept as
+    /// it is.
+    static func mayChangeOwner(mode: mode_t, linkCount: nlink_t) -> Bool {
+        (mode & S_IFMT) == S_IFDIR || linkCount <= 1
+    }
+}
+
 /// Lets the root helper quit once nobody needs it, so the next request starts a fresh
 /// copy from the app bundle that is installed now.
 ///
@@ -123,6 +152,94 @@ nonisolated final class HelperIdleTracker: @unchecked Sendable {
                 lock.unlock()
                 if commit { onIdle() }
             }
+        }
+    }
+}
+
+/// Whether an account is in the local `admin` group. Both the app and the helper
+/// compile this file, so Settings and the root helper always agree on who is an
+/// administrator (#314).
+nonisolated enum AdministratorMembership {
+    /// True only when `userName`, whose primary group is `primaryGID`, is a member of
+    /// the local `admin` group. Any lookup that fails says no.
+    static func includes(userName: String, primaryGID: gid_t) -> Bool {
+        guard let adminGID = adminGroupID() else { return false }
+        var capacity: Int32 = 32
+        // A short buffer makes `getgrouplist` return -1, so it grows and asks
+        // again. A list that never fits says no.
+        while capacity <= 4_096 {
+            var groups = [Int32](repeating: 0, count: Int(capacity))
+            var count = capacity
+            let status = userName.withCString {
+                getgrouplist($0, Int32(bitPattern: primaryGID), &groups, &count)
+            }
+            if status == 0 {
+                return groups.prefix(Int(count)).contains(Int32(bitPattern: adminGID))
+            }
+            capacity = max(capacity * 2, count)
+        }
+        return false
+    }
+
+    /// Whether the account running this process is an administrator. Settings reads
+    /// it to say whether removing an admin-locked app will ask for a password.
+    static func currentUserIsAdministrator() -> Bool {
+        guard let account = UserRecord.lookUp(uid: getuid()) else { return false }
+        return includes(userName: account.name, primaryGID: account.primaryGID)
+    }
+
+    /// The gid of the local `admin` group, read from its directory record. The
+    /// record lists the group's members, so a big group needs a bigger buffer:
+    /// `ERANGE` grows it and asks again, up to 1 MB.
+    private static func adminGroupID() -> gid_t? {
+        let suggestedSize = sysconf(_SC_GETGR_R_SIZE_MAX)
+        var bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        while bufferSize <= 1_048_576 {
+            var record = group()
+            var result: UnsafeMutablePointer<group>?
+            var buffer = [CChar](repeating: 0, count: bufferSize)
+            let status = buffer.withUnsafeMutableBufferPointer { storage -> Int32 in
+                guard let baseAddress = storage.baseAddress else { return -1 }
+                return getgrnam_r("admin", &record, baseAddress, storage.count, &result)
+            }
+            if status == ERANGE {
+                bufferSize *= 2
+                continue
+            }
+            guard status == 0, result != nil else { return nil }
+            return record.gr_gid
+        }
+        return nil
+    }
+}
+
+/// An account's directory record, read once per request.
+nonisolated struct UserRecord {
+    let name: String
+    let primaryGID: gid_t
+    let home: URL
+
+    /// Looks up the account without consulting this process's environment, which
+    /// belongs to root in the helper. The strings are copied while the re-entrant
+    /// lookup buffer is alive.
+    static func lookUp(uid: uid_t) -> UserRecord? {
+        let suggestedSize = sysconf(_SC_GETPW_R_SIZE_MAX)
+        let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        var record = passwd()
+        var result: UnsafeMutablePointer<passwd>?
+        var buffer = [CChar](repeating: 0, count: bufferSize)
+
+        return buffer.withUnsafeMutableBufferPointer { storage in
+            guard let baseAddress = storage.baseAddress else { return nil }
+            let status = getpwuid_r(uid, &record, baseAddress, storage.count, &result)
+            guard status == 0, result != nil,
+                  let namePointer = record.pw_name,
+                  let directory = record.pw_dir else { return nil }
+            return UserRecord(
+                name: String(cString: namePointer),
+                primaryGID: record.pw_gid,
+                home: URL(fileURLWithPath: String(cString: directory), isDirectory: true).standardizedFileURL
+            )
         }
     }
 }

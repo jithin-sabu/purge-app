@@ -118,4 +118,19 @@ struct FirstRunGateTests {
         #expect(relaunch == .alreadyResolved)
         #expect(defaults.bool(forKey: FirstRunGate.onboardingCompletedKey) == false)
     }
+
+    /// These keys are on disk in every install, and `priorUsageKeys` finds an
+    /// existing install by them. A constant whose value changed would make an
+    /// update look like a fresh install (#185).
+    @MainActor
+    @Test func persistedKeysKeepTheirShippedValues() {
+        #expect(SafetyFilter.appCachesKey == "filter.appCaches")
+        #expect(SafetyFilter.devToolsKey == "filter.devTools")
+        #expect(SortOption.appCachesKey == "sort.appCaches")
+        #expect(SortOption.devToolsKey == "sort.devTools")
+        #expect(PurgeStore.pendingOnboardingCelebrationKey == "onboarding.pendingCelebration")
+        #expect(OnboardingFlowView.pendingDeeperScanKey == "onboarding.pendingDeeperScan")
+        #expect(OnboardingFlowView.lookDeeperExitKey == "onboarding.lookDeeperExit")
+        #expect(OnboardingFlowView.didCleanBeforeLookDeeperKey == "onboarding.didCleanBeforeLookDeeper")
+    }
 }

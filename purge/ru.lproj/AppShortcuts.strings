@@ -1,0 +1,23 @@
+/* Siri and Spotlight phrases for the App Shortcuts in PurgeAppShortcuts.swift. */
+
+"Find junk with ${applicationName}" = "Найти мусор с помощью ${applicationName}";
+"Clear junk with ${applicationName}" = "Очистить мусор с помощью ${applicationName}";
+"Check my storage with ${applicationName}" = "Проверить хранилище с помощью ${applicationName}";
+"Delete junk with ${applicationName}" = "Удалить мусор с помощью ${applicationName}";
+"Remove an app with ${applicationName}" = "Удалить приложение с помощью ${applicationName}";
+"Uninstall ${app} with ${applicationName}" = "Удалить ${app} с помощью ${applicationName}";
+"How much can ${applicationName} free" = "Сколько может освободить ${applicationName}";
+"Scan for junk with ${applicationName}" = "Сканировать мусор с помощью ${applicationName}";
+"Remove ${app} with ${applicationName}" = "Удалить ${app} с помощью ${applicationName}";
+"${applicationName} clean" = "${applicationName}: очистка";
+"Clean up my Mac with ${applicationName}" = "Очистить Mac с помощью ${applicationName}";
+"Clean safe junk with ${applicationName}" = "Очистить безопасный мусор с помощью ${applicationName}";
+"Uninstall an app with ${applicationName}" = "Удалить приложение с помощью ${applicationName}";
+"Delete an app with ${applicationName}" = "Удалить приложение с помощью ${applicationName}";
+"How much space can ${applicationName} free up" = "Сколько места может освободить ${applicationName}";
+"${applicationName} scan" = "${applicationName}: сканирование";
+"Clear caches with ${applicationName}" = "Очистить кэши с помощью ${applicationName}";
+"Free up space with ${applicationName}" = "Освободить место с помощью ${applicationName}";
+"Scan my Mac with ${applicationName}" = "Просканировать Mac с помощью ${applicationName}";
+"Get rid of an app with ${applicationName}" = "Избавиться от приложения с помощью ${applicationName}";
+"Clean junk with ${applicationName}" = "Очистить мусор с помощью ${applicationName}";

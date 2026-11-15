@@ -51,29 +51,11 @@ enum GitRepositoryFinder {
 
 /// Folder names that are always safe to remove without consulting git.
 /// These rebuildable artifacts must never trigger the dirty-repo warning even
-/// when they live inside a repository with uncommitted edits.
+/// when they live inside a repository with uncommitted edits. The list is the
+/// safety policy's own, so a folder it allows is never flagged here (#185).
 enum GitWarningPolicy {
-    nonisolated static let rebuildableFolderNames: Set<String> = [
-        "node_modules",
-        "venv",
-        ".venv",
-        "target",
-        "Pods",
-        ".gradle",
-        "DerivedData",
-        "build",
-        "dist",
-        "out",
-        ".next",
-        ".nuxt",
-        ".cache",
-        "__pycache__",
-        ".turbo",
-        ".parcel-cache"
-    ]
-
     nonisolated static func isRebuildableFolder(_ url: URL) -> Bool {
-        rebuildableFolderNames.contains(url.lastPathComponent)
+        DeletionSafetyPolicy.whitelistedFolderNames.contains(url.lastPathComponent)
     }
 }
 
@@ -268,7 +250,16 @@ actor GitStatusChecker {
 
     /// Returns `.unknown` if Git is unavailable or the repository could make it run
     /// a program; empty porcelain means `.clean`.
-    nonisolated static func invokeGit(repository: URL) -> GitWorktreeStatus {
+    ///
+    /// `/usr/bin/git` is a shim. On a Mac without a developer directory it does not
+    /// fail but asks to install the command line developer tools (#298), so git is
+    /// only run once `DeveloperDirectory` says there is one. That check comes
+    /// first: `repositoryDefinesFilters` runs git too.
+    nonisolated static func invokeGit(
+        repository: URL,
+        developerDirectoryExists: () -> Bool = { DeveloperDirectory.exists }
+    ) -> GitWorktreeStatus {
+        guard developerDirectoryExists() else { return .unknown }
         // Submodule config is not covered by the filter check, so a repository
         // with submodules is not run at all.
         if FileManager.default.fileExists(atPath: repository.appendingPathComponent(".gitmodules").path) {

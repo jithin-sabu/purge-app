@@ -94,7 +94,7 @@ struct ApplicationSupportCacheShapeTests {
                 "User Data/GrShaderCache", "User Data/GraphiteDawnCache", "User Data/ShaderCache",
                 "User Data/Safe Browsing", "User Data/Default/Cache/Cache_Data", "User Data/Default/Code Cache",
                 "User Data/Default/DawnWebGPUCache", "User Data/Default/DawnCache",
-                "User Data/Default/Service Worker/CacheStorage",
+                "User Data/Default/Service Worker/CacheStorage", "User Data/Default/Service Worker/ScriptCache",
                 "User Data/Default/Service Worker/Database", "User Data/Default/Extensions",
                 "User Data/Default/IndexedDB", "User Data/Profile 1/Cache", "User Data/Profile 1/GPUCache",
             ],
@@ -105,8 +105,7 @@ struct ApplicationSupportCacheShapeTests {
             "Cache", "Code Cache", "Crashpad/completed", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
             "GPUCache", "GrShaderCache", "GraphiteDawnCache",
             "User Data/Default/Cache", "User Data/Default/Code Cache", "User Data/Default/DawnCache",
-            "User Data/Default/DawnWebGPUCache",
-            "User Data/Default/Service Worker/CacheStorage", "User Data/GrShaderCache",
+            "User Data/Default/DawnWebGPUCache", "User Data/GrShaderCache",
             "User Data/GraphiteDawnCache", "User Data/Profile 1/GPUCache", "User Data/ShaderCache",
         ])
 
