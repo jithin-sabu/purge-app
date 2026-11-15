@@ -107,6 +107,9 @@ enum AppColors {
         static let everythingElse = Color(light: 0x8C8983, dark: 0xA8A49D)
         /// Free space on the storage bars.
         static let freeSpace = Color(light: 0xDAD7D2, dark: 0x4E4B47)
+        /// The stripes across free space that mark purgeable space (#243). Between
+        /// free space and "everything else" in lightness, so it reads as neither.
+        static let purgeableStripe = Color(light: 0xAEAAA4, dark: 0x7A7671)
 
         /// The Everything else page's four buckets (#159), the Signal palette:
         /// each colour says what to do. Blue opens an app, amber is yours to

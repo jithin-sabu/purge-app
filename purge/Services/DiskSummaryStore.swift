@@ -7,6 +7,9 @@ final class DiskSummaryStore: ObservableObject {
     @Published private(set) var totalDiskBytes: Int64 = 0
     @Published private(set) var usedDiskBytes: Int64 = 0
     @Published private(set) var freeDiskBytes: Int64 = 0
+    /// The part of `freeDiskBytes` that is purgeable rather than empty, when there is
+    /// enough of it to show. Display only: gains are measured on `freeDiskBytes`.
+    @Published private(set) var freeSpaceSplit: FreeSpaceSplit?
 
     /// The read taken when the app went to the background, still running or done.
     private var backgroundRead: Task<Void, Never>?
@@ -84,6 +87,7 @@ final class DiskSummaryStore: ObservableObject {
         totalDiskBytes = capacity.totalBytes
         freeDiskBytes = capacity.availableBytes
         usedDiskBytes = capacity.usedBytes
+        freeSpaceSplit = FreeSpaceSplit(availableBytes: capacity.availableBytes, freeNowBytes: capacity.freeNowBytes)
     }
 
     /// Publishes a read unless a read that started after it already has.

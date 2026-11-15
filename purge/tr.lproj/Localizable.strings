@@ -124,6 +124,11 @@
 "Automatic clean" = "Otomatik temizlik";
 "Available after the scan finishes" = "Tarama bittikten sonra kullanılabilir";
 "Available for new files" = "Yeni dosyalar için kullanılabilir";
+"Purgeable" = "Temizlenebilir alan";
+"macOS frees this by itself when it needs room" = "macOS, yere ihtiyaç duyduğunda bunu kendisi boşaltır";
+"What is purgeable space?" = "Temizlenebilir alan nedir?";
+"About purgeable space" = "Temizlenebilir alan hakkında";
+"Space macOS can take back by itself when something needs room: local Time Machine snapshots, iCloud files kept on this Mac, and caches macOS manages. System Settings counts it as used. Removing old Time Machine snapshots below frees part of it now." = "macOS'un bir şey için yer gerektiğinde kendiliğinden geri alabildiği alan: yerel Time Machine anlık görüntüleri, bu Mac'te tutulan iCloud dosyaları ve macOS'un yönettiği önbellekler. Sistem Ayarları bunu kullanılan alan olarak sayar. Aşağıdaki eski Time Machine anlık görüntülerini kaldırmak bunun bir kısmını hemen boşaltır.";
 "Big files tend to live in Downloads, Documents and Desktop, and macOS keeps those locked until you say Purge can look. Purge only ever shows them to you. It never cleans them on its own." = "Büyük dosyalar çoğunlukla İndirilenler, Belgeler ve Masaüstü'nde durur ve macOS, Purge'ün bakmasına izin verene kadar bunları kilitli tutar. Purge bunları yalnızca size gösterir; kendi başına asla temizlemez.";
 "Big forgotten files" = "Unutulmuş büyük dosyalar";
 "Browser caches" = "Tarayıcı önbellekleri";

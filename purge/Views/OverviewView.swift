@@ -44,12 +44,13 @@ struct OverviewView: View {
             totalBytes: diskStore.totalDiskBytes,
             freeBytes: diskStore.freeDiskBytes
         )
+        let freeSpace = OverviewFreeSpace(breakdown: breakdown, split: diskStore.freeSpaceSplit)
         VStack(alignment: .leading, spacing: AppStyle.Spacing.large) {
             if breakdown.totalBytes > 0 {
                 VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-                    diskSummary(breakdown)
+                    diskSummary(breakdown, freeSpace: freeSpace)
                     OverviewDiskBar(
-                        segments: barSegments(breakdown),
+                        segments: barSegments(breakdown, freeSpace: freeSpace),
                         highlightedID: highlightedID,
                         onHover: { highlightedID = $0 }
                     )
@@ -59,7 +60,7 @@ struct OverviewView: View {
             categoriesCard(breakdown, now: now)
 
             if breakdown.totalBytes > 0 {
-                restOfDiskCard(breakdown)
+                restOfDiskCard(breakdown, freeSpace: freeSpace)
                 systemDataCard(now: now)
             }
 
@@ -78,30 +79,32 @@ struct OverviewView: View {
 
     // MARK: Disk summary
 
-    private func diskSummary(_ breakdown: OverviewBreakdown) -> some View {
+    /// Used and free as System Settings shows them: purgeable space counts as used
+    /// (#243), so the two still add up to the total.
+    private func diskSummary(_ breakdown: OverviewBreakdown, freeSpace: OverviewFreeSpace) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
             // One line, ahead of the smaller figures: Russian puts the word first
             // ("Занято 372.7 GB"), and a narrow window broke it after the word (#342).
-            Text("\(formatStorageBytes(breakdown.usedBytes)) used")
+            Text("\(formatStorageBytes(freeSpace.usedBytes)) used")
                 .font(AppStyle.Typography.title.weight(.bold).numbers)
                 .lineLimit(1)
                 .layoutPriority(1)
-                .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
+                .overviewNumberTransition(freeSpace.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
                 .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
             // Right end, above the free part of the bar.
-            Text("\(formatStorageBytes(breakdown.freeBytes)) free")
+            Text("\(formatStorageBytes(freeSpace.emptyBytes)) free")
                 .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textSecondary)
-                .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
+                .overviewNumberTransition(freeSpace.emptyBytes, reduceMotion: reduceMotion)
         }
         .accessibilityElement(children: .combine)
     }
 
-    private func barSegments(_ breakdown: OverviewBreakdown) -> [OverviewDiskBar.Segment] {
+    private func barSegments(_ breakdown: OverviewBreakdown, freeSpace: OverviewFreeSpace) -> [OverviewDiskBar.Segment] {
         var segments = OverviewCategory.allCases.map { category in
             OverviewDiskBar.Segment(
                 id: category.rawValue,
@@ -116,10 +119,19 @@ struct OverviewView: View {
             bytes: breakdown.everythingElseBytes,
             color: AppColors.Chart.everythingElse
         ))
+        // Between used and free, since it is both: macOS counts it as used and
+        // frees it by itself. Zero wide when there is too little to show.
+        segments.append(OverviewDiskBar.Segment(
+            id: OverviewDiskBar.purgeableID,
+            label: String(localized: "Purgeable"),
+            bytes: freeSpace.purgeableBytes,
+            color: AppColors.Chart.freeSpace,
+            isStriped: true
+        ))
         segments.append(OverviewDiskBar.Segment(
             id: OverviewDiskBar.freeID,
             label: String(localized: "Free"),
-            bytes: breakdown.freeBytes,
+            bytes: freeSpace.emptyBytes,
             color: AppColors.Chart.freeSpace
         ))
         return segments
@@ -145,23 +157,52 @@ struct OverviewView: View {
         .overviewCard()
     }
 
-    private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
+    private func restOfDiskCard(_ breakdown: OverviewBreakdown, freeSpace: OverviewFreeSpace) -> some View {
         VStack(spacing: 0) {
             OverviewEverythingElseRow(
                 breakdown: breakdown,
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
             )
+            if freeSpace.purgeableBytes > 0 {
+                InsetCardDivider()
+                OverviewPlainRow(
+                    color: AppColors.Chart.freeSpace,
+                    isStriped: true,
+                    title: String(localized: "Purgeable"),
+                    detail: String(localized: "macOS frees this by itself when it needs room"),
+                    info: OverviewPlainRow.Info(
+                        text: Self.purgeableInfo,
+                        help: String(localized: "What is purgeable space?"),
+                        accessibilityLabel: String(localized: "About purgeable space")
+                    ),
+                    bytes: freeSpace.purgeableBytes,
+                    share: breakdown.share(of: freeSpace.purgeableBytes),
+                    linkedState: linkedRowState(OverviewDiskBar.purgeableID)
+                )
+            }
             InsetCardDivider()
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
                 title: String(localized: "Free"),
                 detail: String(localized: "Available for new files"),
-                bytes: breakdown.freeBytes,
-                share: breakdown.share(of: breakdown.freeBytes),
+                bytes: freeSpace.emptyBytes,
+                share: breakdown.share(of: freeSpace.emptyBytes),
                 linkedState: linkedRowState(OverviewDiskBar.freeID)
             )
         }
         .overviewCard()
+    }
+
+    /// What purgeable space is, for the many people who have never seen the word.
+    private static let purgeableInfo = String(localized: "Space macOS can take back by itself when something needs room: local Time Machine snapshots, iCloud files kept on this Mac, and caches macOS manages. System Settings counts it as used. Removing old Time Machine snapshots below frees part of it now.")
+
+    /// The snapshots row lights up with the purgeable segment when there are
+    /// snapshots, since they are usually most of it and the one part Purge removes.
+    private var snapshotLinkedState: OverviewLinkedRowState {
+        if highlightedID == OverviewDiskBar.purgeableID, (snapshotStore.snapshots?.count ?? 0) > 0 {
+            return .emphasized
+        }
+        return linkedRowState(OverviewSnapshotRow.id)
     }
 
     /// Things inside System Data that Purge can remove. They are part of the used
@@ -182,7 +223,7 @@ struct OverviewView: View {
                 OverviewSnapshotRow(
                     snapshotStore: snapshotStore,
                     now: now,
-                    linkedState: linkedRowState(OverviewSnapshotRow.id)
+                    linkedState: snapshotLinkedState
                 )
                 // Apple Intelligence's models, macOS 27 only, and only when there is
                 // something on the Mac, a block in place, or a removal to report (#133).
@@ -475,6 +516,8 @@ private struct OverviewCategoryRow: View {
 struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
+    /// Purgeable space: the bar segment's stripes, filling the tile.
+    var isStriped = false
     var imageName: String? = nil
     var appPath: String? = nil
 
@@ -515,6 +558,8 @@ struct OverviewIconTile: View {
                     .scaledToFit()
                     .frame(width: Self.size * Self.appIconScale, height: Self.size * Self.appIconScale)
                     .frame(width: Self.size, height: Self.size)
+            } else if isStriped {
+                PurgeableStripes()
             } else if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
@@ -537,22 +582,37 @@ struct OverviewIconTile: View {
 }
 
 struct OverviewPlainRow: View {
+    /// What an info button beside the title opens.
+    struct Info {
+        let text: String
+        let help: String
+        let accessibilityLabel: String
+    }
+
     var symbol: String?
     let color: Color
+    var isStriped = false
     let title: String
     let detail: String
+    var info: Info?
     let bytes: Int64
     let share: Double
     let linkedState: OverviewLinkedRowState
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isShowingInfo = false
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            OverviewIconTile(symbol: symbol, color: color)
+            OverviewIconTile(symbol: symbol, color: color, isStriped: isStriped)
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(LocalizedStringKey(title))
-                    .font(AppStyle.Typography.headline)
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
+                    Text(LocalizedStringKey(title))
+                        .font(AppStyle.Typography.headline)
+                    if let info {
+                        infoButton(info)
+                    }
+                }
                 Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -571,7 +631,29 @@ struct OverviewPlainRow: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: info == nil ? .combine : .contain)
+    }
+
+    /// The same button and popover as the snapshots row's.
+    private func infoButton(_ info: Info) -> some View {
+        Button {
+            isShowingInfo = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .help(info.help)
+        .accessibilityLabel(info.accessibilityLabel)
+        .popover(isPresented: $isShowingInfo, arrowEdge: .bottom) {
+            Text(info.text)
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(AppStyle.Spacing.medium)
+                .frame(width: 320)
+        }
     }
 }
 
@@ -597,7 +679,8 @@ private struct OverviewSnapshotRow: View {
     /// What the row is about, for the many people who have never heard of snapshots.
     private static let info = String(localized: "Time Machine saves a snapshot every hour so you can get files back without your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps the newest and the one from your last backup, which Time Machine may still need.")
 
-    /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
+    /// Not a bar segment of its own. The purgeable segment lifts it, since snapshots
+    /// are usually most of that space; any other segment fades it with the rest.
     static let id = "timeMachineSnapshots"
 
     private var snapshots: LocalSnapshots? { snapshotStore.snapshots }
@@ -622,6 +705,7 @@ private struct OverviewSnapshotRow: View {
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
+        .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .contain)
     }
 
@@ -935,6 +1019,8 @@ struct OverviewDiskBar: View {
         let label: String
         let bytes: Int64
         let color: Color
+        /// Drawn as `PurgeableStripes` instead of `color`.
+        var isStriped = false
     }
 
     let segments: [Segment]
@@ -945,6 +1031,7 @@ struct OverviewDiskBar: View {
 
     static let everythingElseID = "everythingElse"
     static let freeID = "free"
+    static let purgeableID = "purgeable"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -962,11 +1049,16 @@ struct OverviewDiskBar: View {
             // segments happen to sit at the ends.
             ZStack(alignment: .leading) {
                 ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
-                    Rectangle()
-                        .fill(segment.color)
-                        .opacity(highlightedID == nil || highlightedID == segment.id ? 1 : Self.fadedOpacity)
-                        .frame(width: layout[index].width)
-                        .offset(x: layout[index].x)
+                    Group {
+                        if segment.isStriped {
+                            PurgeableStripes()
+                        } else {
+                            Rectangle().fill(segment.color)
+                        }
+                    }
+                    .opacity(highlightedID == nil || highlightedID == segment.id ? 1 : Self.fadedOpacity)
+                    .frame(width: layout[index].width)
+                    .offset(x: layout[index].x)
                 }
             }
             .frame(width: geometry.size.width, height: Self.height, alignment: .leading)
@@ -1048,6 +1140,31 @@ struct OverviewDiskBar: View {
             widths[largest] = max(minimumWidth, widths[largest] - overflow)
         }
         return widths
+    }
+}
+
+// MARK: - Purgeable stripes
+
+/// Purgeable space: free space's grey crossed with diagonal stripes, on the bar
+/// and on its row's tile. It reads as free space that isn't empty yet.
+struct PurgeableStripes: View {
+    /// Distance between stripes along the bar, and each stripe's width.
+    private static let pitch: CGFloat = 5
+    private static let lineWidth: CGFloat = 2
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(AppColors.Chart.freeSpace))
+            var stripes = Path()
+            var x = -size.height
+            while x < size.width {
+                stripes.move(to: CGPoint(x: x, y: size.height))
+                stripes.addLine(to: CGPoint(x: x + size.height, y: 0))
+                x += Self.pitch
+            }
+            context.stroke(stripes, with: .color(AppColors.Chart.purgeableStripe), lineWidth: Self.lineWidth)
+        }
+        .accessibilityHidden(true)
     }
 }
 

@@ -245,6 +245,11 @@
 "Automatic clean" = "Автоматическая очистка";
 "Available after the scan finishes" = "Доступно после завершения сканирования";
 "Available for new files" = "Доступно для новых файлов";
+"Purgeable" = "Очищаемое место";
+"macOS frees this by itself when it needs room" = "macOS освобождает его сама, когда нужно место";
+"What is purgeable space?" = "Что такое очищаемое место?";
+"About purgeable space" = "Об очищаемом месте";
+"Space macOS can take back by itself when something needs room: local Time Machine snapshots, iCloud files kept on this Mac, and caches macOS manages. System Settings counts it as used. Removing old Time Machine snapshots below frees part of it now." = "Место, которое macOS может освободить сама, когда оно понадобится: локальные снимки Time Machine, файлы iCloud, хранящиеся на этом Mac, и кэши, которыми управляет macOS. В «Системных настройках» оно считается занятым. Удаление старых снимков Time Machine ниже сразу освобождает его часть.";
 "Back to the Overview" = "Назад к обзору";
 "Big files tend to live in Downloads, Documents and Desktop, and macOS keeps those locked until you say Purge can look. Purge only ever shows them to you. It never cleans them on its own." = "Большие файлы обычно лежат в «Загрузках», «Документах» и на рабочем столе, а macOS не даёт к ним доступа, пока вы не разрешите Purge заглянуть туда. Purge только показывает их вам. Сам он их никогда не очищает.";
 "Big forgotten files" = "Забытые большие файлы";
