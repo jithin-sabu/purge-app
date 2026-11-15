@@ -49,11 +49,11 @@ enum CacheDiscoveryPaths {
     /// `com.openai.codex/web/Crashpad`, two for `Figma/DesktopProfile/v43/Crashpad`.
     nonisolated static let crashpadMaxDepth = 2
 
-    /// A Crashpad report database: a real `Crashpad` folder with Crashpad's
-    /// `settings.dat` file and its `new` folder inside. A folder that is merely
-    /// named Crashpad has neither.
+    /// A Crashpad report database: a real, visible `Crashpad` folder with
+    /// Crashpad's `settings.dat` file and its `new` folder inside. A folder that
+    /// is merely named Crashpad has neither.
     nonisolated static func isCrashpadDatabase(_ folder: URL) -> Bool {
-        guard folder.lastPathComponent == crashpadFolderName, isRealDirectory(folder) else { return false }
+        guard folder.lastPathComponent == crashpadFolderName, isVisibleRealDirectory(folder) else { return false }
         let settings = folder.appendingPathComponent("settings.dat", isDirectory: false)
         return (try? settings.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
             && isRealDirectory(folder.appendingPathComponent("new", isDirectory: true))
@@ -68,20 +68,22 @@ enum CacheDiscoveryPaths {
 
     /// Whether `parts`, a path inside the Application Support folder `appRoot`, is
     /// the `pending` or `completed` folder of a Crashpad database at most
-    /// `crashpadMaxDepth` folders down. Every folder on the way must be a real,
-    /// non-hidden folder, as discovery walks them, and so must the report folder.
+    /// `crashpadMaxDepth` folders down. The app folder, every folder on the way and
+    /// the report folder must be real, visible folders, as discovery walks them:
+    /// a link as the app folder would send the move outside Application Support.
     /// The plain `Crashpad/completed` in `applicationSupportRelativeCachePaths` is
     /// allowed by its name and needs none of this.
     nonisolated static func isCrashpadReportsPath(_ parts: [String], appRoot: URL) -> Bool {
         guard (2...(crashpadMaxDepth + 2)).contains(parts.count),
-              [crashpadPendingName, crashpadCompletedName].contains(parts[parts.count - 1]) else { return false }
+              [crashpadPendingName, crashpadCompletedName].contains(parts[parts.count - 1]),
+              !appRoot.lastPathComponent.hasPrefix("."), isVisibleRealDirectory(appRoot) else { return false }
         var folder = appRoot
         for part in parts.dropLast() {
             folder = folder.appendingPathComponent(part, isDirectory: true)
-            guard !part.hasPrefix("."), isRealDirectory(folder) else { return false }
+            guard !part.hasPrefix("."), isVisibleRealDirectory(folder) else { return false }
         }
         return isCrashpadDatabase(folder)
-            && isRealDirectory(folder.appendingPathComponent(parts[parts.count - 1], isDirectory: true))
+            && isVisibleRealDirectory(folder.appendingPathComponent(parts[parts.count - 1], isDirectory: true))
     }
 
     /// Cache folder names under Chromium `User Data/<profile>/`.
@@ -200,6 +202,14 @@ enum CacheDiscoveryPaths {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
     }
 
+    /// A real folder Finder shows: no leading dot and no hidden flag. The walk
+    /// skips hidden folders, but a name Purge builds itself, like `Crashpad`,
+    /// needs the check made here.
+    private nonisolated static func isVisibleRealDirectory(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isHiddenKey]) else { return false }
+        return values.isDirectory == true && values.isHidden != true
+    }
+
     /// Readable, non-hidden folders one and two levels below `appRoot`, links
     /// left out. Both nested walks share it: Chromium storage folders and
     /// Crashpad databases are looked for at the same depths.
@@ -252,7 +262,9 @@ enum CacheDiscoveryPaths {
             }
             for name in [crashpadCompletedName, crashpadPendingName] {
                 let folder = crashpad.appendingPathComponent(name, isDirectory: true)
-                guard ProtectedLocations.isReadable(folder, access: access), isRealDirectory(folder) else { continue }
+                guard ProtectedLocations.isReadable(folder, access: access), isVisibleRealDirectory(folder) else {
+                    continue
+                }
                 results.append(folder)
             }
         }

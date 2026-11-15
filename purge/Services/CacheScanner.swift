@@ -311,17 +311,13 @@ nonisolated final class CacheScanner {
                 ? CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolderName)
                 : nil
             for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
-                // Unsent crash reports from every app share one Check First row
-                // (#367), never the app's own row, whatever tier its entry has.
-                let isPendingCrashReports = CacheDiscoveryPaths.isCrashpadPendingFolder(cacheURL)
+                let row = Self.applicationSupportRow(for: cacheURL, appFolderName: appFolderName, groupKey: groupKey)
                 guard let item = cacheItemAtDiscoveredPath(
                     cacheURL,
-                    headline: isPendingCrashReports
-                        ? CacheDiscoveryPaths.crashpadPendingKey
-                        : applicationSupportHeadline(appFolderName: appFolderName),
+                    headline: row.headline,
                     folderName: appFolderName,
-                    classificationName: isPendingCrashReports ? CacheDiscoveryPaths.crashpadPendingKey : nil,
-                    groupKey: isPendingCrashReports ? nil : groupKey,
+                    classificationName: row.classificationName,
+                    groupKey: row.groupKey,
                     access: access,
                     collectedPaths: &collectedPaths
                 ) else { continue }
@@ -562,7 +558,33 @@ nonisolated final class CacheScanner {
     }
 
     /// One name for every cache folder of an app, since they share a row.
-    private func applicationSupportHeadline(appFolderName: String) -> String {
+    /// The row an Application Support cache folder is shown on.
+    struct ApplicationSupportRow: Equatable {
+        let headline: String
+        /// The name the tier and row come from, when it is not the app folder.
+        let classificationName: String?
+        let groupKey: String?
+    }
+
+    /// Unsent crash reports from every app share one Check First row (#367),
+    /// never the app's own row, whatever tier the app's entry has. Every other
+    /// folder goes on its app's row.
+    static func applicationSupportRow(for cacheURL: URL, appFolderName: String, groupKey: String?) -> ApplicationSupportRow {
+        if CacheDiscoveryPaths.isCrashpadPendingFolder(cacheURL) {
+            return ApplicationSupportRow(
+                headline: CacheDiscoveryPaths.crashpadPendingKey,
+                classificationName: CacheDiscoveryPaths.crashpadPendingKey,
+                groupKey: nil
+            )
+        }
+        return ApplicationSupportRow(
+            headline: applicationSupportHeadline(appFolderName: appFolderName),
+            classificationName: nil,
+            groupKey: groupKey
+        )
+    }
+
+    private static func applicationSupportHeadline(appFolderName: String) -> String {
         let displayApp = appFolderName
             .replacingOccurrences(of: "company.thebrowser.", with: "")
             .replacingOccurrences(of: "com.google.", with: "")

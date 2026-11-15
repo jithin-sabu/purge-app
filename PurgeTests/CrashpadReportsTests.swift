@@ -158,6 +158,56 @@ struct CrashpadReportsTests {
         }
     }
 
+    /// The app folder itself must be a real, visible folder. Through a link the
+    /// move would reach a `pending` folder outside Application Support.
+    @Test
+    func appFolderMustBeRealAndVisible() throws {
+        let fm = FileManager.default
+        let fake = try makeHome()
+        defer { try? fm.removeItem(at: fake.home) }
+        let elsewhere = fake.home.appendingPathComponent("Elsewhere", isDirectory: true)
+        try fake.crashpadDatabase(in: elsewhere)
+        try fake.crashpadDatabase(in: elsewhere, at: "web/Crashpad")
+
+        try fm.createDirectory(at: fake.support, withIntermediateDirectories: true)
+        let linked = fake.support.appendingPathComponent("Linked", isDirectory: true)
+        try fm.createSymbolicLink(at: linked, withDestinationURL: elsewhere)
+        let dotted = try fake.app(".Dotted")
+        try fake.crashpadDatabase(in: dotted)
+        let flagged = try fake.app("Flagged")
+        try fake.crashpadDatabase(in: flagged)
+        try setHidden(flagged)
+
+        for relative in ["Crashpad/pending", "web/Crashpad/pending", "web/Crashpad/completed"] {
+            #expect(!fake.allowed(linked, relative), "Linked/\(relative)")
+        }
+        #expect(!fake.allowed(dotted, "Crashpad/pending"))
+        #expect(!fake.allowed(flagged, "Crashpad/pending"))
+    }
+
+    /// A folder with Finder's hidden flag is left out like one whose name starts
+    /// with a dot, wherever it is: the database, a folder above it, or `pending`.
+    @Test(arguments: ["web", "web/Crashpad", "web/Crashpad/pending"])
+    func hiddenFlagIsLeftOut(hidden: String) throws {
+        let fake = try makeHome()
+        defer { try? FileManager.default.removeItem(at: fake.home) }
+        let root = try fake.app("Codex")
+        try fake.crashpadDatabase(in: root, at: "web/Crashpad")
+        try setHidden(root.appendingPathComponent(hidden, isDirectory: true))
+
+        #expect(!fake.listed(root).contains("web/Crashpad/pending"))
+        #expect(!fake.allowed(root, "web/Crashpad/pending"))
+    }
+
+    private func setHidden(_ url: URL) throws {
+        var url = url
+        var values = URLResourceValues()
+        values.isHidden = true
+        try url.setResourceValues(values)
+        url.removeAllCachedResourceValues()
+        try #require((try url.resourceValues(forKeys: [.isHiddenKey])).isHidden == true)
+    }
+
     /// The gate allows exactly what discovery lists, with Crashpad databases at
     /// every depth next to an Electron app's caches and data.
     @Test
@@ -219,12 +269,43 @@ struct CrashpadReportsTests {
             base.appendingPathComponent("Application Support/Codex/Crashpad/completed")))
     }
 
-    /// Through the whole decision chain on the real home: a `pending` folder with
-    /// no Crashpad database around it is never allowed.
+    /// The scan puts `pending` on the shared row even in an app whose own entry
+    /// is Safe. On the app's row that entry would decide, so Clean Safe Items and
+    /// scheduled cleans would take the reports. `completed` stays on the app's row.
+    @Test(arguments: [("Claude", "claude-app"), ("Code", "vscode"), ("Slack", "slack")])
+    func pendingLeavesASafeAppsRow(app: String, entry: String) {
+        let pending = URL(fileURLWithPath: "/Users/alice/Library/Application Support/\(app)/Crashpad/pending",
+                          isDirectory: true)
+        #expect(ExplanationDatabase.definitionKey(forFolderName: app) == entry)
+        #expect(ExplanationResolver.initialSafetyForCacheFolder(
+            folderName: app, friendlyHeadline: "\(app) Cache", path: pending
+        ).level == .safe, "the app's own entry is Safe, so the row swap is what keeps pending Check First")
+
+        let row = CacheScanner.applicationSupportRow(for: pending, appFolderName: app, groupKey: nil)
+        let name = row.classificationName ?? app
+        let info = ExplanationResolver.initialSafetyForCacheFolder(folderName: name, friendlyHeadline: row.headline,
+                                                                   path: pending)
+        #expect(info.level == .medium)
+        #expect(info.headline == "Unsent Crash Reports")
+        #expect((row.groupKey ?? ExplanationDatabase.definitionKey(forFolderName: name)) == "crashpad-pending")
+
+        let completed = pending.deletingLastPathComponent().appendingPathComponent("completed", isDirectory: true)
+        let appRow = CacheScanner.applicationSupportRow(for: completed, appFolderName: app, groupKey: nil)
+        #expect(appRow.classificationName == nil)
+        #expect(appRow.headline == "\(app) Cache")
+    }
+
+    /// An app with no entry keeps its own group key for everything but `pending`.
     @Test
-    func evaluateRefusesPendingWithoutADatabase() {
-        let url = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
-            .appendingPathComponent("Library/Application Support/purge-test-\(UUID().uuidString)/Crashpad/pending")
-        #expect(DeletionSafetyPolicy.evaluate(url) != .allow)
+    func pendingLeavesAnUnknownAppsGroup() {
+        let root = URL(fileURLWithPath: "/Users/alice/Library/Application Support/SomeApp", isDirectory: true)
+        let group = CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: "SomeApp")
+        let pending = CacheScanner.applicationSupportRow(
+            for: root.appendingPathComponent("web/Crashpad/pending"), appFolderName: "SomeApp", groupKey: group)
+        #expect(pending.groupKey == nil)
+        #expect(pending.classificationName == CacheDiscoveryPaths.crashpadPendingKey)
+        let cache = CacheScanner.applicationSupportRow(
+            for: root.appendingPathComponent("GPUCache"), appFolderName: "SomeApp", groupKey: group)
+        #expect(cache.groupKey == group)
     }
 }
