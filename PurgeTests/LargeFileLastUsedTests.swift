@@ -12,9 +12,11 @@ import Testing
 struct LargeFileLastUsedTests {
     private let day: TimeInterval = 24 * 60 * 60
 
+    /// `.noindex`, so Spotlight leaves the files alone: its importer reads a
+    /// new file and would move the access times these tests set.
     private func makeRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("purge-last-used-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("purge-last-used-\(UUID().uuidString).noindex", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
