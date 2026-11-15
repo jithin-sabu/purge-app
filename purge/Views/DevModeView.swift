@@ -22,6 +22,21 @@ struct DevToolsView: View {
 
     @State private var expandedProjectRoots = Set<String>()
 
+    /// The keyboard highlight and keys (#96). Held as a plain reference so this
+    /// view never observes the highlight; only the rows do.
+    @State private var keyboard = ScanListKeyboardController<DevRowKey>()
+
+    /// A row the keyboard can stand on. Project headers and their folders are
+    /// rows of their own, as in Finder's list view.
+    enum DevRowKey: Hashable {
+        case tool(String)
+        case simulator(UUID)
+        case runtime(String)
+        case component(String)
+        case project(String)
+        case artifact(group: String, artifact: String)
+    }
+
     /// The project card's expand chevron, and the empty slot that stands in for it
     /// on a saved card.
     private static let chevronSize: CGFloat = 12
@@ -640,6 +655,161 @@ struct DevToolsView: View {
             }
         }
         .background(AppColors.surfaceBase)
+        .scanListKeyboard(
+            keyboard,
+            rows: keyboardRows,
+            actions: keyboardActions,
+            isBlocked: { [store] in store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
+        )
+    }
+
+    /// The rows the keys walk, in the order the list draws them.
+    private var keyboardRows: [[DevRowKey]] {
+        var keys: [DevRowKey] = mergedStandardRowEntries().map { entry in
+            switch entry {
+            case .tool(let id, _), .savedTool(let id, _): return .tool(id)
+            }
+        }
+        if simulatorSectionVisible {
+            keys += sortedSimulatorRowIDs().map(DevRowKey.simulator)
+            keys += visibleRunningSimulators.map { .simulator($0.id) }
+        }
+        if runtimeSectionVisible {
+            keys += sortedRuntimeRowIDs().map(DevRowKey.runtime)
+        }
+        if xcodeComponentSectionVisible {
+            keys += sortedXcodeComponentRowIDs().map(DevRowKey.component)
+        }
+        for row in sortedProjectGroupRows() {
+            let gi = row.groupIndex
+            if row.isFromLastScan {
+                let saved = lastScanProjectGroups
+                if saved.indices.contains(gi) { keys.append(.project(saved[gi].id)) }
+            } else if store.projectGroups.indices.contains(gi) {
+                let group = store.projectGroups[gi]
+                keys.append(.project(group.id))
+                if expandedProjectRoots.contains(group.id) {
+                    keys += sortedVisibleArtifactIndices(forGroup: gi).map {
+                        .artifact(group: group.id, artifact: group.artifacts[$0].id)
+                    }
+                }
+            }
+        }
+        return keys.map { [$0] }
+    }
+
+    /// What the keys do to each kind of row (#96). Simulators, runtimes and Xcode
+    /// components are deleted permanently, so ⌘⌫ refuses them; they can still be
+    /// ticked and cleaned with Clean Selected, whose sheet says so. A project's
+    /// folders are ticked from its header, so Return on a folder refuses too.
+    private var keyboardActions: ScanListKeyActions<DevRowKey> {
+        let store = store
+        let savedTools = lastScanTools
+        let savedSimulators = lastScanSimulators
+        let savedRuntimes = lastScanRuntimes
+        let savedComponents = lastScanXcodeComponents
+        let savedGroups = lastScanProjectGroups
+
+        func tool(_ id: String) -> DevTool? {
+            store.devTools.first { $0.id == id } ?? savedTools.first { $0.id == id }
+        }
+        func simulator(_ id: UUID) -> SimulatorDevice? {
+            store.simulatorDevices.first { $0.id == id }
+                ?? store.runningSimulatorDevices.first { $0.id == id }
+                ?? savedSimulators.first { $0.id == id }
+        }
+        func runtime(_ id: String) -> SimulatorRuntime? {
+            store.simulatorRuntimes.first { $0.id == id } ?? savedRuntimes.first { $0.id == id }
+        }
+        func component(_ id: String) -> XcodeComponent? {
+            store.xcodeComponents.first { $0.id == id } ?? savedComponents.first { $0.id == id }
+        }
+        func group(_ id: String) -> ProjectGroup? {
+            store.projectGroups.first { $0.id == id } ?? savedGroups.first { $0.id == id }
+        }
+        func artifact(_ groupID: String, _ artifactID: String) -> ProjectCacheArtifact? {
+            store.projectGroups.first { $0.id == groupID }?.artifacts.first { $0.id == artifactID }
+        }
+        func locations(_ key: DevRowKey) -> [URL] {
+            switch key {
+            case .tool(let id):
+                guard let tool = tool(id) else { return [] }
+                return zip(tool.paths, tool.standardizedPaths)
+                    .sorted { (tool.pathSizeBytesByPath[$0.1] ?? 0) > (tool.pathSizeBytesByPath[$1.1] ?? 0) }
+                    .map(\.0)
+            case .simulator(let id): return simulator(id).map { [$0.folderURL] } ?? []
+            case .runtime(let id): return runtime(id).map { [$0.locationURL] } ?? []
+            case .component(let id): return component(id).map { [$0.assetURL] } ?? []
+            case .project(let id): return group(id).map { [$0.rootPath] } ?? []
+            case .artifact(let groupID, let artifactID): return artifact(groupID, artifactID).map { [$0.path] } ?? []
+            }
+        }
+
+        return ScanListKeyActions(
+            toggle: { key in
+                switch key {
+                case .tool(let id):
+                    guard store.devTools.contains(where: { $0.id == id && $0.isDetected }) else { return false }
+                    store.setDevToolSelected(id: id, isSelected: !store.scanSelection.devToolIDs.contains(id))
+                case .simulator(let id):
+                    guard store.simulatorDevices.contains(where: { $0.id == id }) else { return false }
+                    store.setSimulatorDeviceSelected(id: id, isSelected: !store.scanSelection.simulatorIDs.contains(id))
+                case .runtime(let id):
+                    guard store.simulatorRuntimes.contains(where: { $0.id == id }) else { return false }
+                    store.setSimulatorRuntimeSelected(id: id, isSelected: !store.scanSelection.simulatorRuntimeIDs.contains(id))
+                case .component(let id):
+                    guard store.xcodeComponents.contains(where: { $0.id == id }) else { return false }
+                    store.setXcodeComponentSelected(id: id, isSelected: !store.scanSelection.xcodeComponentIDs.contains(id))
+                case .project(let id):
+                    guard !eligibleArtifactIndices(forGroupID: id).isEmpty else { return false }
+                    toggleProjectEligibleSelection(groupID: id)
+                case .artifact:
+                    return false
+                }
+                return true
+            },
+            trash: { key in
+                switch key {
+                case .tool(let id): return store.presentKeyboardDeletionSheet(.devTool(id: id))
+                case .artifact(_, let artifactID): return store.presentKeyboardDeletionSheet(.artifact(id: artifactID))
+                case .simulator, .runtime, .component, .project: return false
+                }
+            },
+            previewURL: { locations($0).first },
+            copyURLs: locations,
+            stillExists: { key in
+                switch key {
+                case .tool(let id): return store.devTools.contains { $0.id == id }
+                case .simulator(let id):
+                    return store.simulatorDevices.contains { $0.id == id }
+                        || store.runningSimulatorDevices.contains { $0.id == id }
+                case .runtime(let id): return store.simulatorRuntimes.contains { $0.id == id }
+                case .component(let id): return store.xcodeComponents.contains { $0.id == id }
+                case .project(let id): return store.projectGroups.contains { $0.id == id }
+                case .artifact(let groupID, let artifactID): return artifact(groupID, artifactID) != nil
+                }
+            },
+            parent: { key in
+                if case .artifact(let groupID, _) = key { return .project(groupID) }
+                return nil
+            },
+            expand: { key in
+                guard case .project(let id) = key, store.projectGroups.contains(where: { $0.id == id }),
+                      !expandedProjectRoots.contains(id)
+                else { return false }
+                toggleProjectExpanded(id)
+                return true
+            },
+            collapse: { key in
+                guard case .project(let id) = key, expandedProjectRoots.contains(id) else { return false }
+                toggleProjectExpanded(id)
+                return true
+            }
+        )
+    }
+
+    private func highlightAction(_ key: DevRowKey) -> () -> Void {
+        { [keyboard] in keyboard.highlight(key) }
     }
 
     private var standardBody: some View {
@@ -826,9 +996,11 @@ struct DevToolsView: View {
                                 }
                             },
                             isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
-                            isMetadataPending: isDevToolMetadataPending(tool)
+                            isMetadataPending: isDevToolMetadataPending(tool),
+                            onHighlight: highlightAction(.tool(toolID))
                         )
                     }
+                    .scanListRow(DevRowKey.tool(toolID), in: keyboard)
                     .disabled(!tool.isDetected)
                     .opacity(tool.isDetected ? 1 : 0.45)
                     .id(DeveloperListRowID.tool(toolID))
@@ -857,8 +1029,10 @@ struct DevToolsView: View {
                                     )
                                 }
                             },
-                            isFromLastScan: true
+                            isFromLastScan: true,
+                            onHighlight: highlightAction(.tool(tool.id))
                         )
+                        .scanListRow(DevRowKey.tool(tool.id), in: keyboard)
                         .id(DeveloperListRowID.tool(tool.id))
                         .listRowInsets(ScanListRowInsets.standard)
                         .listRowBackground(Color.clear)
@@ -904,9 +1078,11 @@ struct DevToolsView: View {
                                     isUserOverride: false,
                                     allowsBulkSelection: true,
                                     isMetadataPending: isSimulatorMetadataPending(device),
-                                    usesCompactExplanation: true
+                                    usesCompactExplanation: true,
+                                    onHighlight: highlightAction(.simulator(device.id))
                                 )
                             }
+                            .scanListRow(DevRowKey.simulator(device.id), in: keyboard)
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -922,8 +1098,10 @@ struct DevToolsView: View {
                                     [ScanRowLocation(url: device.folderURL, sizeBytes: device.sizeOnDisk)]
                                 },
                                 usesCompactExplanation: true,
-                                isFromLastScan: true
+                                isFromLastScan: true,
+                                onHighlight: highlightAction(.simulator(device.id))
                             )
+                            .scanListRow(DevRowKey.simulator(device.id), in: keyboard)
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -943,8 +1121,10 @@ struct DevToolsView: View {
                                 [ScanRowLocation(url: device.folderURL, sizeBytes: device.sizeOnDisk)]
                             },
                             allowsBulkSelection: false,
-                            usesCompactExplanation: true
+                            usesCompactExplanation: true,
+                            onHighlight: highlightAction(.simulator(device.id))
                         )
+                        .scanListRow(DevRowKey.simulator(device.id), in: keyboard)
                         .listRowInsets(ScanListRowInsets.standard)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -989,9 +1169,11 @@ struct DevToolsView: View {
                                     isUserOverride: false,
                                     allowsBulkSelection: true,
                                     isMetadataPending: false,
-                                    usesCompactExplanation: true
+                                    usesCompactExplanation: true,
+                                    onHighlight: highlightAction(.runtime(runtime.id))
                                 )
                             }
+                            .scanListRow(DevRowKey.runtime(runtime.id), in: keyboard)
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -1008,8 +1190,10 @@ struct DevToolsView: View {
                                     [ScanRowLocation(url: runtime.locationURL, sizeBytes: runtime.sizeBytes)]
                                 },
                                 usesCompactExplanation: true,
-                                isFromLastScan: true
+                                isFromLastScan: true,
+                                onHighlight: highlightAction(.runtime(runtime.id))
                             )
+                            .scanListRow(DevRowKey.runtime(runtime.id), in: keyboard)
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -1050,9 +1234,11 @@ struct DevToolsView: View {
                                         [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]
                                     },
                                     allowsBulkSelection: true,
-                                    usesCompactExplanation: true
+                                    usesCompactExplanation: true,
+                                    onHighlight: highlightAction(.component(component.id))
                                 )
                             }
+                            .scanListRow(DevRowKey.component(component.id), in: keyboard)
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -1069,8 +1255,10 @@ struct DevToolsView: View {
                                     [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]
                                 },
                                 usesCompactExplanation: true,
-                                isFromLastScan: true
+                                isFromLastScan: true,
+                                onHighlight: highlightAction(.component(component.id))
                             )
+                            .scanListRow(DevRowKey.component(component.id), in: keyboard)
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -1253,6 +1441,7 @@ struct DevToolsView: View {
                 // without re-rendering the list container.
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
                     TriStateCheckbox(title: "", state: projectSelectTriState(forGroupID: group.id)) {
+                        keyboard.highlight(.project(group.id))
                         toggleProjectEligibleSelection(groupID: group.id)
                     }
                     .accessibilityLabel("Select all \(group.displayName) items")
@@ -1260,6 +1449,7 @@ struct DevToolsView: View {
                 .frame(width: 24)
 
                 Button {
+                    keyboard.highlight(.project(group.id))
                     toggleProjectExpanded(group.id)
                 } label: {
                     HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
@@ -1304,6 +1494,7 @@ struct DevToolsView: View {
             .padding(.vertical, AppStyle.Spacing.xSmall)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .frame(minHeight: AppStyle.Row.parentHeight)
+            .scanListRow(DevRowKey.project(group.id), in: keyboard)
             // Header only: an overlay across the whole card would swallow the
             // right-click meant for an individual artifact row.
             .overlay {
@@ -1382,6 +1573,7 @@ struct DevToolsView: View {
         .padding(.horizontal, AppStyle.Spacing.xSmall)
         .frame(minHeight: AppStyle.Row.parentHeight)
         .contentShape(Rectangle())
+        .onTapGesture(perform: highlightAction(.project(group.id)))
         .help(LastScanRowMarker.help)
         .overlay {
             ScanRowContextMenu(isMenuActive: .constant(false)) {
@@ -1389,6 +1581,7 @@ struct DevToolsView: View {
             }
         }
         .devToolsGroupCardChrome()
+        .scanListRow(DevRowKey.project(group.id), in: keyboard)
         .opacity(0.55)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Project \(group.displayName)")
@@ -1486,9 +1679,11 @@ struct DevToolsView: View {
                     showsBulkCheckbox: false,
                     isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
                     showsCardChrome: false,
-                    showsLeadingIcon: false
+                    showsLeadingIcon: false,
+                    onHighlight: highlightAction(.artifact(group: groupID, artifact: artifactID))
                 )
             }
+            .scanListRow(DevRowKey.artifact(group: groupID, artifact: artifactID), in: keyboard, cornerRadius: AppStyle.Radius.md)
             .padding(.trailing, AppStyle.Spacing.xSmall)
             .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
             .transition(cleaningRowRemovalTransition)

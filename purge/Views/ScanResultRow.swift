@@ -54,6 +54,9 @@ struct ScanResultRow: View {
     /// A row from the last scan's saved file (#283): dimmed, a clock where the
     /// checkbox goes, and no way to select it until the scan finds it again.
     var isFromLastScan: Bool = false
+    /// Makes this row the keyboard's current row (#96). Runs on every tap of the
+    /// row, before any toggle, so rows that don't toggle still take the highlight.
+    var onHighlight: (() -> Void)?
 
     @State private var isContextMenuActive = false
 
@@ -108,7 +111,8 @@ struct ScanResultRow: View {
         showsCardChrome: Bool = true,
         showsLeadingIcon: Bool = true,
         usesCompactExplanation: Bool = false,
-        isFromLastScan: Bool = false
+        isFromLastScan: Bool = false,
+        onHighlight: (() -> Void)? = nil
     ) {
         self.isSelected = isSelected
         self.onToggle = onToggle
@@ -130,6 +134,7 @@ struct ScanResultRow: View {
         self.showsLeadingIcon = showsLeadingIcon
         self.usesCompactExplanation = usesCompactExplanation
         self.isFromLastScan = isFromLastScan
+        self.onHighlight = onHighlight
     }
 
     @ViewBuilder
@@ -221,6 +226,7 @@ struct ScanResultRow: View {
             stack
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    onHighlight?()
                     onToggle()
                 }
                 .accessibilityAction {
@@ -229,7 +235,14 @@ struct ScanResultRow: View {
         } else if isFromLastScan {
             stack
                 .contentShape(Rectangle())
+                .onTapGesture {
+                    onHighlight?()
+                }
                 .help(LastScanRowMarker.help)
+        } else if let onHighlight {
+            stack
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onHighlight)
         } else {
             stack
         }

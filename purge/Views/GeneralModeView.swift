@@ -26,6 +26,10 @@ struct AppCachesView: View {
         self.usesExternalScrollContainer = usesExternalScrollContainer
     }
 
+    /// The keyboard highlight and keys (#96). Held as a plain reference so this
+    /// view never observes the highlight; only the rows do.
+    @State private var keyboard = ScanListKeyboardController<String>()
+
     @AppStorage(SafetyFilter.appCachesKey) private var filterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage(SortOption.appCachesKey) private var sortRaw: String = SortOption.sizeDesc.rawValue
 
@@ -165,6 +169,35 @@ struct AppCachesView: View {
             }
         }
         .background(AppColors.surfaceBase)
+        .scanListKeyboard(
+            keyboard,
+            rows: plan.sortedEntries.map { [$0.id] },
+            actions: keyboardActions(plan: plan),
+            isBlocked: { [store] in store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
+        )
+    }
+
+    /// What the keys do to a row (#96). A saved row from the last scan can be
+    /// previewed and copied, but not ticked or cleaned until the scan finds it.
+    private func keyboardActions(plan: ListPlan) -> ScanListKeyActions<String> {
+        let store = store
+        let saved = plan.savedItems
+        let liveItem: (String) -> CacheItem? = { id in store.cacheItems.first { $0.id == id } }
+        let anyItem: (String) -> CacheItem? = { id in liveItem(id) ?? saved.first { $0.id == id } }
+        let locations: (String) -> [URL] = { id in
+            (anyItem(id)?.locations ?? []).sorted { $0.sizeBytes > $1.sizeBytes }.map(\.path)
+        }
+        return ScanListKeyActions(
+            toggle: { id in
+                guard liveItem(id) != nil else { return false }
+                store.setCacheSelected(id: id, isSelected: !store.scanSelection.cacheIDs.contains(id))
+                return true
+            },
+            trash: { id in store.presentKeyboardDeletionSheet(.cache(id: id)) },
+            previewURL: { id in locations(id).first },
+            copyURLs: locations,
+            stillExists: { id in liveItem(id) != nil }
+        )
     }
 
     private func standardBody(plan: ListPlan) -> some View {
@@ -313,8 +346,10 @@ struct AppCachesView: View {
                     ScanRowLocation(url: $0.path, sizeBytes: $0.sizeBytes)
                 }
             },
-            isFromLastScan: true
+            isFromLastScan: true,
+            onHighlight: { [keyboard] in keyboard.highlight(item.id) }
         )
+        .scanListRow(item.id, in: keyboard)
         .id(item.id)
         .listRowInsets(ScanListRowInsets.standard)
         .listRowBackground(Color.clear)
@@ -358,9 +393,11 @@ struct AppCachesView: View {
                 isUserOverride: item.standardizedPaths.contains {
                     store.userOverridePaths.contains($0)
                 },
-                isMetadataPending: store.cacheItemHasPendingSize(item)
+                isMetadataPending: store.cacheItemHasPendingSize(item),
+                onHighlight: { [keyboard] in keyboard.highlight(itemID) }
             )
         }
+        .scanListRow(itemID, in: keyboard)
         .id(itemID)
         .listRowInsets(ScanListRowInsets.standard)
         .listRowBackground(Color.clear)
