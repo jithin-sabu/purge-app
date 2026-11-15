@@ -117,7 +117,9 @@ struct LargeFileLastUsedTests {
         let ledger = makeLedger(in: root)
         try drawThumbnail(of: file, ledger: ledger)
 
-        let opened = Date().addingTimeInterval(60)
+        // Any access time other than the one Quick Look left. A past one, as a
+        // time in the future can be moved again by the next read.
+        let opened = Date().addingTimeInterval(-2 * day)
         let modification = try #require(FileAccessLedger.Times(url: file)).modification
         setTimes(file, access: opened, modification: Date(timeIntervalSince1970: modification))
 
