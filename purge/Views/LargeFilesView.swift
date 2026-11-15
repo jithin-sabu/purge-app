@@ -29,6 +29,10 @@ struct LargeFilesView: View {
     /// the index exactly once per pass, so this fires exactly once.
     @State private var duplicateIndex: DuplicateIndex = .empty
 
+    /// The keyboard highlight and keys (#96). Held as a plain reference so this
+    /// view never observes the highlight; only the rows do.
+    @State private var keyboard = ScanListKeyboardController<String>()
+
     /// Pseudo-category shared with the real category chips via
     /// `store.largeFileCategoryFilter`, so chip selection stays single-select
     /// without a second piece of state.
@@ -196,6 +200,38 @@ struct LargeFilesView: View {
         .onReceive(store.largeFileDuplicates.indexPublisher) { index in
             duplicateIndex = index
         }
+        .scanListKeyboard(keyboard, rows: keyboardRows, actions: keyboardActions, isBlocked: { [store] in
+            store.isShowingReviewOrCleaning || store.isAnotherSheetOpen
+        })
+    }
+
+    /// The rows the keys walk, in the order the list draws them: under the
+    /// Duplicates chip, the copies group by group. Empty while the list shows a
+    /// placeholder or the last scan's saved rows, which are not real rows.
+    private var keyboardRows: [[String]] {
+        guard !isAwaitingFirstScan else { return [] }
+        let files = store.largeFiles
+        let indices = isDuplicatesFilterActive ? duplicateSections.flatMap(\.memberIndices) : visibleIndices
+        return indices.map { [files[$0].id] }
+    }
+
+    private var keyboardActions: ScanListKeyActions<String> {
+        let store = store
+        let file: (String) -> LargeFile? = { id in store.largeFiles.first { $0.id == id } }
+        return ScanListKeyActions(
+            toggle: { id in
+                guard file(id) != nil else { return false }
+                store.setLargeFileSelected(id: id, isSelected: !store.largeFileSelection.ids.contains(id))
+                return true
+            },
+            trash: { id in
+                guard let file = file(id) else { return false }
+                return store.presentLargeFileDeletionSheet(for: file)
+            },
+            previewURL: { id in file(id)?.path.standardizedFileURL },
+            copyURLs: { id in file(id).map { [$0.path] } ?? [] },
+            stillExists: { id in file(id) != nil }
+        )
     }
 
     /// No scan has finished this session and nothing has streamed in yet: the
@@ -470,6 +506,7 @@ struct LargeFilesView: View {
                         section: section,
                         files: store.largeFiles,
                         selection: store.largeFileSelection,
+                        keyboard: keyboard,
                         onToggle: toggleSelection(forFileID:),
                         onExclude: store.excludeLargeFileFromScans,
                         onExcludeFolder: store.excludeLargeFileFolderFromScans
@@ -488,6 +525,7 @@ struct LargeFilesView: View {
                     LargeFileRow(
                         file: file,
                         selection: store.largeFileSelection,
+                        keyboard: keyboard,
                         duplicateCopyCount: duplicateIndex.copyCount(forFileID: file.id),
                         onToggle: { toggleSelection(forFileID: file.id) },
                         onExclude: { store.excludeLargeFileFromScans(file) },
@@ -787,6 +825,7 @@ private struct DuplicateGroupCard: View {
     /// Observed by the child rows, not here — the container itself must not
     /// re-render on selection.
     let selection: LargeFileSelection
+    let keyboard: ScanListKeyboardController<String>
     let onToggle: (String) -> Void
     let onExclude: (LargeFile) -> Void
     let onExcludeFolder: (LargeFile) -> Void
@@ -816,6 +855,7 @@ private struct DuplicateGroupCard: View {
                 LargeFileRow(
                     file: file,
                     selection: selection,
+                    keyboard: keyboard,
                     // No badge inside the box: the container header already says
                     // how many copies there are, and repeating it on every card
                     // is noise.
@@ -1029,6 +1069,8 @@ private struct LargeFileRow: View {
     /// Observed so a toggle re-renders only the (visible) rows — not the List
     /// container, whose re-render is what reverts the scroll position.
     @ObservedObject var selection: LargeFileSelection
+    /// Not observed here: the ring observes the highlight by itself.
+    let keyboard: ScanListKeyboardController<String>
     /// How many byte-identical copies of this file the scan found, nil when it
     /// isn't part of a duplicate group. Passed as a plain value rather than by
     /// observing the index object: it only changes when the whole index does, and
@@ -1108,10 +1150,12 @@ private struct LargeFileRow: View {
     }
 
     private func revealInFinder() {
+        keyboard.highlight(file.id)
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
 
     private func quickLook() {
+        keyboard.highlight(file.id)
         QuickLookPreview.show(url: fileURL)
     }
 
@@ -1139,6 +1183,7 @@ private struct LargeFileRow: View {
         .frame(height: Self.contentHeight)
         .contentShape(Rectangle())
         .onTapGesture {
+            keyboard.highlight(file.id)
             onToggle()
         }
         .modifier(ScanRowCardChrome(showsContextMenuHighlight: isContextMenuActive))
@@ -1148,6 +1193,7 @@ private struct LargeFileRow: View {
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
             }
         }
+        .scanListRow(file.id, in: keyboard)
         // Same right-click overlay the other scan rows use, rather than SwiftUI's
         // `.contextMenu`, which makes the List paint its blue row highlight.
         .overlay {
