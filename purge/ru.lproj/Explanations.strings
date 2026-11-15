@@ -142,6 +142,7 @@
 "Corepack Cache" = "Кэш Corepack";
 "Cost and usage totals CodexBar worked out from your Claude and Codex session logs. CodexBar works them out again, but days whose logs are gone stay missing." = "Итоги расходов и использования, которые CodexBar рассчитал по журналам сеансов Claude и Codex. CodexBar пересчитает их снова, но дни, журналы которых уже удалены, останутся пустыми.";
 "Crash Reports" = "Отчёты о сбоях";
+"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first." = "Отчёты о сбоях, которые приложения сохранили, но ещё не отправили. Приложения работают и без них, но разработчики эти отчёты не получат. Сначала закройте приложение.";
 "Cursor Agent Install Leftovers" = "Остатки установки агента Cursor";
 "Cursor Agent Leftovers" = "Остатки агента Cursor";
 "Cursor Cache" = "Кэш Cursor";
@@ -533,6 +534,7 @@
 "Unity's imported-asset database for this project. It rebuilds itself, but reimporting a large project can take a long time, so check before removing it." = "База импортированных ресурсов Unity для этого проекта. Она перестраивается сама, но повторный импорт большого проекта может занять много времени — поэтому перед удалением проверьте.";
 "Unreal Derived Data Cache" = "Кэш производных данных Unreal";
 "Unreal Intermediate Files" = "Промежуточные файлы Unreal";
+"Unsent Crash Reports" = "Неотправленные отчёты о сбоях";
 "Unused Android System Images" = "Неиспользуемые образы системы Android";
 "Unused Playwright Browsers" = "Неиспользуемые браузеры Playwright";
 "Update packages Electron apps downloaded to install a new version, left behind once installed. Each app downloads its next update when one comes out." = "Пакеты обновлений, которые приложения на Electron скачивают для установки новой версии; после установки они остаются здесь. Когда выйдет следующее обновление, каждое приложение скачает его снова.";
