@@ -1494,7 +1494,7 @@ struct DevToolsView: View {
             .padding(.vertical, AppStyle.Spacing.xSmall)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .frame(minHeight: AppStyle.Row.parentHeight)
-            .scanListRow(DevRowKey.project(group.id), in: keyboard)
+            .scanListRow(DevRowKey.project(group.id), in: keyboard, ring: .inside)
             // Header only: an overlay across the whole card would swallow the
             // right-click meant for an individual artifact row.
             .overlay {
@@ -1683,7 +1683,7 @@ struct DevToolsView: View {
                     onHighlight: highlightAction(.artifact(group: groupID, artifact: artifactID))
                 )
             }
-            .scanListRow(DevRowKey.artifact(group: groupID, artifact: artifactID), in: keyboard, cornerRadius: AppStyle.Radius.md)
+            .scanListRow(DevRowKey.artifact(group: groupID, artifact: artifactID), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
             .padding(.trailing, AppStyle.Spacing.xSmall)
             .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
             .transition(cleaningRowRemovalTransition)

@@ -127,6 +127,17 @@ struct UninstallView: View {
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
     /// Why a folder picked from the hint under the list could not be added (#99).
     @State private var appFolderMessage: String?
+
+    /// The keyboard highlight and keys (#96), one per section. Held as plain
+    /// references so this view never observes a highlight; only the rows do.
+    @State private var appsKeyboard = ScanListKeyboardController<AppRowKey>()
+    @State private var leftoversKeyboard = ScanListKeyboardController<String>()
+
+    /// A tile or row the keyboard can stand on: an app, or a vendor's group.
+    enum AppRowKey: Hashable {
+        case app(String)
+        case group(String)
+    }
     /// The vendor group whose tray is open in the grid (#155), and the groups
     /// opened in the list. Kept on the store for the session, so a group stays
     /// open across a trip to another tab.
@@ -239,8 +250,15 @@ struct UninstallView: View {
             switch section {
             case .installedApps:
                 appsContent
+                    .scanListKeyboard(appsKeyboard, rows: appKeyboardRows, actions: appKeyboardActions, isBlocked: isKeyboardBlocked)
             case .leftovers:
                 leftoversScroll
+                    .scanListKeyboard(
+                        leftoversKeyboard,
+                        rows: orphanSections.flatMap(\.items).map { [$0.id] },
+                        actions: leftoverKeyboardActions,
+                        isBlocked: isKeyboardBlocked
+                    )
             case .commandLineTools:
                 if store.commandLineTools.isEmpty {
                     if store.isCommandLineToolsScanPending { leftoversSkeleton } else { Color.clear }
@@ -251,6 +269,161 @@ struct UninstallView: View {
         }
         .id(section)
         .transition(.opacity.animation(reduceMotion ? nil : Self.sectionFade))
+    }
+
+    private var isKeyboardBlocked: () -> Bool {
+        { [store] in store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
+    }
+
+    // MARK: Keyboard (#96)
+
+    /// The apps the keys walk, as drawn. In the list, one per row, with an open
+    /// group's apps under it. In the grid, the rows of four, with the open
+    /// group's tray rows under the row that holds the group.
+    private var appKeyboardRows: [[AppRowKey]] {
+        let key: (AppListEntry) -> AppRowKey = { entry in
+            switch entry {
+            case .app(let app): return .app(app.id)
+            case .group(let group, _): return .group(group.id)
+            }
+        }
+        var rows: [[AppRowKey]] = []
+        switch viewMode {
+        case .list:
+            for entry in filteredEntries {
+                rows.append([key(entry)])
+                if case .group(let group, let apps) = entry, expandedListGroupIDs.contains(group.id) {
+                    rows += apps.map { [.app($0.id)] }
+                }
+            }
+        case .grid:
+            for row in gridRows {
+                rows.append(row.entries.map(key))
+                for entry in row.entries {
+                    guard case .group(let group, let apps) = entry, group.id == openGridGroupID else { continue }
+                    rows += stride(from: 0, to: apps.count, by: 4).map {
+                        apps[$0..<min($0 + 4, apps.count)].map { .app($0.id) }
+                    }
+                }
+            }
+        }
+        return rows
+    }
+
+    /// What the keys do to an app or a group. ⌘⌫ opens the uninstall review
+    /// for one app; a group, and an app Homebrew installed (whose review
+    /// defaults to Homebrew's permanent uninstall), beep instead.
+    private var appKeyboardActions: ScanListKeyActions<AppRowKey> {
+        let store = store
+        let entries = filteredEntries
+        let saved = lastScanApps
+        var groups: [String: (group: AppSuiteGroup, apps: [InstalledApp])] = [:]
+        var parentOf: [String: String] = [:]
+        for entry in entries {
+            guard case .group(let group, let apps) = entry else { continue }
+            groups[group.id] = (group, apps)
+            for app in apps { parentOf[app.id] = group.id }
+        }
+        let app: (String) -> InstalledApp? = { id in
+            store.installedApps.first { $0.id == id } ?? saved.first { $0.id == id }
+        }
+        let location: (AppRowKey) -> URL? = { key in
+            switch key {
+            case .app(let id): return app(id)?.bundleURL
+            case .group(let id): return groups[id]?.group.folderURL
+            }
+        }
+        let isGrid = viewMode == .grid
+        let openGroup: (String) -> Bool = { id in
+            guard groups[id] != nil else { return false }
+            if isGrid {
+                guard openGridGroupID != id else { return false }
+                toggleGridGroup(id)
+            } else {
+                guard !expandedListGroupIDs.contains(id) else { return false }
+                toggleListGroup(id)
+            }
+            return true
+        }
+        let closeGroup: (String) -> Bool = { id in
+            if isGrid {
+                guard openGridGroupID == id else { return false }
+                toggleGridGroup(id)
+            } else {
+                guard expandedListGroupIDs.contains(id) else { return false }
+                toggleListGroup(id)
+            }
+            return true
+        }
+        return ScanListKeyActions(
+            toggle: { key in
+                switch key {
+                case .app(let id):
+                    guard store.installedApps.contains(where: { $0.id == id }) else { return false }
+                    store.toggleAppSelected(id: id)
+                case .group(let id):
+                    guard let apps = groups[id]?.apps, !liveIDs(apps).isEmpty else { return false }
+                    toggleGroupSelection(apps)
+                }
+                return true
+            },
+            trash: { key in
+                guard case .app(let id) = key else { return false }
+                return store.requestUninstall(appID: id) != nil
+            },
+            previewURL: location,
+            copyURLs: { key in location(key).map { [$0] } ?? [] },
+            stillExists: { key in
+                switch key {
+                case .app(let id): return store.installedApps.contains { $0.id == id }
+                case .group(let id): return store.appSuiteGroups.contains { $0.id == id }
+                }
+            },
+            parent: { key in
+                guard case .app(let id) = key, let group = parentOf[id] else { return nil }
+                return .group(group)
+            },
+            expand: { key in
+                guard !isGrid, case .group(let id) = key else { return false }
+                return openGroup(id)
+            },
+            collapse: { key in
+                guard !isGrid, case .group(let id) = key else { return false }
+                return closeGroup(id)
+            },
+            openGroup: { key in
+                guard case .group(let id) = key else { return false }
+                return openGroup(id)
+            },
+            closeGroup: { key in
+                switch key {
+                case .group(let id): return closeGroup(id)
+                case .app(let id): return parentOf[id].map(closeGroup) ?? false
+                }
+            },
+            arrowsStepSideways: isGrid
+        )
+    }
+
+    /// Leftovers: ⌘⌫ opens the leftover review for one row. A saved row from
+    /// the last scan can be previewed and copied, nothing more.
+    private var leftoverKeyboardActions: ScanListKeyActions<String> {
+        let store = store
+        let saved = lastScanLeftovers
+        let item: (String) -> UninstallItem? = { id in
+            store.orphanLeftovers.first { $0.id == id } ?? saved.first { $0.id == id }
+        }
+        return ScanListKeyActions(
+            toggle: { id in
+                guard store.orphanLeftovers.contains(where: { $0.id == id }) else { return false }
+                store.toggleOrphanSelected(id: id)
+                return true
+            },
+            trash: { id in store.requestOrphanCleanup(forLeftoverID: id) },
+            previewURL: { id in item(id)?.path },
+            copyURLs: { id in item(id).map { [$0.path] } ?? [] },
+            stillExists: { id in store.orphanLeftovers.contains { $0.id == id } }
+        )
     }
 
     private var leftoversSort: SortOption {
@@ -301,24 +474,30 @@ struct UninstallView: View {
                             UninstallSectionHeader(title: section.reason.leftoverSectionTitle)
                                 .padding(.top, index == 0 ? 0 : AppStyle.Spacing.small)
                             ForEach(section.items) { item in
-                                if savedPaths.contains(item.path.path) {
-                                    UninstallItemRow(
-                                        item: item,
-                                        isSelected: .constant(false),
-                                        showsShortLocation: true,
-                                        isFromLastScan: true
-                                    )
-                                } else {
-                                    UninstallItemRow(
-                                        item: item,
-                                        isSelected: Binding(
-                                            get: { store.orphanSelectedIDs.contains(item.id) },
-                                            set: { _ in store.toggleOrphanSelected(id: item.id) }
-                                        ),
-                                        togglesOnRowTap: true,
-                                        showsShortLocation: true
-                                    )
+                                let itemID = item.id
+                                Group {
+                                    if savedPaths.contains(item.path.path) {
+                                        UninstallItemRow(
+                                            item: item,
+                                            isSelected: .constant(false),
+                                            showsShortLocation: true,
+                                            isFromLastScan: true,
+                                            onHighlight: { [leftoversKeyboard] in leftoversKeyboard.highlight(itemID) }
+                                        )
+                                    } else {
+                                        UninstallItemRow(
+                                            item: item,
+                                            isSelected: Binding(
+                                                get: { store.orphanSelectedIDs.contains(itemID) },
+                                                set: { _ in store.toggleOrphanSelected(id: itemID) }
+                                            ),
+                                            togglesOnRowTap: true,
+                                            showsShortLocation: true,
+                                            onHighlight: { [leftoversKeyboard] in leftoversKeyboard.highlight(itemID) }
+                                        )
+                                    }
                                 }
+                                .scanListRow(itemID, in: leftoversKeyboard)
                             }
                         }
                     }
@@ -807,10 +986,12 @@ struct UninstallView: View {
             size: displayedSize(for: app, isFromLastScan: isFromLastScan),
             activityLabel: activityLabel(for: app),
             isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
-            isFromLastScan: isFromLastScan
+            isFromLastScan: isFromLastScan,
+            onHighlight: { [appsKeyboard] in appsKeyboard.highlight(.app(app.id)) }
         ) {
             store.toggleAppSelected(id: app.id)
         }
+        .scanListRow(AppRowKey.app(app.id), in: appsKeyboard)
     }
 
     /// A group's header row and, while it is open, the uninstaller note and its
@@ -828,9 +1009,16 @@ struct UninstallView: View {
                 pickedCount: live.filter(store.selectedAppIDs.contains).count,
                 isExpanded: isExpanded,
                 canSelect: !live.isEmpty,
-                onToggleExpanded: { toggleListGroup(group.id) },
-                onToggleSelection: { toggleGroupSelection(apps) }
+                onToggleExpanded: {
+                    appsKeyboard.highlight(.group(group.id))
+                    toggleListGroup(group.id)
+                },
+                onToggleSelection: {
+                    appsKeyboard.highlight(.group(group.id))
+                    toggleGroupSelection(apps)
+                }
             )
+            .scanListRow(AppRowKey.group(group.id), in: appsKeyboard)
             if isExpanded {
                 VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     if let uninstaller = uninstaller(of: group, in: apps) {
@@ -906,9 +1094,16 @@ struct UninstallView: View {
                 pickedCount: live.filter(store.selectedAppIDs.contains).count,
                 isOpen: openGridGroupID == group.id,
                 canSelect: !live.isEmpty,
-                onToggleOpen: { toggleGridGroup(group.id) },
-                onToggleSelection: { toggleGroupSelection(apps) }
+                onToggleOpen: {
+                    appsKeyboard.highlight(.group(group.id))
+                    toggleGridGroup(group.id)
+                },
+                onToggleSelection: {
+                    appsKeyboard.highlight(.group(group.id))
+                    toggleGroupSelection(apps)
+                }
             )
+            .scanListRow(AppRowKey.group(group.id), in: appsKeyboard)
         }
     }
 
@@ -919,10 +1114,12 @@ struct UninstallView: View {
             size: displayedSize(for: app, isFromLastScan: isFromLastScan),
             activityLabel: activityLabel(for: app),
             isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
-            isFromLastScan: isFromLastScan
+            isFromLastScan: isFromLastScan,
+            onHighlight: { [appsKeyboard] in appsKeyboard.highlight(.app(app.id)) }
         ) {
             store.toggleAppSelected(id: app.id)
         }
+        .scanListRow(AppRowKey.app(app.id), in: appsKeyboard)
     }
 
     /// The open group in the grid (#155): its name and checkbox, the uninstaller
@@ -1150,6 +1347,8 @@ private struct UninstallItemRow: View {
     /// A leftover from the last scan (#283): dimmed, a clock for the checkbox, and
     /// nothing to tick until the scan finds it again.
     var isFromLastScan = false
+    /// Makes the row the keyboard's current row (#96). Off in the review sheets.
+    var onHighlight: (() -> Void)?
     @State private var isContextMenuActive = false
 
     var body: some View {
@@ -1219,7 +1418,10 @@ private struct UninstallItemRow: View {
         )
         .opacity(isFromLastScan ? 0.55 : 1)
         .help(isFromLastScan ? LastScanRowMarker.help : showsShortLocation ? displayDirectoryPath(for: item.path) : "")
-        .modifier(OptionalRowTap(enabled: togglesOnRowTap && !isToggleDisabled && !isFromLastScan) {
+        .modifier(OptionalRowTap(
+            enabled: togglesOnRowTap && !isToggleDisabled && !isFromLastScan,
+            onHighlight: onHighlight
+        ) {
             isSelected.toggle()
         })
         .finderRevealMenu(isMenuActive: $isContextMenuActive) {
@@ -1246,13 +1448,22 @@ struct UninstallSectionHeader: View {
 
 private struct OptionalRowTap: ViewModifier {
     let enabled: Bool
+    /// Runs on any tap, before the toggle, even when the row can't toggle.
+    var onHighlight: (() -> Void)?
     let action: () -> Void
 
     func body(content: Content) -> some View {
         if enabled {
             content
                 .contentShape(Rectangle())
-                .onTapGesture(perform: action)
+                .onTapGesture {
+                    onHighlight?()
+                    action()
+                }
+        } else if let onHighlight {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onHighlight)
         } else {
             content
         }
@@ -1278,6 +1489,8 @@ private struct AppListRow: View {
     let isSelected: Bool
     /// An app from the last scan (#283), shown read only until this scan lists it.
     var isFromLastScan = false
+    /// Makes the app the keyboard's current row (#96), on any tap.
+    var onHighlight: (() -> Void)?
     let onToggle: () -> Void
 
     private var totalBytes: Int64 { size.bytes }
@@ -1358,7 +1571,10 @@ private struct AppListRow: View {
         )
         .opacity(isFromLastScan ? 0.55 : 1)
         .contentShape(Rectangle())
-        .onTapGesture { if !isFromLastScan { onToggle() } }
+        .onTapGesture {
+            onHighlight?()
+            if !isFromLastScan { onToggle() }
+        }
         .onHover { isHovering = $0 && !isFromLastScan }
         .help(isFromLastScan ? LastScanRowMarker.help : app.name)
         .accessibilityElement(children: .combine)
@@ -1427,6 +1643,8 @@ private struct AppTile: View {
     let isSelected: Bool
     /// An app from the last scan (#283), shown read only until this scan lists it.
     var isFromLastScan = false
+    /// Makes the app the keyboard's current row (#96), on any tap.
+    var onHighlight: (() -> Void)?
     let onToggle: () -> Void
 
     private var totalBytes: Int64 { size.bytes }
@@ -1502,7 +1720,10 @@ private struct AppTile: View {
         }
         .opacity(isFromLastScan ? 0.55 : 1)
         .contentShape(Rectangle())
-        .onTapGesture { if !isFromLastScan { onToggle() } }
+        .onTapGesture {
+            onHighlight?()
+            if !isFromLastScan { onToggle() }
+        }
         .onHover { isHovering = $0 && !isFromLastScan }
         // Full name on hover, since the tile truncates longer ones.
         .help(isFromLastScan ? LastScanRowMarker.help : [app.name, driveLabel, activityLabel].compactMap { $0 }.joined(separator: ", "))

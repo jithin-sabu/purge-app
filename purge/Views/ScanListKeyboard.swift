@@ -419,17 +419,37 @@ private struct ScanRowAnchor: NSViewRepresentable {
 
 // MARK: - Modifiers
 
-/// Draws the highlight ring on the current row and keeps an anchor behind it.
+/// How the highlight ring sits on a row.
+enum ScanListRingPlacement {
+    /// Just outside the card, like a focus ring, so it never reads as the
+    /// selection outline some cards draw on their own edge (the app tiles).
+    case outside
+    /// On the card's edge, for a row inside a card that clips what it holds.
+    case inside
+}
+
+/// Draws the highlight ring on the current row.
 private struct ScanListHighlightRing<ID: Hashable>: View {
     @ObservedObject var highlight: ScanHighlight<ID>
     let id: ID
     let cornerRadius: CGFloat
+    let placement: ScanListRingPlacement
+
+    private static var gap: CGFloat { AppStyle.Spacing.xxxSmall }
 
     var body: some View {
         if highlight.id == id {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(AppColors.actionPrimary, lineWidth: 1.5)
-                .allowsHitTesting(false)
+            switch placement {
+            case .outside:
+                RoundedRectangle(cornerRadius: cornerRadius + Self.gap, style: .continuous)
+                    .strokeBorder(AppColors.actionPrimary, lineWidth: 2)
+                    .padding(-Self.gap)
+                    .allowsHitTesting(false)
+            case .inside:
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(AppColors.actionPrimary, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
         }
     }
 }
@@ -448,14 +468,17 @@ extension View {
 
     /// Marks a row of a keyboard-wired scan list: the ring when it is current,
     /// and the anchor that keeps it in view. Put it on the row's card, outside
-    /// its padding, so the ring sits on the card's edge.
+    /// its padding, so the ring follows the card's edge.
     func scanListRow<ID: Hashable>(
         _ id: ID,
         in controller: ScanListKeyboardController<ID>,
-        cornerRadius: CGFloat = AppStyle.Radius.lg
+        cornerRadius: CGFloat = AppStyle.Radius.lg,
+        ring placement: ScanListRingPlacement = .outside
     ) -> some View {
         background(ScanRowAnchor(id: AnyHashable(id), registry: controller.anchors))
-            .overlay(ScanListHighlightRing(highlight: controller.highlight, id: id, cornerRadius: cornerRadius))
+            .overlay(ScanListHighlightRing(
+                highlight: controller.highlight, id: id, cornerRadius: cornerRadius, placement: placement
+            ))
     }
 }
 

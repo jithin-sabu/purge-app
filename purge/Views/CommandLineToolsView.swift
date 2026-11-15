@@ -9,6 +9,10 @@ import SwiftUI
 struct CommandLineToolsSection: View {
     @EnvironmentObject private var store: PurgeStore
 
+    /// The keyboard highlight and keys (#96). Held as a plain reference so this
+    /// view never observes the highlight; only the rows do.
+    @State private var keyboard = ScanListKeyboardController<String>()
+
     private var standalone: [StandaloneCommandLineTool] { store.commandLineTools.standalone }
     private var managed: [PackageManagerTool] { store.commandLineTools.managed }
     private var allIDs: [String] { standalone.map(\.id) + managed.map(\.id) }
@@ -28,8 +32,10 @@ struct CommandLineToolsSection: View {
                                 sizeBytes: tool.sizeBytes,
                                 runsInBackground: !tool.install.launchAgents.isEmpty,
                                 locations: [ScanRowLocation(url: tool.folder, sizeBytes: tool.sizeBytes)],
-                                isSelected: selection(tool.id)
+                                isSelected: selection(tool.id),
+                                onHighlight: { [keyboard] in keyboard.highlight(tool.id) }
                             )
+                            .scanListRow(tool.id, in: keyboard)
                         }
                     }
                     if !managed.isEmpty {
@@ -43,8 +49,10 @@ struct CommandLineToolsSection: View {
                                 sizeBytes: tool.sizeBytes,
                                 runsInBackground: false,
                                 locations: tool.locations.map { ScanRowLocation(url: $0) },
-                                isSelected: selection(tool.id)
+                                isSelected: selection(tool.id),
+                                onHighlight: { [keyboard] in keyboard.highlight(tool.id) }
                             )
+                            .scanListRow(tool.id, in: keyboard)
                         }
                     }
                 }
@@ -55,6 +63,35 @@ struct CommandLineToolsSection: View {
             .scrollContentBackground(.hidden)
             .background(AppColors.surfaceBase)
         }
+        .scanListKeyboard(keyboard, rows: allIDs.map { [$0] }, actions: keyboardActions, isBlocked: { [store] in
+            store.isShowingReviewOrCleaning || store.isAnotherSheetOpen
+        })
+    }
+
+    /// What the keys do to a tool (#96). ⌘⌫ opens the review for one tool a
+    /// script installed. A tool a package manager owns beeps: its manager
+    /// deletes it permanently, and ⌘⌫ only ever moves things to the Trash.
+    private var keyboardActions: ScanListKeyActions<String> {
+        let store = store
+        let exists: (String) -> Bool = { id in
+            store.commandLineTools.standalone.contains { $0.id == id }
+                || store.commandLineTools.managed.contains { $0.id == id }
+        }
+        let locations: (String) -> [URL] = { id in
+            if let tool = store.commandLineTools.standalone.first(where: { $0.id == id }) { return [tool.folder] }
+            return store.commandLineTools.managed.first { $0.id == id }?.locations ?? []
+        }
+        return ScanListKeyActions(
+            toggle: { id in
+                guard exists(id) else { return false }
+                store.toggleCommandLineToolSelected(id: id)
+                return true
+            },
+            trash: { id in store.requestCommandLineToolRemoval(forToolID: id) },
+            previewURL: { id in locations(id).first },
+            copyURLs: locations,
+            stillExists: exists
+        )
     }
 
     private func selection(_ id: String) -> Binding<Bool> {
@@ -110,6 +147,8 @@ private struct CommandLineToolRow: View {
     let runsInBackground: Bool
     let locations: [ScanRowLocation]
     @Binding var isSelected: Bool
+    /// Makes the tool the keyboard's current row (#96), on any tap.
+    var onHighlight: (() -> Void)?
 
     @State private var isContextMenuActive = false
 
@@ -169,7 +208,10 @@ private struct CommandLineToolRow: View {
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .onTapGesture { isSelected.toggle() }
+        .onTapGesture {
+            onHighlight?()
+            isSelected.toggle()
+        }
         .finderRevealMenu(isMenuActive: $isContextMenuActive) { locations }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
