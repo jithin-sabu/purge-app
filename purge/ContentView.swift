@@ -88,8 +88,8 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
-                files: store.selectedTrashableLargeFiles,
-                fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySelection,
+                files: store.largeFileDeletionSheetFiles,
+                fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySheet,
                 onCancel: { store.dismissLargeFileDeletionSheet() },
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
             )
