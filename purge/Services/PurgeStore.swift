@@ -210,7 +210,9 @@ final class PurgeStore: ObservableObject {
         /// The line under a cache folder's title in the confirm sheets. An app's
         /// Application Support cache folders share one row and one title (#231), so
         /// each shows its path inside the app's folder, like `GPUCache` or
-        /// `Crashpad/completed`. Every other location keeps its folder key.
+        /// `Crashpad/completed`. Unsent crash reports from every app share one row
+        /// (#367), so theirs starts with the app's folder: `Codex/Crashpad/pending`.
+        /// Every other location keeps its folder key.
         static func cacheLocationLabel(_ location: CacheLocation) -> String {
             let components = location.path.pathComponents
             guard let index = components.indices.dropLast(2).first(where: {
@@ -218,7 +220,8 @@ final class PurgeStore: ObservableObject {
                     && components[$0 + 1] == "Application Support"
                     && components[$0 + 2] == location.folderName
             }), index + 3 < components.count else { return location.folderName }
-            return components[(index + 3)...].joined(separator: "/")
+            let start = CacheDiscoveryPaths.isCrashpadPendingFolder(location.path) ? index + 2 : index + 3
+            return components[start...].joined(separator: "/")
         }
     }
 

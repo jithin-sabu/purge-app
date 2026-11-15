@@ -1380,6 +1380,17 @@
     "kind": "logs"
   },
   {
+    "key": "crashpad-pending",
+    "display_name": "Unsent Crash Reports",
+    "tag": "medium",
+    "explanation": "Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first, or it saves no new reports until it opens again.",
+    "bundle_ids": [],
+    "aliases": [
+      "Unsent Crash Reports"
+    ],
+    "kind": "logs"
+  },
+  {
     "key": "iossimulators",
     "display_name": "iOS Simulators",
     "aliases": [

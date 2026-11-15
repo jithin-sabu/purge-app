@@ -120,6 +120,11 @@ enum SafetyTierList {
             if pathLower.contains("/service worker/") {
                 return nil
             }
+            // Crash reports an app has not sent yet are Check First (#367), even in
+            // a folder the Application Support shape below would call Safe.
+            if pathLower.hasSuffix("/crashpad/pending") || pathLower.contains("/crashpad/pending/") {
+                return .medium
+            }
             if pathLower.contains("/gpucache")
                 || pathLower.contains("/shadercache")
                 || pathLower.contains("/code cache")

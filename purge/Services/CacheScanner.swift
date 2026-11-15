@@ -311,11 +311,17 @@ nonisolated final class CacheScanner {
                 ? CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolderName)
                 : nil
             for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
+                // Unsent crash reports from every app share one Check First row
+                // (#367), never the app's own row, whatever tier its entry has.
+                let isPendingCrashReports = CacheDiscoveryPaths.isCrashpadPendingFolder(cacheURL)
                 guard let item = cacheItemAtDiscoveredPath(
                     cacheURL,
-                    headline: applicationSupportHeadline(appFolderName: appFolderName),
+                    headline: isPendingCrashReports
+                        ? CacheDiscoveryPaths.crashpadPendingKey
+                        : applicationSupportHeadline(appFolderName: appFolderName),
                     folderName: appFolderName,
-                    groupKey: groupKey,
+                    classificationName: isPendingCrashReports ? CacheDiscoveryPaths.crashpadPendingKey : nil,
+                    groupKey: isPendingCrashReports ? nil : groupKey,
                     access: access,
                     collectedPaths: &collectedPaths
                 ) else { continue }
@@ -455,10 +461,14 @@ nonisolated final class CacheScanner {
         _ url: URL,
         headline: String,
         folderName: String,
+        classificationName: String? = nil,
         groupKey: String? = nil,
         access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
+        // The name the tier and row come from. The location keeps `folderName`,
+        // which its label in the confirm sheets is read from.
+        let classificationName = classificationName ?? folderName
         // Before `standardizedFileURL` and the modification date, both of which
         // follow a symlink to its target.
         guard ProtectedLocations.isReadable(url, access: access) else { return nil }
@@ -470,12 +480,12 @@ nonisolated final class CacheScanner {
 
         let modified = FolderSizing.contentModificationDate(at: url)
         let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: folderName,
+            folderName: classificationName,
             friendlyHeadline: headline,
             path: url
         )
         return CacheItem(
-            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: folderName),
+            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: classificationName),
             location: CacheLocation(
                 path: url,
                 sizeBytes: 0,

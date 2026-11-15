@@ -440,6 +440,10 @@
 "Crash Reports" = "崩溃报告";
 "Records of app crashes saved by macOS. Safe to delete. These are only useful if you are reporting a bug to an app developer." = "macOS 保存的应用崩溃记录。可以安全删除，仅在向应用开发者报告问题时有用。";
 
+/* crashpad-pending */
+"Unsent Crash Reports" = "未发送的崩溃报告";
+"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first, or it saves no new reports until it opens again." = "应用已保存但尚未发送的崩溃报告。没有它们应用也能正常运行，但开发者将收不到这些报告。请先退出应用，否则在应用再次打开之前，它不会保存新的报告。";
+
 /* iossimulators */
 "iOS Simulators" = "iOS 模拟器";
 "Virtual iPhone and iPad devices Xcode tests apps on. Deleting one also deletes its apps and data. Xcode can create a new one when you need it." = "Xcode 用于测试应用的虚拟 iPhone 和 iPad 设备。删除模拟器也会删除其中的应用与数据。需要时 Xcode 可以创建新的模拟器。";
