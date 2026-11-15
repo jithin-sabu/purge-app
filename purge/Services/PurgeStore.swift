@@ -634,7 +634,11 @@ final class PurgeStore: ObservableObject {
         /// slow enough that each tick's `.numericText()` roll finishes before the
         /// next value lands rather than being retargeted mid-flight.
         static let flushInterval: Duration = .milliseconds(140)
-        static let flushThreshold = 100
+        /// A backstop for a producer far faster than the beat. Each flush filters
+        /// every row found so far through the safety policy on the main thread,
+        /// so at 100 a fast cache scan flushed about 20 times and the main thread
+        /// fell 0.6 s behind it.
+        static let flushThreshold = 1_000
     }
 
     /// The scan-flush cadence in seconds, derived from `ScanCoalesce.flushInterval`.
@@ -4236,19 +4240,28 @@ final class PurgeStore: ObservableObject {
         await gitChecker.setAccess(access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
 
+        // The first read inside each app's container makes macOS decide, in
+        // the kernel, whether Purge may read it. Made while other folders were
+        // being read, that sometimes stalled 5 s; made first, alone, it never
+        // did, and the reads below find it decided.
+        await scanSources.prepareFullScan(access)
+        guard !Task.isCancelled, scanGeneration == generation else { return }
+
         // Project discovery walks the home folders and needs nothing from the
         // two scans below, so it starts with them rather than after them, and
         // carries Dev Tools on if it is still going when they end.
         startProjectDiscovery(generation: generation, access: access)
         let discovery = projectDiscoveryTask
 
+        // The two halves read different folders and share nothing, so they run
+        // side by side; one after the other, the scan took their sum.
+        readableWithoutFullDiskAccess.removeAll()
+        async let developerHalf: Void = runDeveloperScan(generation: generation, access: access, inFullScan: true)
         await runGeneralScan(generation: generation, access: access, inFullScan: true)
-        guard !Task.isCancelled, scanGeneration == generation else {
-            stopProjectDiscovery(discovery)
-            return
+        if !Task.isCancelled, scanGeneration == generation {
+            cacheScanStage = .devTools
         }
-        cacheScanStage = .devTools
-        await runDeveloperScan(generation: generation, access: access, inFullScan: true)
+        await developerHalf
         guard !Task.isCancelled, scanGeneration == generation else {
             stopProjectDiscovery(discovery)
             return
@@ -4278,8 +4291,9 @@ final class PurgeStore: ObservableObject {
         errorMessage = nil
         isScanningGeneral = true
         generalResultsAccess = access
-        readableWithoutFullDiskAccess.removeAll()
         if !inFullScan {
+            // A full scan clears this once for both halves.
+            readableWithoutFullDiskAccess.removeAll()
             await gitChecker.clearSessionCache()
             await gitChecker.setAccess(access)
         }
@@ -4310,7 +4324,7 @@ final class PurgeStore: ObservableObject {
             }
         }
         coalesce.debounceTask?.cancel()
-        flushCacheScanBuffers(coalesce: coalesce, animate: true)
+        flushCacheScanBuffers(coalesce: coalesce, animate: true, filtersEveryRow: true)
         ScanPhaseTiming.finish(
             "runGeneralScan stream",
             since: streamStart,
@@ -4341,8 +4355,9 @@ final class PurgeStore: ObservableObject {
         simulatorSizingGeneration += 1
         isScanningDeveloper = true
         developerResultsAccess = access
-        readableWithoutFullDiskAccess.removeAll()
         if !inFullScan {
+            // A full scan clears this once for both halves.
+            readableWithoutFullDiskAccess.removeAll()
             await gitChecker.clearSessionCache()
             await gitChecker.setAccess(access)
         }
@@ -5308,22 +5323,30 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private func flushCacheScanBuffers(coalesce: CacheScanCoalesceBuffers, animate: Bool) {
-        guard coalesce.eventCount > 0 else { return }
+    /// `filtersEveryRow` runs the safety filter over every row found so far,
+    /// as the scan's last flush does; the flushes before it filter only the rows
+    /// they add. Filtering every row on every flush kept the main thread busy
+    /// for about 0.6 s of a 2 s scan, and the list it published at the end
+    /// passed the same filter either way.
+    private func flushCacheScanBuffers(coalesce: CacheScanCoalesceBuffers, animate: Bool, filtersEveryRow: Bool = false) {
+        // With nothing new and nothing staged there is nothing to filter, and
+        // publishing would replace the list with an empty one.
+        guard coalesce.eventCount > 0 || (filtersEveryRow && !stagedGeneralCacheItems.isEmpty) else { return }
         let snapshot = coalesce.takeSnapshot()
-        flushCacheScanBuffers(found: snapshot.found, sizes: snapshot.sizes, animate: animate)
+        flushCacheScanBuffers(found: snapshot.found, sizes: snapshot.sizes, animate: animate, filtersEveryRow: filtersEveryRow)
     }
 
     private func flushCacheScanBuffers(
         found: [CacheItem],
         sizes: [String: (sizeBytes: Int64, lastModified: Date)],
-        animate: Bool
+        animate: Bool,
+        filtersEveryRow: Bool
     ) {
-        guard !found.isEmpty || !sizes.isEmpty else { return }
+        guard !found.isEmpty || !sizes.isEmpty || filtersEveryRow else { return }
 
         var items = stagedGeneralCacheItems
         if !found.isEmpty {
-            items.append(contentsOf: found)
+            items.append(contentsOf: filtersEveryRow ? found : DeletionSafetyPolicy.filterCacheItems(found))
             for item in found {
                 pendingCacheSizePaths.formUnion(
                     item.locations.map { $0.path.standardizedFileURL.path }
@@ -5339,7 +5362,9 @@ final class PurgeStore: ObservableObject {
 
         items = DefinitionCacheGrouper.group(items)
         items = dedupeCacheItemsByPath(items)
-        items = DeletionSafetyPolicy.filterCacheItems(items)
+        if filtersEveryRow {
+            items = DeletionSafetyPolicy.filterCacheItems(items)
+        }
         stagedGeneralCacheItems = items
 
         let published = publishedCacheItems(from: items)

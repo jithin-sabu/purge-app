@@ -28,6 +28,10 @@ struct ScanSources {
     /// asks `GitStatusChecker` again for each path before it moves anything, and
     /// never reads this.
     var gitStatuses: ([URL]) async -> [String: GitWorktreeStatus]
+    /// Runs before a full scan starts its parts side by side. The live one
+    /// lists every app container's caches folder alone first (see
+    /// `PurgeStore.runFullScan`); tests read none of the user's folders.
+    var prepareFullScan: (ScanAccess) async -> Void = { _ in }
 
     static func live(
         cacheScanner: CacheScanner,
@@ -47,7 +51,13 @@ struct ScanSources {
             fullAccessStep: nil,
             everythingElse: { everythingElseMeasurer.measureStream(access: $0) },
             commandLineTools: { await CommandLineToolScanner().scan() },
-            gitStatuses: { await gitChecker.cleanupStatuses(for: $0) }
+            gitStatuses: { await gitChecker.cleanupStatuses(for: $0) },
+            prepareFullScan: { access in
+                guard access == .full else { return }
+                await Task.detached(priority: .userInitiated) {
+                    CacheDiscoveryPaths.touchContainerCaches(home: FileManager.default.homeDirectoryForCurrentUser)
+                }.value
+            }
         )
     }
 }

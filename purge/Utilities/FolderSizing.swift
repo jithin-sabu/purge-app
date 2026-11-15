@@ -149,6 +149,13 @@ nonisolated enum FolderSizing {
         onChunkDone: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil
     ) -> [String: Int64] {
         guard !urls.isEmpty else { return [:] }
+        if split == .spread {
+            let done = Counter()
+            return walkedSizes(at: urls, staysOnVolume: staysOnVolume) { path, bytes in
+                onChunkSizes?(bytes.map { [path: $0] } ?? [:])
+                onChunkDone?(done.increment(), urls.count)
+            }
+        }
 
         let chunks = Self.chunks(of: urls, split: split)
         // A scan's `du` runs at the priority of the scan that asked, so a scan
@@ -205,6 +212,35 @@ nonisolated enum FolderSizing {
         return result
     }
 
+    /// Scan sizing: what `du -sk` reports for each folder, read inside Purge on
+    /// `FolderWalker`'s threads rather than by `du` processes. Keyed by
+    /// standardized path; a folder that could not be read has no entry.
+    /// `onSize` hears each folder as it finishes, on a walker thread, with nil
+    /// for one that could not be read. A cancelled call stops early and returns
+    /// what finished.
+    nonisolated static func walkedSizes(
+        at urls: [URL],
+        staysOnVolume: Bool = false,
+        onSize: ((_ path: String, _ bytes: Int64?) -> Void)? = nil
+    ) -> [String: Int64] {
+        var seen = Set<String>()
+        let paths = urls.map { $0.standardizedFileURL.path }.filter { seen.insert($0).inserted }
+        let sizes = FolderWalker.shared.sizes(of: paths, staysOnVolume: staysOnVolume) { index, bytes in
+            onSize?(paths[index], bytes)
+        }
+        var result: [String: Int64] = [:]
+        result.reserveCapacity(paths.count)
+        for (path, size) in zip(paths, sizes) {
+            if let size { result[path] = size }
+        }
+        return result
+    }
+
+    /// One folder through `walkedSizes`: nil when it could not be read.
+    nonisolated static func measuredSize(at url: URL, staysOnVolume: Bool = false) -> Int64? {
+        walkedSizes(at: [url], staysOnVolume: staysOnVolume)[url.standardizedFileURL.path]
+    }
+
     nonisolated static func directoryByteSize(at url: URL) -> Int64 {
         directoryByteSizeIfMeasurable(at: url) ?? 0
     }
@@ -233,6 +269,11 @@ nonisolated enum FolderSizing {
         skipsPackages: Bool,
         isCancelled: () -> Bool = { Task.isCancelled }
     ) -> (bytes: Int64, lastUsed: Date) {
+        // The same sums read in parallel with `getattrlistbulk`. Measuring a
+        // Photos library this way took 0.45 s file by file.
+        guard skipsPackages else {
+            return FolderWalker.shared.fileTotals(of: url.standardizedFileURL.path, isCancelled: isCancelled)
+        }
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey
@@ -268,5 +309,18 @@ nonisolated enum FolderSizing {
 
     nonisolated static func contentModificationDate(at url: URL) -> Date {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+}
+
+/// Counts finished folders for `onChunkDone`, which walker threads call at once.
+private nonisolated final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
     }
 }

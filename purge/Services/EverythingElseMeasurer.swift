@@ -126,7 +126,7 @@ nonisolated final class EverythingElseMeasurer {
         }
         switch root.kind {
         case .whole:
-            guard let bytes = FolderSizing.directoryByteSizeIfMeasurable(at: root.url, staysOnVolume: true) else {
+            guard let bytes = FolderSizing.measuredSize(at: root.url, staysOnVolume: true) else {
                 return [.skipped(root, locked: false)]
             }
             return [.measured(EverythingElseMeasuredRoot(root: root, totalBytes: bytes))]

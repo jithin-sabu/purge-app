@@ -108,19 +108,27 @@ nonisolated struct InstalledCodeEvidence {
         unwalked = uniqued(unwalked).filter { !walkedPaths.contains($0.standardizedFileURL.path) }
         programs = uniqued(programs)
 
-        // The nested code of every walked bundle, all walks side by side, then
-        // every signature at once. Running the two in one pass nested one
-        // parallel loop in another, which GCD runs one item at a time, so
-        // Xcode's walk alone set the pace.
-        let nested = nestedCodeBundleURLs(inEach: walked)
+        // The nested code of every walked bundle, all walks side by side. The
+        // bundles' own signatures don't wait for it: they are read while it
+        // runs, and the nested code's once it is found.
+        func readCode(_ urls: [URL]) -> [CodeRead] {
+            ConcurrentMap.values(urls) { url in
+                CodeRead(bundleID: bundleIdentifier(of: url), signature: CodeSignature.read(at: url))
+            }
+        }
+        let bundleURLs = uniqued(walked + unwalked)
+        let (nested, bundleReads) = ConcurrentMap.both(
+            { nestedCodeBundleURLs(inEach: walked) },
+            { readCode(bundleURLs) }
+        )
         var nestedByBundle: [String: [URL]] = [:]
         for (bundle, inside) in zip(walked, nested) {
             nestedByBundle[bundle.standardizedFileURL.path] = inside
         }
-        let codeURLs = uniqued(walked + nested.flatMap { $0 } + unwalked)
-        let codeReads = ConcurrentMap.values(codeURLs) { url in
-            CodeRead(bundleID: bundleIdentifier(of: url), signature: CodeSignature.read(at: url))
-        }
+        let bundlePaths = Set(bundleURLs.map(\.standardizedFileURL.path))
+        let nestedURLs = uniqued(nested.flatMap { $0 }).filter { !bundlePaths.contains($0.standardizedFileURL.path) }
+        let codeURLs = bundleURLs + nestedURLs
+        let codeReads = bundleReads + readCode(nestedURLs)
         let programReads = ConcurrentMap.values(programs) { CodeSignature.read(at: $0) }
         let codeByPath = Dictionary(
             zip(codeURLs.map(\.standardizedFileURL.path), codeReads),

@@ -42,10 +42,13 @@ nonisolated enum PackageManagerToolScanner {
         for prefix in roots.homebrewPrefixes {
             let cellar = prefix.appendingPathComponent("Cellar", isDirectory: true)
             let brew = prefix.appendingPathComponent("bin/brew")
-            for name in directoryNames(in: cellar) {
+            let names = directoryNames(in: cellar).filter { PackageManager.homebrew.isValidPackageName($0) }
+            // Each formula's receipts are read on their own, so side by side.
+            let onRequest = ConcurrentMap.values(names) { name in
+                isInstalledOnRequest(formula: cellar.appendingPathComponent(name, isDirectory: true))
+            }
+            for (name, isOnRequest) in zip(names, onRequest) where isOnRequest {
                 let folder = cellar.appendingPathComponent(name, isDirectory: true)
-                guard PackageManager.homebrew.isValidPackageName(name),
-                      isInstalledOnRequest(formula: folder) else { continue }
                 tools.append(tool(
                     .homebrew, name: name, locations: [folder], context: nil,
                     executable: executableIfPresent(brew),

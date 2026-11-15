@@ -95,12 +95,6 @@ nonisolated final class LargeFileScanner {
         }
     }
 
-    /// How many enumerator steps share one autorelease pool. `nextObject()` and
-    /// `resourceValues` allocate Foundation objects per file; draining every step
-    /// is slower, and never draining lets a Downloads walk hold megabytes of
-    /// transients until the root finishes.
-    private static let enumeratorAutoreleaseBatch = 256
-
     /// Asked once per scan, here off the main thread, so drawing a row never
     /// makes a LaunchServices call to decide what its explanation says.
     private static func installedVirtualMachineApps() -> Set<VirtualMachineApp> {
@@ -242,122 +236,171 @@ nonisolated final class LargeFileScanner {
                 continue
             }
 
-            enumerateRoot: while true {
-                let keepGoing: Bool = autoreleasepool {
-                    for _ in 0..<enumeratorAutoreleaseBatch {
-                        guard let next = enumerator.nextObject() else { return false }
-                        if Task.isCancelled { return false }
-                        guard let fileURL = next as? URL else { continue }
+            // The root's own entries, as the walk meets them, read with the
+            // enumerator so the paths are spelled as it spells them. The walk
+            // below starts from these.
+            var units: [(url: URL, values: Seen?)] = []
+            while let next = enumerator.nextObject() {
+                if Task.isCancelled { break }
+                guard let fileURL = next as? URL else { continue }
+                enumerator.skipDescendants()
+                if walkedRootPrefix == nil {
+                    walkedRootPrefix = fileURL.deletingLastPathComponent().path + "/"
+                }
+                units.append((fileURL, (try? fileURL.resourceValues(forKeys: resourceKeys)).map(Seen.init)))
+            }
+            let prefix = walkedRootPrefix
 
-                        let values = try? fileURL.resourceValues(forKeys: resourceKeys)
+            func isUserExcluded(_ fileURL: URL) -> Bool {
+                guard !excluded.isEmpty else { return false }
+                let path = fileURL.path
+                guard let prefix, path.hasPrefix(prefix) else { return false }
+                return excluded.contains(relativePath: path.dropFirst(prefix.count))
+            }
 
-                        var isUserExcluded: Bool {
-                            guard !excluded.isEmpty else { return false }
-                            if walkedRootPrefix == nil, enumerator.level == 1 {
-                                walkedRootPrefix = fileURL.deletingLastPathComponent().path + "/"
-                            }
-                            let path = fileURL.path
-                            guard let prefix = walkedRootPrefix, path.hasPrefix(prefix) else { return false }
-                            return excluded.contains(relativePath: path.dropFirst(prefix.count))
+            /// What the walk makes of one entry: what it adds to the list or
+            /// the summary, and whether it goes into the entry. `values` is nil
+            /// for an entry whose values could not be read.
+            func examine(_ fileURL: URL, values: Seen?, isCancelled: () -> Bool) -> (findings: [Finding], descends: Bool) {
+                if values?.isDirectory == true {
+                    // A VM or a Safari download bundle is one item. Never walk
+                    // into it, whether or not macOS calls it a package: without
+                    // the VM app installed it is a plain folder, and a disk file
+                    // listed from inside it could be trashed alone.
+                    let isVirtualMachine = VirtualMachineApp(bundleExtension: fileURL.pathExtension) != nil
+                    if isVirtualMachine
+                        || (!bundlesOnly && LargeFileScanPolicy.isSafariDownloadBundle(fileURL, home: home)) {
+                        if isUserExcluded(fileURL) { return ([], false) }
+                        // A VM that may be running is left off the list; the
+                        // delete check refuses it again in case it starts later.
+                        if isVirtualMachine,
+                           LargeFileScanPolicy.virtualMachineIsInUse(fileURL, isAppRunning: isAppRunning) {
+                            return ([], false)
                         }
-
-                        if values?.isDirectory == true || values?.isPackage == true {
-                            // A VM or a Safari download bundle is one item. Never walk
-                            // into it, whether or not macOS calls it a package: without
-                            // the VM app installed it is a plain folder, and a disk file
-                            // listed from inside it could be trashed alone.
-                            let isVirtualMachine = VirtualMachineApp(bundleExtension: fileURL.pathExtension) != nil
-                            if isVirtualMachine
-                                || (!bundlesOnly && LargeFileScanPolicy.isSafariDownloadBundle(fileURL, home: home)) {
-                                enumerator.skipDescendants()
-                                if isUserExcluded { continue }
-                                // A VM that may be running is left off the list; the
-                                // delete check refuses it again in case it starts later.
-                                if isVirtualMachine,
-                                   LargeFileScanPolicy.virtualMachineIsInUse(fileURL, isAppRunning: isAppRunning) {
-                                    continue
-                                }
-                                let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false)
-                                if let file = listed(
-                                    fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
-                                    minBytes: minBytes, staleDays: staleDays, now: now,
-                                    installedApps: installedApps, isExcluded: isExcluded,
-                                    home: home, downloadOnly: walk.downloadOnly
-                                ), isFirstListing(file) {
-                                    continuation.yield(.file(file))
-                                }
-                                continue
-                            }
-                            // A media library is skipped like any excluded folder, but
-                            // its size goes in the summary: on a Mac whose big files
-                            // all live in Photos, an empty list with no reason reads as
-                            // a broken scan. Nothing inside it is ever listed.
-                            if !bundlesOnly, !isUserExcluded,
-                               LargeFileScanSummary.SkippedLibrary.extensions.contains(fileURL.pathExtension.lowercased()) {
-                                enumerator.skipDescendants()
-                                // The exclusion check comes before the walk: a library
-                                // the user excluded must not cost the scan its size.
-                                guard !isExcluded(fileURL) else { continue }
-                                let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false)
-                                if measured.bytes >= minBytes {
-                                    summary.skippedLibraries.append(
-                                        .init(path: fileURL.standardizedFileURL, bytes: measured.bytes)
-                                    )
-                                }
-                                continue
-                            }
-                            if LargeFileScanPolicy.isExcludedDirectory(fileURL) || isUserExcluded {
-                                enumerator.skipDescendants()
-                                continue
-                            }
-                            if modelStoreRoots.contains(fileURL.standardizedFileURL.path) {
-                                enumerator.skipDescendants()
-                            }
-                            continue
-                        }
-
-                        // VM folders hold VM bundles. Anything else there is not
-                        // this walk's business; the home roots cover the rest.
-                        if bundlesOnly { continue }
-                        guard values?.isRegularFile == true else { continue }
-                        if isUserExcluded { continue }
-
-                        // Zero allocated bytes is a real size, not a missing one. A dataless
-                        // iCloud placeholder reports 0 here and a large logical `fileSize`;
-                        // falling through on 0 would list files that aren't on this Mac.
-                        let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
-                        let accessed = values?.contentAccessDate ?? .distantPast
-                        let modified = values?.contentModificationDate ?? .distantPast
-
-                        // The placeholder still counts, under the provider that holds
-                        // it, so the empty state can say the files exist but take no
-                        // space here. Same filters as a listed row, so the summary
-                        // answers the question the chips ask.
-                        if size < minBytes, values?.totalFileAllocatedSize == 0,
-                           let logical = values?.fileSize, Int64(logical) >= minBytes,
-                           passesStaleFilter(lastUsed: max(accessed, modified), staleDays: staleDays, now: now),
-                           !isExcluded(fileURL) {
-                            let isUbiquitous = (try? fileURL.resourceValues(
-                                forKeys: [.isUbiquitousItemKey]
-                            ))?.isUbiquitousItem == true
-                            summary.addCloudOnly(
-                                LargeFileScanSummary.CloudProvider.provider(for: fileURL, isUbiquitous: isUbiquitous, home: home),
-                                bytes: Int64(logical)
-                            )
-                            continue
-                        }
-                        if let file = listed(
-                            fileURL, size: size, lastUsed: max(accessed, modified),
+                        let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, isCancelled: isCancelled)
+                        guard let file = listed(
+                            fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
                             minBytes: minBytes, staleDays: staleDays, now: now,
                             installedApps: installedApps, isExcluded: isExcluded,
                             home: home, downloadOnly: walk.downloadOnly
-                        ), isFirstListing(file) {
-                            continuation.yield(.file(file))
-                        }
+                        ) else { return ([], false) }
+                        return ([.file(file)], false)
                     }
-                    return true
+                    // A media library is skipped like any excluded folder, but
+                    // its size goes in the summary: on a Mac whose big files
+                    // all live in Photos, an empty list with no reason reads as
+                    // a broken scan. Nothing inside it is ever listed.
+                    if !bundlesOnly, !isUserExcluded(fileURL),
+                       LargeFileScanSummary.SkippedLibrary.extensions.contains(fileURL.pathExtension.lowercased()) {
+                        // The exclusion check comes before the walk: a library
+                        // the user excluded must not cost the scan its size.
+                        guard !isExcluded(fileURL) else { return ([], false) }
+                        let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, isCancelled: isCancelled)
+                        guard measured.bytes >= minBytes else { return ([], false) }
+                        return ([.skippedLibrary(.init(path: fileURL.standardizedFileURL, bytes: measured.bytes))], false)
+                    }
+                    if LargeFileScanPolicy.isExcludedDirectory(fileURL) || isUserExcluded(fileURL) {
+                        return ([], false)
+                    }
+                    if modelStoreRoots.contains(fileURL.standardizedFileURL.path) {
+                        return ([], false)
+                    }
+                    // The walk never goes into a package.
+                    return ([], values?.isPackage() != true)
                 }
-                if !keepGoing { break enumerateRoot }
+
+                // VM folders hold VM bundles. Anything else there is not
+                // this walk's business; the home roots cover the rest.
+                if bundlesOnly { return ([], false) }
+                guard let values, values.isRegularFile else { return ([], false) }
+                if isUserExcluded(fileURL) { return ([], false) }
+
+                // Zero allocated bytes is a real size, not a missing one. A dataless
+                // iCloud placeholder reports 0 here and a large logical `fileSize`;
+                // falling through on 0 would list files that aren't on this Mac.
+                let size = values.allocatedBytes ?? values.logicalBytes ?? 0
+                let accessed = values.accessDate
+                let modified = values.modificationDate
+
+                // The placeholder still counts, under the provider that holds
+                // it, so the empty state can say the files exist but take no
+                // space here. Same filters as a listed row, so the summary
+                // answers the question the chips ask.
+                if size < minBytes, values.allocatedBytes == 0,
+                   let logical = values.logicalBytes, logical >= minBytes,
+                   passesStaleFilter(lastUsed: max(accessed, modified), staleDays: staleDays, now: now),
+                   !isExcluded(fileURL) {
+                    let isUbiquitous = (try? fileURL.resourceValues(
+                        forKeys: [.isUbiquitousItemKey]
+                    ))?.isUbiquitousItem == true
+                    let provider = LargeFileScanSummary.CloudProvider.provider(for: fileURL, isUbiquitous: isUbiquitous, home: home)
+                    return ([.cloudOnly(provider, bytes: Int64(logical))], false)
+                }
+                guard let file = listed(
+                    fileURL, size: size, lastUsed: max(accessed, modified),
+                    minBytes: minBytes, staleDays: staleDays, now: now,
+                    installedApps: installedApps, isExcluded: isExcluded,
+                    home: home, downloadOnly: walk.downloadOnly
+                ) else { return ([], false) }
+                return ([.file(file)], false)
+            }
+
+            // Folders are read on several threads, each as soon as one is free:
+            // one walk of Documents set the pace of the whole scan. What they
+            // find comes back in the order one walk met it, so the rows, which
+            // copy of a file is listed first, and the summary come out the same.
+            // The reads run on threads of their own, where `Task.isCancelled` is
+            // always false, so cancelling this task raises a flag they read.
+            let stop = CancellationFlag()
+            let isCancelled = { stop.isRaised }
+            let unitFindings = await withTaskCancellationHandler {
+                ConcurrentMap.tree([WalkFolder.top], width: foldersReadAtOnce, isCancelled: isCancelled) { folder -> [TreeStep<[Finding], WalkFolder>] in
+                    let folderURL: URL
+                    switch folder {
+                    case .top:
+                        return units.indices.map { .child(.unit($0)) }
+                    case .unit(let index):
+                        let unit = units[index]
+                        let (found, descends) = examine(unit.url, values: unit.values, isCancelled: isCancelled)
+                        return (found.isEmpty ? [] : [.value(found)]) + (descends ? [.child(.folder(unit.url))] : [])
+                    case .folder(let url):
+                        folderURL = url
+                    }
+                    // As `FileManager` lists with `.skipsHiddenFiles`.
+                    let children = DirectoryListing.entries(of: folderURL.path) ?? []
+                    var steps: [TreeStep<[Finding], WalkFolder>] = []
+                    for child in children where !child.isHidden {
+                        // A file under the size floor that is not a cloud
+                        // placeholder over it adds nothing, nor does a link,
+                        // so neither costs a URL.
+                        if !child.isDirectory {
+                            guard child.isRegularFile, child.allocatedBytes >= minBytes
+                                || (child.allocatedBytes == 0 && child.logicalBytes >= minBytes)
+                            else { continue }
+                        }
+                        let url = folderURL.appendingPathComponent(child.name, isDirectory: child.isDirectory)
+                        let (found, descends) = examine(url, values: Seen(child, url: url), isCancelled: isCancelled)
+                        if !found.isEmpty { steps.append(.value(found)) }
+                        if descends { steps.append(.child(.folder(url))) }
+                    }
+                    return steps
+                }
+            } onCancel: {
+                stop.raise()
+            }
+
+            for finding in unitFindings.joined() {
+                if Task.isCancelled { break }
+                switch finding {
+                case .file(let file):
+                    if isFirstListing(file) {
+                        continuation.yield(.file(file))
+                    }
+                case .skippedLibrary(let library):
+                    summary.skippedLibraries.append(library)
+                case .cloudOnly(let provider, let bytes):
+                    summary.addCloudOnly(provider, bytes: bytes)
+                }
             }
 
             if !bundlesOnly {
@@ -374,6 +417,59 @@ nonisolated final class LargeFileScanner {
         }
         continuation.finish()
     }
+
+    /// What walking one entry adds, applied in walk order once the units are done.
+    private enum Finding {
+        case file(LargeFile)
+        case skippedLibrary(LargeFileScanSummary.SkippedLibrary)
+        case cloudOnly(LargeFileScanSummary.CloudProvider, bytes: Int64)
+    }
+
+    /// What the walk reads of an entry, from `URLResourceValues` or from
+    /// `DirectoryListing`. Whether a folder is a package is asked only of a
+    /// folder the walk would go into.
+    private struct Seen {
+        let isDirectory: Bool
+        let isRegularFile: Bool
+        let allocatedBytes: Int64?
+        let logicalBytes: Int64?
+        let accessDate: Date
+        let modificationDate: Date
+        let isPackage: () -> Bool
+
+        init(_ values: URLResourceValues) {
+            // A package reads as a folder here, as it did in the walk's checks.
+            isDirectory = values.isDirectory == true || values.isPackage == true
+            isRegularFile = values.isRegularFile == true
+            allocatedBytes = values.totalFileAllocatedSize.map(Int64.init)
+            logicalBytes = values.fileSize.map(Int64.init)
+            accessDate = values.contentAccessDate ?? .distantPast
+            modificationDate = values.contentModificationDate ?? .distantPast
+            let isPackage = values.isPackage == true
+            self.isPackage = { isPackage }
+        }
+
+        init(_ entry: ListingEntry, url: URL) {
+            isDirectory = entry.isDirectory
+            isRegularFile = entry.isRegularFile
+            allocatedBytes = entry.isRegularFile ? entry.allocatedBytes : nil
+            logicalBytes = entry.isRegularFile ? entry.logicalBytes : nil
+            accessDate = entry.accessDate
+            modificationDate = entry.modificationDate
+            isPackage = { (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true }
+        }
+    }
+
+    /// What the walk reads: the root, whose entries were listed before the
+    /// walk; one of those entries, by its index; or a folder below them.
+    private enum WalkFolder {
+        case top
+        case unit(Int)
+        case folder(URL)
+    }
+
+    /// How many folders are read at once.
+    static let foldersReadAtOnce = 8
 
     /// Set by the enumerator's error handler, which must outlive the loop that
     /// reads it.

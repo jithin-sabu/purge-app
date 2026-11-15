@@ -453,6 +453,13 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Lists each app container's caches folder once, one after another, and
+    /// keeps nothing: see the full scan's first step in `PurgeStore`. A look-up
+    /// alone (`lstat`) was not enough: the stalls came back.
+    nonisolated static func touchContainerCaches(home: URL) {
+        _ = containerCacheURLs(home: home)
+    }
+
     /// Enumerates cache paths under `~/Library/Containers/<bundleID>/Data/Library/Caches`.
     nonisolated static func containerCacheURLs(home: URL) -> [URL] {
         let containersRoot = home.appendingPathComponent("Library/Containers", isDirectory: true)
@@ -469,13 +476,18 @@ enum CacheDiscoveryPaths {
             guard !DeletionSafetyPolicy.isProtectedContainerBundleID(bundleID) else { continue }
             let cachesRoot = bundleDir
                 .appendingPathComponent("Data/Library/Caches", isDirectory: true)
-            guard fm.fileExists(atPath: cachesRoot.path) else { continue }
+            // Other scans may be reading inside the containers at the same time.
+            let listing: [URL]?? = ContainerAccessGate.access(cachesRoot.path) {
+                guard fm.fileExists(atPath: cachesRoot.path) else { return nil }
+                return .some(try? fm.contentsOfDirectory(
+                    at: cachesRoot,
+                    includingPropertiesForKeys: [.isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                ))
+            }
+            guard let listing else { continue }
 
-            if let children = try? fm.contentsOfDirectory(
-                at: cachesRoot,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ), !children.isEmpty {
+            if let children = listing, !children.isEmpty {
                 let subdirs = children.filter {
                     (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
                 }
