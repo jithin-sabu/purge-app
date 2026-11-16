@@ -24,7 +24,6 @@
 
 <p>
   <a href="https://trendshift.io/repositories/64435" target="_blank"><picture><source media="(prefers-color-scheme: dark)" srcset="https://trendshift.io/api/badge/repositories/64435?theme=dark"><img src="https://trendshift.io/api/badge/repositories/64435?theme=light" alt="jithin-sabu/purge-app | Trendshift" width="250" height="55"/></picture></a>
-  <a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/"><img src="https://img.shields.io/badge/Featured_in-WIRED-000000?style=for-the-badge" alt="Про Purge написав WIRED" height="40" /></a>
 </p>
 
   <p>
