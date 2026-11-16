@@ -138,11 +138,15 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     /// Sets Purge removed that are not back, so Download Again has something
     /// to ask for even when the profile is already gone, as after a download
-    /// request that failed.
+    /// request that failed. Without the profile it counts only after a failed
+    /// request: while one macOS accepted is still arriving, a click would
+    /// clear it and start over.
     private var hasSetsToRequest: Bool {
         guard let reading else { return false }
+        if !isProfileInstalled {
+            guard case .downloadRequestFailed = lastOutcome, !removedSetNames.isEmpty else { return false }
+        }
         return !Self.setsToRequest(removed: removedSetNames, blockedTypes: installedBlocks, sets: reading.sets).isEmpty
-            && (!removedSetNames.isEmpty || isProfileInstalled)
     }
 
     /// The button that lifts the block. With nothing of Purge's to bring back,
@@ -221,31 +225,73 @@ final class AppleIntelligenceModelStore: ObservableObject {
     }
 
     /// A removal's leftovers, and what is needed to book them if they go later.
+    /// `sets` holds only those macOS accepted or answered with a lock, so a set
+    /// it refused, or one never sent, is never booked as Purge's removal.
     private struct LeftWatch {
-        let sets: [AppleIntelligenceModelSet]
-        let removedBefore: Int
+        var sets: [AppleIntelligenceModelSet]
         let reading: AppleIntelligenceReading
         let since: Date
+        /// Readings in a row that showed each set gone, by set name.
+        var goneReadings: [String: Int] = [:]
+    }
+
+    /// Readings in a row that must show the watched sets gone before they are
+    /// booked, so one failed read never books sets still on disk.
+    nonisolated static let leftWatchConfirmations = 2
+
+    /// The set is gone by a reading that could see it: no records and a folder
+    /// that was read. A folder that couldn't be read proves nothing.
+    nonisolated static func isPositivelyGone(_ set: AppleIntelligenceModelSet, in reading: AppleIntelligenceReading) -> Bool {
+        guard let item = reading.sets.first(where: { $0.set == set }) else { return false }
+        return !item.isPresent && item.folder != .unknown
     }
 
     /// How long after a removal the row keeps checking whether the sets that
     /// stayed have gone after all.
     nonisolated static let leftWatchTime: TimeInterval = 15 * 60
 
-    /// Once every set a removal left behind has gone, the row says they were
-    /// removed and the history books them, instead of keeping the failure.
+    /// Once a watched set has gone, in two readings in a row, the history
+    /// books it and the row counts it as removed, instead of keeping the
+    /// failure. Each set is booked on its own, so one that goes while another
+    /// stays still counts.
     private func noteLateRemovals(_ fresh: AppleIntelligenceReading) {
-        guard phase == .idle, let watch = leftWatch else { return }
-        guard case .someLeft = lastOutcome, Date().timeIntervalSince(watch.since) < Self.leftWatchTime else {
+        guard phase == .idle, var watch = leftWatch else { return }
+        guard Date().timeIntervalSince(watch.since) < Self.leftWatchTime,
+              Self.outcomeAfterLateRemoval(lastOutcome, sets: 0) != nil else {
             leftWatch = nil
             return
         }
-        let stillThere = watch.sets.filter { set in fresh.present.contains { $0.set == set } }
-        guard stillThere.isEmpty else { return }
-        leftWatch = nil
-        lastOutcome = .removed(sets: watch.removedBefore + watch.sets.count, freedShownBytes: nil, freedRawBytes: nil)
-        removedSetNames = Self.remembering(removed: watch.sets.map(\.name), in: removedSetNames)
-        services.recordRemoval(watch.sets, watch.reading, nil)
+        for set in watch.sets {
+            watch.goneReadings[set.name] = Self.isPositivelyGone(set, in: fresh)
+                ? (watch.goneReadings[set.name] ?? 0) + 1 : 0
+        }
+        let went = watch.sets.filter { (watch.goneReadings[$0.name] ?? 0) >= Self.leftWatchConfirmations }
+        guard !went.isEmpty, let next = Self.outcomeAfterLateRemoval(lastOutcome, sets: went.count) else {
+            leftWatch = watch
+            return
+        }
+        watch.sets.removeAll { went.contains($0) }
+        leftWatch = watch.sets.isEmpty ? nil : watch
+        lastOutcome = next
+        removedSetNames = Self.remembering(removed: went.map(\.name), in: removedSetNames)
+        services.recordRemoval(went, watch.reading, nil)
+    }
+
+    /// What the row says once `sets` watched sets went late: Removed when they
+    /// were all that stayed, otherwise the same outcome with the counts moved.
+    /// Nil when another action has replaced the removal's outcome.
+    nonisolated static func outcomeAfterLateRemoval(_ outcome: AppleIntelligenceOutcome?, sets: Int) -> AppleIntelligenceOutcome? {
+        switch outcome {
+        case .someLeft(let removed, let left, let reason, let details):
+            guard left > sets else { return .removed(sets: removed + sets, freedShownBytes: nil, freedRawBytes: nil) }
+            return .someLeft(removed: removed + sets, left: left - sets, reason: reason, details: details)
+        case .stopped(let removed, let left):
+            guard left > sets else { return .removed(sets: removed + sets, freedShownBytes: nil, freedRawBytes: nil) }
+            return .stopped(removed: removed + sets, left: left - sets)
+        case .removed, .profileNotInstalled, .notReady, .downloadRequested, .downloadNotStarted,
+             .profileStillInstalled, .downloadRequestFailed, nil:
+            return nil
+        }
     }
 
     /// After Download Again, the row says "downloading" and re-reads every 20
@@ -346,7 +392,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         if isDownloading { return 20 }
         if case .downloadNotStarted = lastOutcome { return 60 }
         // Sets a removal left, which macOS may still be deleting.
-        if leftWatch != nil, case .someLeft = lastOutcome { return 30 }
+        if leftWatch != nil, Self.outcomeAfterLateRemoval(lastOutcome, sets: 0) != nil { return 30 }
         return nil
     }
 
@@ -435,6 +481,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
             let mapping = await services.runWorker("asset-type", ["assetSet": set.name], 30)
             guard mapping.ok, mapping.result["assetType"] as? String == set.assetType else {
                 phase = .idle
+                isStopping = false
                 // The reason can be the worker's own English diagnostics, so it
                 // follows a translated sentence rather than stand alone (#187).
                 if mapping.ok {
@@ -513,6 +560,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
             replies[set.name] = await release(set)
         }
 
+        // A Stop clicked during the last set's request has no next pass to
+        // catch it, so it is carried here before the flag clears.
+        if isStopping { stopped = true }
+
         // 3. Wait for the sets macOS took to go. It answers before it has
         // deleted them, and judging at once reported sets as staying that
         // went seconds later.
@@ -536,6 +587,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 let earlier = replies[set.name]?.failedLines ?? []
                 replies[set.name] = Release(outcome: again.outcome, failedLines: earlier + again.failedLines)
             }
+            if isStopping { stopped = true }
             phase = .measuring
             isStopping = false
             after = await waitForRemoval(of: stillLocked)
@@ -567,10 +619,13 @@ final class AppleIntelligenceModelStore: ObservableObject {
             if let reason = reply.reason { reasons.append(reason) }
         }
         let removed = gone.count
+        // Only sets macOS took, or answered with a lock, may still go.
+        let watched = stayed.filter { replies[$0.name]?.isWorthWatching == true }
         if stayed.isEmpty {
             lastOutcome = .removed(sets: removed, freedShownBytes: freedShown, freedRawBytes: freedRaw)
         } else if stopped, stayedDetails.isEmpty {
             lastOutcome = .stopped(removed: removed, left: stayed.count)
+            if !watched.isEmpty { leftWatch = LeftWatch(sets: watched, reading: before, since: Date()) }
         } else {
             // The service's own words over Purge's generic one.
             let generic = String(localized: "macOS says these are still in use")
@@ -585,7 +640,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
             lastOutcome = .someLeft(
                 removed: removed, left: stayed.count, reason: reason,
                 details: AppleIntelligenceWorker.details(stayedDetails, serviceLog: serviceLog))
-            leftWatch = LeftWatch(sets: stayed, removedBefore: removed, reading: before, since: Date())
+            if !watched.isEmpty { leftWatch = LeftWatch(sets: watched, reading: before, since: Date()) }
         }
         phase = .idle
         if removed > 0 {
@@ -643,6 +698,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 return (outcome, failedLines)
             }
             await services.pause(.seconds(3 * attempt))
+            // Stop can be clicked during the pause.
+            guard !isStopping else { return (outcome, failedLines) }
             attempt += 1
         }
     }
@@ -683,6 +740,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
         guard !isBusy, Self.isSupported else { return }
         // Busy before the first await, so a second click can't start another run.
         phase = .measuring
+        // A Stop left over from a removal must not cut this request's retries.
+        isStopping = false
         lastOutcome = nil
         leftWatch = nil
         downloadRequest = nil

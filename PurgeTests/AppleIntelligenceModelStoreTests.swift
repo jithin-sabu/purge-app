@@ -353,6 +353,12 @@ struct AppleIntelligenceModelStoreTests {
         var serviceLog: [String] = []
         /// Runs after each release request, with how many have gone out.
         var afterReset: ((Int) -> Void)?
+        /// Runs after a set's asset-type lookup.
+        var afterLookup: (() -> Void)?
+        /// Runs inside each pause, as a click during it would.
+        var duringPause: (() -> Void)?
+
+        func paused() { duringPause?() }
 
         /// The current reading, behind a lock: the store reads it off the main actor.
         final class ReadingBox: @unchecked Sendable {
@@ -394,11 +400,13 @@ struct AppleIntelligenceModelStoreTests {
             services.installedBlocks = { [blocks] in blocks }
             services.siriLanguage = { [siriLanguage] in siriLanguage }
             services.recordRemoval = { [self] sets, _, _ in self.recorded.append(sets) }
-            services.pause = { _ in }
+            services.pause = { [self] _ in await self.paused() }
             services.serviceLog = { [serviceLog] _ in serviceLog }
             services.runWorker = { [self] op, input, _ in
                 switch op {
                 case "asset-type":
+                    defer { self.afterLookup?() }
+                    if let failure = self.failing[op] { return failure }
                     let name = input["assetSet"] as? String
                     let type = AppleIntelligenceCatalog.sets.first { $0.name == name }?.assetType
                     return AppleIntelligenceWorker.Outcome(ok: true, result: ["assetType": type as Any], error: nil)
@@ -492,6 +500,12 @@ struct AppleIntelligenceModelStoreTests {
     /// What the worker sends when macOS's asset service drops the connection.
     private static let droppedText = "NSCocoaErrorDomain 4097: Couldn’t communicate with a helper application."
         + "; NSDebugDescription: connection to service named com.apple.siri.uaf.subscription.service"
+
+    private var lockReply: AppleIntelligenceWorker.Outcome {
+        AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:], error: "com.apple.UnifiedAssetFramework -1: Could not eliminate as there are current locks",
+            domain: "com.apple.UnifiedAssetFramework", code: -1)
+    }
 
     private var dropped: AppleIntelligenceWorker.Outcome {
         AppleIntelligenceWorker.outcome(fromReply: [
@@ -826,6 +840,206 @@ struct AppleIntelligenceModelStoreTests {
         }
     }
 
+    /// A Stop clicked while the only set's first release is out is kept, so a
+    /// set that answered with a lock gets no second request.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func stopDuringTheLastReleaseHoldsBeforeTheLockRetry() async throws {
+        let mac = FakeMac(reading: reading(present: 1), blocks: catalog.map(\.assetType))
+        mac.failingResets[catalog[0].name] = lockReply
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        mac.afterReset = { count in if count == 1 { store.stop() } }
+
+        await store.remove(sets: [catalog[0]])
+
+        #expect(mac.resets == [catalog[0].name])
+        #expect(!store.isStopping)
+    }
+
+    /// A Stop clicked in the pause after a dropped connection sends nothing more.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func stopDuringThePauseSendsNothingMore() async throws {
+        let mac = FakeMac(reading: reading(present: 2), blocks: catalog.map(\.assetType))
+        mac.failingResets[catalog[0].name] = dropped
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        mac.duringPause = { store.stop() }
+
+        await store.remove(sets: [catalog[0], catalog[1]])
+
+        #expect(mac.resets == [catalog[0].name])
+    }
+
+    /// Only sets macOS took, or answered with a lock, are watched. A set it
+    /// refused, or one never sent because of a Stop, is not booked as Purge's
+    /// removal when it goes later for another reason.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func refusedAndUnsentSetsAreNotBookedLater() async throws {
+        let start = reading(present: 2)
+        let mac = FakeMac(reading: start, blocks: catalog.map(\.assetType))
+        mac.failingResets[catalog[0].name] = AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:], error: "com.apple.UnifiedAssetFramework -1: unknown asset set",
+            domain: "com.apple.UnifiedAssetFramework", code: -1)
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        mac.afterReset = { count in if count == 1 { store.stop() } }
+
+        await store.remove(sets: [catalog[0], catalog[1]])
+        #expect(mac.resets == [catalog[0].name])
+        #expect(store.arrivalPollInterval == nil)
+
+        mac.current.set(reading(present: 0))
+        await store.refresh()
+        await store.refresh()
+
+        #expect(mac.recorded.isEmpty)
+        guard case .someLeft(0, 2, _, _) = store.lastOutcome else {
+            Issue.record("expected someLeft, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(Store.loadRemovedSetNames(from: defaults.defaults).isEmpty)
+    }
+
+    /// A reading that couldn't see the folder, or a single reading, never books
+    /// a watched set. Two readings in a row that saw it gone do.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func oneBadReadingBooksNothing() async throws {
+        let start = reading(present: 1)
+        let mac = FakeMac(reading: start, blocks: catalog.map(\.assetType))
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        await store.remove(sets: [catalog[0]])
+
+        let unreadable = AppleIntelligenceReading(
+            sets: start.sets.map { item in
+                item.set == catalog[0]
+                    ? AppleIntelligenceSetReading(set: item.set, recordsOnDisk: 0, eliminating: 0, latestBytes: nil, folder: .unknown)
+                    : item
+            },
+            readAt: Date())
+        mac.current.set(unreadable)
+        await store.refresh()
+        await store.refresh()
+        #expect(mac.recorded.isEmpty)
+
+        // Gone once, then back: the count starts again.
+        mac.current.set(without(catalog[0], from: start))
+        await store.refresh()
+        mac.current.set(start)
+        await store.refresh()
+        mac.current.set(without(catalog[0], from: start))
+        await store.refresh()
+        #expect(mac.recorded.isEmpty)
+
+        await store.refresh()
+        #expect(mac.recorded == [[catalog[0]]])
+    }
+
+    /// A stopped removal still watches the set macOS took, and books it when
+    /// it goes later. The set never sent stays counted as left.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func aStoppedRemovalBooksAnAcceptedSetLater() async throws {
+        let start = reading(present: 2)
+        let mac = FakeMac(reading: start, blocks: catalog.map(\.assetType))
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        mac.afterReset = { count in if count == 1 { store.stop() } }
+
+        await store.remove(sets: [catalog[0], catalog[1]])
+        #expect(store.lastOutcome == .stopped(removed: 0, left: 2))
+        #expect(store.arrivalPollInterval == 30)
+
+        mac.current.set(without(catalog[0], from: start))
+        await store.refresh()
+        await store.refresh()
+
+        #expect(store.lastOutcome == .stopped(removed: 1, left: 1))
+        #expect(mac.recorded == [[catalog[0]]])
+        #expect(store.arrivalPollInterval == nil)
+    }
+
+    /// With the profile gone, Download Again shows again only after a request
+    /// failed, never while one macOS accepted is still arriving.
+    @Test(.enabled(if: Store.isSupported, "the download is gated to macOS 27 on Apple silicon"))
+    @MainActor func downloadAgainHidesWhileARequestArrives() async throws {
+        Store.saveRemovedSetNames([catalog[0].name, catalog[1].name], to: defaults.defaults)
+        // One of the two is back already, the other not yet.
+        let mac = FakeMac(reading: reading(present: 1), blocks: [])
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.downloadAgain()
+        #expect(store.lastOutcome == .downloadRequested)
+        #expect(!store.offersDownloadAgain)
+
+        mac.subscribeReplies = [dropped, dropped, dropped]
+        await store.downloadAgain()
+        guard case .downloadRequestFailed = store.lastOutcome else {
+            Issue.record("expected downloadRequestFailed, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(store.offersDownloadAgain)
+    }
+
+    /// A Stop left from a removal that ended at the lookup does not cut a
+    /// later download request's retries.
+    @Test(.enabled(if: Store.isSupported, "the download is gated to macOS 27 on Apple silicon"))
+    @MainActor func aStaleStopDoesNotCutDownloadRetries() async throws {
+        // No profile, so Download Again has no System Settings step.
+        let mac = FakeMac(reading: reading(present: 1), blocks: [])
+        mac.failing["asset-type"] = AppleIntelligenceWorker.Outcome(ok: false, result: [:], error: "lookup failed")
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        mac.afterLookup = { store.stop() }
+
+        await store.remove(sets: [catalog[0]])
+        #expect(!store.isStopping)
+        #expect(mac.resets.isEmpty)
+
+        mac.subscribeReplies = [dropped]
+        await store.downloadAgain()
+        #expect(mac.subscribeCalls == 2)
+        #expect(store.lastOutcome == .downloadRequested)
+    }
+
+    /// Two sets stayed and only one goes later: that one is booked on its own,
+    /// and the other is still watched.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func oneOfTwoLeftSetsIsBookedOnItsOwn() async throws {
+        let start = reading(present: 2)
+        let mac = FakeMac(reading: start, blocks: catalog.map(\.assetType))
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+        await store.remove(sets: [catalog[0], catalog[1]])
+        guard case .someLeft(0, 2, _, _) = store.lastOutcome else {
+            Issue.record("expected someLeft, got \(String(describing: store.lastOutcome))")
+            return
+        }
+
+        mac.current.set(without(catalog[1], from: start))
+        await store.refresh()
+        await store.refresh()
+
+        guard case .someLeft(1, 1, _, _) = store.lastOutcome else {
+            Issue.record("expected someLeft, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(mac.recorded == [[catalog[1]]])
+        #expect(store.arrivalPollInterval == 30)
+
+        mac.current.set(reading(present: 0))
+        await store.refresh()
+        await store.refresh()
+        #expect(mac.recorded == [[catalog[1]], [catalog[0]]])
+        guard case .removed(2, _, _) = store.lastOutcome else {
+            Issue.record("expected removed, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(store.arrivalPollInterval == nil)
+    }
+
+    @Test func aLateRemovalMovesTheCounts() {
+        #expect(Store.outcomeAfterLateRemoval(.someLeft(removed: 1, left: 2, reason: "r", details: nil), sets: 1)
+            == .someLeft(removed: 2, left: 1, reason: "r", details: nil))
+        #expect(Store.outcomeAfterLateRemoval(.someLeft(removed: 1, left: 2, reason: "r", details: nil), sets: 2)
+            == .removed(sets: 3, freedShownBytes: nil, freedRawBytes: nil))
+        #expect(Store.outcomeAfterLateRemoval(.stopped(removed: 0, left: 2), sets: 1) == .stopped(removed: 1, left: 1))
+        #expect(Store.outcomeAfterLateRemoval(.downloadRequested, sets: 1) == nil)
+        #expect(Store.outcomeAfterLateRemoval(nil, sets: 1) == nil)
+    }
+
     /// Deletion safety: the retries add requests, never names. Every release
     /// still names exactly one set, a release with no set is never sent (the
     /// service reads that as every asset on the Mac), and a set outside the
@@ -864,6 +1078,9 @@ struct AppleIntelligenceModelStoreTests {
         #expect(mac.recorded.isEmpty)
 
         mac.current.set(without(catalog[0], from: start))
+        await store.refresh()
+        // One reading is not enough: it could be a failed read.
+        #expect(mac.recorded.isEmpty)
         await store.refresh()
 
         guard case .removed(let sets, _, _) = store.lastOutcome else {
