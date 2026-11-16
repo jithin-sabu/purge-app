@@ -43,6 +43,12 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
         var modification: Double
         /// When the entry was made, so the oldest go first past `maxEntries`.
         var recorded: Double
+
+        /// True while the file still has the times Purge's read left.
+        func matches(_ times: Times) -> Bool {
+            FileAccessLedger.matches(causedAccess, times.access)
+                && FileAccessLedger.matches(modification, times.modification)
+        }
     }
 
     /// A file's access and modification times, in seconds since 1970, as
@@ -91,19 +97,24 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
     func userAccess(of url: URL, access: Date, modification: Date) -> Date {
         if lock.withLock({ loadLocked().isEmpty }) { return access }
         let key = Self.key(url)
-        return lock.withLock {
+        guard let entry = lock.withLock({ loadLocked()[key] }) else { return access }
+        if entry.matches(Times(access: access.timeIntervalSince1970, modification: modification.timeIntervalSince1970)) {
+            return Date(timeIntervalSince1970: entry.userAccess)
+        }
+        // The walk read these times a moment ago, and Quick Look may have read
+        // the file since. Only the file as it is now can say the user opened
+        // it, or it was written, since Purge's read.
+        if let current = Times(url: url), entry.matches(current) {
+            return Date(timeIntervalSince1970: entry.userAccess)
+        }
+        lock.withLock {
             var entries = loadLocked()
-            guard let entry = entries[key] else { return access }
-            if Self.matches(entry.causedAccess, access.timeIntervalSince1970),
-               Self.matches(entry.modification, modification.timeIntervalSince1970) {
-                return Date(timeIntervalSince1970: entry.userAccess)
-            }
-            // The user opened the file, or it was written, since Purge read it.
+            guard entries[key] == entry else { return }
             entries[key] = nil
             loaded = entries
             scheduleWriteLocked()
-            return access
         }
+        return access
     }
 
     /// Notes what a read of Purge's did to the file at `url`, from its times
@@ -206,7 +217,7 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
         url.standardizedFileURL.path
     }
 
-    private static func matches(_ lhs: Double, _ rhs: Double) -> Bool {
+    fileprivate static func matches(_ lhs: Double, _ rhs: Double) -> Bool {
         abs(lhs - rhs) < matchTolerance
     }
 

@@ -199,11 +199,52 @@ struct LargeFileLastUsedTests {
         ledger.watch(file, checks: [0.2])
         let modification = try #require(FileAccessLedger.Times(url: file)).modification
         setTimes(file, access: Date(), modification: Date(timeIntervalSince1970: modification))
-        try await Task.sleep(for: .milliseconds(600))
-        #expect(ledger.entry(for: file) != nil)
+        #expect(await eventually { ledger.entry(for: file) != nil })
 
         let rows = await scan(root, staleDays: 30, ledger: ledger)
         #expect(abs(daysSince(try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent }).lastUsed) - 40) < 0.01)
+    }
+
+    @Test("A preview after a thumbnail keeps the user's date from before both")
+    func previewAfterThumbnailKeepsFirstDate() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let file = try writeOldFile("site.pdf", in: root, daysAgo: 40)
+        let modification = try #require(FileAccessLedger.Times(url: file)).modification
+        let ledger = makeLedger(in: root)
+        defer { ledger.flush() }
+        try drawThumbnail(of: file, ledger: ledger)
+        let userAccess = try #require(ledger.entry(for: file)).userAccess
+        let thumbnailAccess = try #require(ledger.entry(for: file)).causedAccess
+
+        ledger.watch(file, checks: [0.1, 0.3])
+        setTimes(file, access: Date().addingTimeInterval(5), modification: Date(timeIntervalSince1970: modification))
+        #expect(await eventually { ledger.entry(for: file)?.causedAccess != thumbnailAccess })
+        try await Task.sleep(for: .milliseconds(500))
+
+        #expect(ledger.entry(for: file)?.userAccess == userAccess)
+    }
+
+    /// The walk reads a folder's times before it looks at each file. A Quick
+    /// Look read in between must not cost the file its entry.
+    @Test("A read after the walk saw the file keeps the entry")
+    func readDuringScanKeepsEntry() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let file = try writeOldFile("board.pdf", in: root, daysAgo: 40)
+        let seen = try #require(FileAccessLedger.Times(url: file))
+        let ledger = makeLedger(in: root)
+        defer { ledger.flush() }
+        try drawThumbnail(of: file, ledger: ledger)
+
+        let shown = ledger.userAccess(
+            of: file,
+            access: Date(timeIntervalSince1970: seen.access),
+            modification: Date(timeIntervalSince1970: seen.modification)
+        )
+
+        #expect(abs(shown.timeIntervalSince1970 - seen.access) < 0.001)
+        #expect(ledger.entry(for: file) != nil)
     }
 
     /// A file not read since it was written: the user's first plain `read()`
@@ -236,7 +277,7 @@ struct LargeFileLastUsedTests {
 
         ledger.watch(file, checks: [0.1, 0.6])
         setTimes(file, access: Date(), modification: Date(timeIntervalSince1970: modification))
-        try await Task.sleep(for: .milliseconds(350))
+        #expect(await eventually { ledger.entry(for: file) != nil })
         // The user opens the file after the panel has read it.
         let opened = Date().addingTimeInterval(-2 * day)
         setTimes(file, access: opened, modification: Date(timeIntervalSince1970: modification))
