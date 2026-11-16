@@ -14,6 +14,7 @@
   </p>
 
 <p>
+  <a href="https://purgemac.com"><img src="https://img.shields.io/badge/website-purgemac.com-000000" alt="Сайт" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jithin-sabu/purge-app/build.yml?branch=main&label=build" alt="Статус сборки" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="Лицензия: MIT" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=red" alt="Последняя версия" /></a>
@@ -23,12 +24,8 @@
 
 <p>
   <a href="https://trendshift.io/repositories/64435" target="_blank"><picture><source media="(prefers-color-scheme: dark)" srcset="https://trendshift.io/api/badge/repositories/64435?theme=dark"><img src="https://trendshift.io/api/badge/repositories/64435?theme=light" alt="jithin-sabu/purge-app | Trendshift" width="250" height="55"/></picture></a>
+  <a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/"><img src="https://img.shields.io/badge/Featured_in-WIRED-000000?style=for-the-badge" alt="О Purge написал WIRED" height="40" /></a>
 </p>
-
-  <p>
-    Сайт: <a href="https://purgemac.com">purgemac.com</a><br/>
-    О Purge написал WIRED: <a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/">This Totally Free App Can Free Up Space on Your Mac</a>
-  </p>
 
   <p>
     <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>Скачать</b></a>

@@ -14,6 +14,7 @@
   </p>
 
 <p>
+  <a href="https://purgemac.com"><img src="https://img.shields.io/badge/website-purgemac.com-000000" alt="网站" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jithin-sabu/purge-app/build.yml?branch=main&label=build" alt="构建状态" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="许可证：MIT" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=red" alt="最新版本" /></a>
@@ -23,12 +24,8 @@
 
 <p>
   <a href="https://trendshift.io/repositories/64435" target="_blank"><picture><source media="(prefers-color-scheme: dark)" srcset="https://trendshift.io/api/badge/repositories/64435?theme=dark"><img src="https://trendshift.io/api/badge/repositories/64435?theme=light" alt="jithin-sabu/purge-app | Trendshift" width="250" height="55"/></picture></a>
+  <a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/"><img src="https://img.shields.io/badge/Featured_in-WIRED-000000?style=for-the-badge" alt="WIRED 报道" height="40" /></a>
 </p>
-
-  <p>
-    网站：<a href="https://purgemac.com">purgemac.com</a><br/>
-    WIRED 报道：<a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/">This Totally Free App Can Free Up Space on Your Mac</a>
-  </p>
 
   <p>
     <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>下载</b></a>
