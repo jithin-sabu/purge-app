@@ -13,7 +13,7 @@ struct ContentsProgressTests {
         return dir
     }
 
-    @Test("Files report their allocated size and folders their du size")
+    @Test("Files report their allocated size and folders their walked size")
     func entrySizesMatchTheScannersMeasure() throws {
         let root = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -34,7 +34,7 @@ struct ContentsProgressTests {
 
         let fileAllocated = try file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize
         #expect(sizes[file] == Int64(fileAllocated ?? -1))
-        #expect(sizes[folder] == FolderSizing.directoryByteSize(at: folder))
+        #expect(sizes[folder] == FolderSizing.measuredSize(at: folder))
         #expect((sizes[folder] ?? 0) >= 150_000)
         // A link moves as a link. Counting its target would claim the folder twice.
         #expect((sizes[link] ?? .max) < 50_000)

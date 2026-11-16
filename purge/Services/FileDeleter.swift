@@ -1058,8 +1058,9 @@ nonisolated final class FileDeleter: Sendable {
         )
     }
 
-    /// On-disk size of each entry about to be moved: the allocated size for files and
-    /// links, and one batched `du` pass (the scanner's own measure) for folders.
+    /// On-disk size of each entry about to be moved, counted the way the scan sized
+    /// the row (#131): a file's or link's allocated size, or its share when it is a
+    /// full APFS clone (`SharedBlocks`), and the folder walk for folders.
     static func contentsEntrySizes(_ entries: [URL]) -> [URL: Int64] {
         var sizes: [URL: Int64] = [:]
         var folders: [URL] = []
@@ -1068,11 +1069,12 @@ nonisolated final class FileDeleter: Sendable {
             if values?.isDirectory == true, values?.isSymbolicLink != true {
                 folders.append(entry)
             } else {
-                sizes[entry] = Int64(values?.totalFileAllocatedSize ?? 0)
+                let allocated = Int64(values?.totalFileAllocatedSize ?? 0)
+                sizes[entry] = allocated == 0 ? 0 : SharedBlocks.countedBytes(ofFileAt: entry.path, allocated: allocated)
             }
         }
         if !folders.isEmpty {
-            let measured = FolderSizing.directorySizes(at: folders)
+            let measured = FolderSizing.directorySizes(at: folders, split: .spread)
             for folder in folders {
                 sizes[folder] = measured[folder.standardizedFileURL.path] ?? 0
             }
