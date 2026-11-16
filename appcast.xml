@@ -3,6 +3,28 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.16.0</title>
+      <pubDate>Mon, 16 Nov 2026 01:48:18 +0000</pubDate>
+      <sparkle:version>44</sparkle:version>
+      <sparkle:shortVersionString>1.16.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Faster scans</strong>: App Caches and Dev Tools now finish in under 2 s on an M4, and Apps in under 1 s.</li>
+          <li><strong>Keyboard navigation</strong>: Every scan list takes Finder's keys: arrows, Space for Quick Look, Return to tick, ⌘C and ⌘⌫.</li>
+          <li><strong>Purgeable space on the Overview</strong>: The bar shows purgeable space as its own part, so used and free match System Settings.</li>
+          <li><strong>Unsent crash reports</strong>: App Caches now offers crash reports apps never sent, as Check First.</li>
+          <li><strong>prek cache</strong>: Dev Tools now offers prek's hook cache as Check First.</li>
+          <li><strong>Sizes count clones once</strong>: A file and its APFS clone are no longer counted twice.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.16.0/Purgev1.16.0.dmg"
+        sparkle:edSignature="pLzxBr2AbCtke9y6pND/yXfgvkX/4qJFM/nmHiv+LbFInMJVjqf+WvmJsprGat8588o74JFp5uez0HqefpcCCQ=="
+        length="12529208"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.15.0</title>
       <pubDate>Thu, 12 Nov 2026 01:03:12 +0000</pubDate>
       <sparkle:version>43</sparkle:version>
