@@ -955,7 +955,15 @@
 "macOS's asset service couldn't be reached" = "无法连接 macOS 的资源服务";
 "macOS's asset service sent an answer Purge couldn't read" = "macOS 的资源服务返回了 Purge 无法读取的回应";
 "Details" = "详细信息";
-"Show everything macOS answered" = "显示 macOS 的完整回应";
+"Show what to try and everything macOS answered" = "显示可以尝试的办法和 macOS 的完整回应";
+"What you can try" = "可以尝试的办法";
+"Restart your Mac, then click Remove again." = "重新启动 Mac，然后再次点按“移除”。";
+"If they still stay, click %@, leave your Mac on until macOS has finished downloading the models, then click Remove again." = "如果模型仍未移除，请点按“%@”，让 Mac 保持开机，直到 macOS 下载完模型，然后再次点按“移除”。";
+"Restart your Mac, then click Download Again." = "重新启动 Mac，然后再次点按“重新下载”。";
+"The profile is gone, so macOS also downloads the models by itself when you use a feature that needs them." = "描述文件已移除，因此当你使用需要这些模型的功能时，macOS 也会自行下载它们。";
+"Remove Profile" = "移除描述文件";
+"Remove the profile so macOS can download and update the models again" = "移除描述文件，让 macOS 可以再次下载和更新模型";
+"Stopped: removed %lld, %lld left on this Mac" = "已停止：移除了 %lld 组，%lld 组仍在这台 Mac 上";
 "This is everything macOS answered. If you report the problem, copy it into the report." = "这是 macOS 的完整回应。如果你要报告这个问题，请把它复制到报告里。";
 "Copy" = "复制";
 "Copied" = "已复制";

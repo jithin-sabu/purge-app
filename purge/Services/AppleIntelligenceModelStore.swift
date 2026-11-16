@@ -64,6 +64,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
     private var removedSetNames: [String] {
         didSet { Self.saveRemovedSetNames(removedSetNames, to: defaults) }
     }
+    /// Sets a removal left on the Mac, watched for a while afterwards: macOS
+    /// can finish deleting after Purge has stopped watching, and the row
+    /// should then say they went rather than keep the failure.
+    private var leftWatch: LeftWatch?
     private let defaults: UserDefaults
     private let services: Services
 
@@ -80,6 +84,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
         var recordRemoval: ([AppleIntelligenceModelSet], AppleIntelligenceReading, Int64?) -> Void = {
             CleanupHistoryStore.shared.appendAppleIntelligenceRemoval(sets: $0, bytesBefore: $1, freedShownBytes: $2)
         }
+        /// Waits between a dropped request and the next, and between readings
+        /// while macOS deletes. Tests make it return at once.
+        var pause: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+        /// What the asset service logged since a moment, for a failure's details.
+        var serviceLog: @Sendable (Date) async -> [String] = { await AppleIntelligenceServiceLog.lines(since: $0) }
 
         init() {}
     }
@@ -118,16 +127,52 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     /// Remove while any set is still on the Mac. Download Again whenever the
     /// block is installed, even beside Remove after a partial removal, since it
-    /// is the only way back in the app; and when nothing is on the Mac.
+    /// is the only way back in the app; when nothing is on the Mac; and while a
+    /// set Purge removed is missing, so a failed download request can be asked
+    /// again after the profile is gone.
     var offersRemove: Bool { Self.offers(reading: reading, isProfileInstalled: isProfileInstalled).remove }
-    var offersDownloadAgain: Bool { Self.offers(reading: reading, isProfileInstalled: isProfileInstalled).downloadAgain }
+    var offersDownloadAgain: Bool {
+        Self.offers(reading: reading, isProfileInstalled: isProfileInstalled, hasSetsToRequest: hasSetsToRequest)
+            .downloadAgain
+    }
+
+    /// Sets Purge removed that are not back, so Download Again has something
+    /// to ask for even when the profile is already gone, as after a download
+    /// request that failed.
+    private var hasSetsToRequest: Bool {
+        guard let reading else { return false }
+        return !Self.setsToRequest(removed: removedSetNames, blockedTypes: installedBlocks, sets: reading.sets).isEmpty
+            && (!removedSetNames.isEmpty || isProfileInstalled)
+    }
+
+    /// The button that lifts the block. With nothing of Purge's to bring back,
+    /// as after a removal that removed nothing, all it does is remove the
+    /// profile, and it says so.
+    var undoTitle: String {
+        undoOnlyLiftsBlock ? String(localized: "Remove Profile") : String(localized: "Download Again")
+    }
+
+    var undoOnlyLiftsBlock: Bool {
+        Self.undoOnlyLiftsBlock(isProfileInstalled: isProfileInstalled, hasSetsToRequest: hasSetsToRequest)
+    }
+
+    nonisolated static func undoOnlyLiftsBlock(isProfileInstalled: Bool, hasSetsToRequest: Bool) -> Bool {
+        isProfileInstalled && !hasSetsToRequest
+    }
+
+    /// What the user can try after the last action failed.
+    var nextSteps: [String] {
+        guard phase == .idle else { return [] }
+        return lastOutcome?.nextSteps(undoTitle: undoTitle) ?? []
+    }
 
     nonisolated static func offers(
         reading: AppleIntelligenceReading?,
-        isProfileInstalled: Bool
+        isProfileInstalled: Bool,
+        hasSetsToRequest: Bool = false
     ) -> (remove: Bool, downloadAgain: Bool) {
         let present = reading?.isAnythingPresent
-        return (present == true, isProfileInstalled || present == false)
+        return (present == true, isProfileInstalled || present == false || (present != nil && hasSetsToRequest))
     }
 
     /// Whether the row has anything to say: models on disk, a block in place, or
@@ -168,10 +213,39 @@ final class AppleIntelligenceModelStore: ObservableObject {
             reading = fresh
             installedBlocks = blocks
             noteArrivals(fresh)
+            noteLateRemovals(fresh)
             let stillGone = Self.forgetting(present: fresh.present.map(\.set.name), from: removedSetNames)
             if stillGone != removedSetNames { removedSetNames = stillGone }
         }
         return fresh
+    }
+
+    /// A removal's leftovers, and what is needed to book them if they go later.
+    private struct LeftWatch {
+        let sets: [AppleIntelligenceModelSet]
+        let removedBefore: Int
+        let reading: AppleIntelligenceReading
+        let since: Date
+    }
+
+    /// How long after a removal the row keeps checking whether the sets that
+    /// stayed have gone after all.
+    nonisolated static let leftWatchTime: TimeInterval = 15 * 60
+
+    /// Once every set a removal left behind has gone, the row says they were
+    /// removed and the history books them, instead of keeping the failure.
+    private func noteLateRemovals(_ fresh: AppleIntelligenceReading) {
+        guard phase == .idle, let watch = leftWatch else { return }
+        guard case .someLeft = lastOutcome, Date().timeIntervalSince(watch.since) < Self.leftWatchTime else {
+            leftWatch = nil
+            return
+        }
+        let stillThere = watch.sets.filter { set in fresh.present.contains { $0.set == set } }
+        guard stillThere.isEmpty else { return }
+        leftWatch = nil
+        lastOutcome = .removed(sets: watch.removedBefore + watch.sets.count, freedShownBytes: nil, freedRawBytes: nil)
+        removedSetNames = Self.remembering(removed: watch.sets.map(\.name), in: removedSetNames)
+        services.recordRemoval(watch.sets, watch.reading, nil)
     }
 
     /// After Download Again, the row says "downloading" and re-reads every 20
@@ -236,7 +310,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         case .none:
             // Too old to pick up again.
             return (nil, true)
-        case .removed, .someLeft, .profileNotInstalled, .notReady,
+        case .removed, .someLeft, .stopped, .profileNotInstalled, .notReady,
              .profileStillInstalled, .downloadRequestFailed:
             // Another action has taken over from the request.
             return (current, true)
@@ -271,6 +345,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
     var arrivalPollInterval: TimeInterval? {
         if isDownloading { return 20 }
         if case .downloadNotStarted = lastOutcome { return 60 }
+        // Sets a removal left, which macOS may still be deleting.
+        if leftWatch != nil, case .someLeft = lastOutcome { return 30 }
         return nil
     }
 
@@ -338,6 +414,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         phase = .checking
         isStopping = false
         lastOutcome = nil
+        leftWatch = nil
         downloadRequest = nil
         let before = await readLatest()
         let targets = Self.targets(planned: planned, present: before.present.map(\.set))
@@ -423,88 +500,170 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
         // 2. Release, one set per request so one the service rejects does not stop the rest.
         phase = .releasing
+        let releaseStarted = Date()
         let shownBefore = VolumeCapacityReader.read()?.availableBytes
         let rawBefore = VolumeRawCapacityReader.readAvailableBytes()
-        var failures: [String: String] = [:]
-        // Each failed request in full, by set, for the row's Details button (#343).
-        var failureDetails: [String: String] = [:]
-        var lockReplies: [AppleIntelligenceModelSet] = []
+        var replies: [String: Release] = [:]
         var stopped = false
         for set in targets {
             if isStopping {
                 stopped = true
                 break
             }
-            let reset = await services.runWorker("reset", ["assetSets": [set.name]], 120)
-            if reset.ok { continue }
-            failureDetails[set.name] = reset.detailLine(op: "reset", subject: set.name)
-            // macOS can answer "current locks" and still have removed the set
-            // (pared, RemoveMacAI issue 15, and the spike all saw it), so those
-            // are judged by their folders below. The whole answer is searched,
-            // because the short reason leaves out the part after the description.
-            if (reset.error ?? "").contains("current locks") {
-                lockReplies.append(set)
-            } else {
-                failures[set.name] = reset.problem
-            }
+            replies[set.name] = await release(set)
         }
 
-        // 3. What is left, and what the volume gave back once it settled.
+        // 3. Wait for the sets macOS took to go. It answers before it has
+        // deleted them, and judging at once reported sets as staying that
+        // went seconds later.
         phase = .measuring
         isStopping = false
+        var after = await waitForRemoval(of: targets.filter { replies[$0.name]?.isWorthWatching == true })
+        // A lock reply can clear when asked again (RemoveMacAI's issue 56), so
+        // a set that answered one and is still there gets one more request.
+        let stillLocked = targets.filter { set in
+            replies[set.name]?.isLockReply == true && after.present.contains { $0.set == set }
+        }
+        if !stillLocked.isEmpty, !stopped {
+            phase = .releasing
+            for set in stillLocked {
+                // Stop holds here too: the row offers it while releasing.
+                if isStopping {
+                    stopped = true
+                    break
+                }
+                let again = await release(set)
+                let earlier = replies[set.name]?.failedLines ?? []
+                replies[set.name] = Release(outcome: again.outcome, failedLines: earlier + again.failedLines)
+            }
+            phase = .measuring
+            isStopping = false
+            after = await waitForRemoval(of: stillLocked)
+        }
+
+        // 4. What the volume gave back once it settled.
         let freedShown = await VolumeCapacityReader.settledGain(since: shownBefore, attempts: 15) {
             VolumeCapacityReader.read()?.availableBytes
         }
-        let after = await readLatest()
         let rawAfter = VolumeRawCapacityReader.readAvailableBytes()
         let freedRaw: Int64? = {
             guard let rawBefore, let rawAfter else { return nil }
             let gained = rawAfter - rawBefore
             return gained >= VolumeCapacityReader.noiseFloorBytes ? gained : nil
         }()
-        var left = 0
         var gone: [AppleIntelligenceModelSet] = []
+        var stayed: [AppleIntelligenceModelSet] = []
         var stayedDetails: [String] = []
+        var reasons: [String] = []
         for set in targets {
             let stillThere = after.sets.first { $0.set.name == set.name }?.isPresent ?? true
-            if stillThere {
-                left += 1
-                if let line = failureDetails[set.name] { stayedDetails.append(line) }
-                if lockReplies.contains(set) {
-                    failures[set.name] = String(localized: "macOS says these are still in use")
-                }
-            } else {
+            guard stillThere else {
                 gone.append(set)
-                // Its request failed but the set went anyway. The reason must
-                // come from a set that stayed, as the details do.
-                failures[set.name] = nil
+                continue
             }
+            stayed.append(set)
+            guard let reply = replies[set.name] else { continue }
+            stayedDetails += reply.failedLines
+            if let reason = reply.reason { reasons.append(reason) }
         }
         let removed = gone.count
-        phase = .idle
-        if left == 0 {
+        if stayed.isEmpty {
             lastOutcome = .removed(sets: removed, freedShownBytes: freedShown, freedRawBytes: freedRaw)
+        } else if stopped, stayedDetails.isEmpty {
+            lastOutcome = .stopped(removed: removed, left: stayed.count)
         } else {
-            // The service's own words over Purge's generic one, and a stable
-            // pick when several sets stayed.
+            // The service's own words over Purge's generic one.
             let generic = String(localized: "macOS says these are still in use")
-            let reasons = failures.sorted { $0.key < $1.key }.map(\.value)
-            // if/else rather than a ternary around the closure: Xcode 26.6 on CI
-            // crashed on that shape before.
-            let reason: String
-            if stopped {
-                reason = String(localized: "you stopped the removal")
-            } else {
-                reason = reasons.first { $0 != generic } ?? reasons.first ?? String(localized: "macOS hasn't finished removing them")
+            let reason = reasons.first { $0 != generic } ?? reasons.first
+                ?? String(localized: "macOS hasn't finished removing them")
+            // if/else rather than a ternary: Xcode 26.6 on CI crashed on
+            // closures inside one before.
+            var serviceLog: [String] = []
+            if !stayedDetails.isEmpty {
+                serviceLog = await services.serviceLog(releaseStarted)
             }
             lastOutcome = .someLeft(
-                removed: removed, left: left, reason: reason,
-                details: AppleIntelligenceWorker.details(stayedDetails))
+                removed: removed, left: stayed.count, reason: reason,
+                details: AppleIntelligenceWorker.details(stayedDetails, serviceLog: serviceLog))
+            leftWatch = LeftWatch(sets: stayed, removedBefore: removed, reading: before, since: Date())
         }
+        phase = .idle
         if removed > 0 {
             removedSetNames = Self.remembering(removed: gone.map(\.name), in: removedSetNames)
             services.recordRemoval(gone, before, freedShown)
         }
+    }
+
+    /// One set's release: the last answer, and every failed answer in full.
+    private struct Release {
+        let outcome: AppleIntelligenceWorker.Outcome
+        let failedLines: [String]
+
+        /// macOS can answer "current locks" and still remove the set (pared,
+        /// RemoveMacAI's issue 15, and the spike all saw it). The whole answer
+        /// is searched, because the short reason leaves out the part after the
+        /// description.
+        var isLockReply: Bool { !outcome.ok && (outcome.error ?? "").contains("current locks") }
+
+        /// Accepted, or a lock reply: the set may be on its way out.
+        var isWorthWatching: Bool { outcome.ok || isLockReply }
+
+        /// What the row says when the set stayed, or nil when the service
+        /// accepted the release and simply hasn't finished.
+        var reason: String? {
+            if outcome.ok { return nil }
+            if isLockReply { return String(localized: "macOS says these are still in use") }
+            return outcome.problem
+        }
+    }
+
+    /// How many times one request goes out while the connection drops.
+    nonisolated static let connectionAttempts = 3
+
+    /// Sends one release, again after a pause when the connection to the
+    /// service drops. The service starts on demand and can go away while a
+    /// request is on its way; the pause gives launchd time to start it again.
+    /// Every request still names exactly one set.
+    private func release(_ set: AppleIntelligenceModelSet) async -> Release {
+        let sent = await send("reset", ["assetSets": [set.name]], timeout: 120, subject: set.name)
+        return Release(outcome: sent.outcome, failedLines: sent.failedLines)
+    }
+
+    private func send(_ op: String, _ input: [String: Any], timeout: TimeInterval, subject: String)
+        async -> (outcome: AppleIntelligenceWorker.Outcome, failedLines: [String]) {
+        var failedLines: [String] = []
+        var attempt = 1
+        while true {
+            let outcome = await services.runWorker(op, input, timeout)
+            if outcome.ok { return (outcome, failedLines) }
+            failedLines.append(outcome.detailLine(op: op, subject: attempt == 1 ? subject : "\(subject) (try \(attempt))"))
+            // A stop means no more requests, and any other answer is the
+            // service's own, which asking again won't change.
+            guard outcome.isConnectionDrop, attempt < Self.connectionAttempts, !isStopping else {
+                return (outcome, failedLines)
+            }
+            await services.pause(.seconds(3 * attempt))
+            attempt += 1
+        }
+    }
+
+    /// How many readings, two seconds apart, Purge takes while it waits for
+    /// released sets to go: about a minute. The spike's removal of 57 GB of
+    /// records was done within that.
+    nonisolated static let removalWatchReadings = 30
+
+    /// Reads until none of `sets` is on the Mac or the readings run out, and
+    /// returns the last reading.
+    private func waitForRemoval(of sets: [AppleIntelligenceModelSet]) async -> AppleIntelligenceReading {
+        var latest = await readLatest()
+        var readings = 1
+        while readings < Self.removalWatchReadings,
+              sets.contains(where: { set in latest.present.contains { $0.set == set } }) {
+            await services.pause(.seconds(2))
+            latest = await readLatest()
+            readings += 1
+        }
+        return latest
     }
 
     /// The confirmed sets that are still on the Mac, in the confirmed order.
@@ -525,6 +684,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         // Busy before the first await, so a second click can't start another run.
         phase = .measuring
         lastOutcome = nil
+        leftWatch = nil
         downloadRequest = nil
         let setsAtRequest = await readLatest().sets
         // Read before the profile goes: a blocked set that is not on the Mac is
@@ -570,19 +730,20 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 "assetSetUsages": set.recovery.assetSetUsages,
             ]
         }
-        let subscribe = await services.runWorker("subscribe", [
+        let requestStarted = Date()
+        let subscribe = await send("subscribe", [
             "subscriber": AppleIntelligenceCatalog.subscriber, "subscriptions": subscriptions,
-        ], 60)
-        phase = .idle
-        if subscribe.ok {
+        ], timeout: 60, subject: sets.map(\.recovery.name).joined(separator: ", "))
+        if subscribe.outcome.ok {
             downloadRequest = DownloadRequest(requestedAt: Date(), sets: setsAtRequest)
             lastOutcome = .downloadRequested
         } else {
-            let names = sets.map(\.recovery.name).joined(separator: ", ")
+            let serviceLog = await services.serviceLog(requestStarted)
             lastOutcome = .downloadRequestFailed(
-                subscribe.problem,
-                details: AppleIntelligenceWorker.details([subscribe.detailLine(op: "subscribe", subject: names)]))
+                subscribe.outcome.problem,
+                details: AppleIntelligenceWorker.details(subscribe.failedLines, serviceLog: serviceLog))
         }
+        phase = .idle
         lastArrivalChange = Date()
         _ = await readLatest()
     }

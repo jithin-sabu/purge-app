@@ -68,7 +68,8 @@ struct OverviewAppleIntelligenceRow: View {
         switch store.lastOutcome {
         case .someLeft, .notReady, .downloadRequestFailed:
             return true
-        case .removed, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled, nil:
+        case .removed, .stopped, .profileNotInstalled, .downloadRequested, .downloadNotStarted,
+             .profileStillInstalled, nil:
             return false
         }
     }
@@ -79,12 +80,12 @@ struct OverviewAppleIntelligenceRow: View {
         store.phase == .idle ? store.lastOutcome?.details : nil
     }
 
-    private func detailsButton(_ details: String) -> some View {
+    private var detailsButton: some View {
         Button("Details") { isShowingDetails = true }
             .buttonStyle(.purge(.quiet, size: .small))
-            .help("Show everything macOS answered")
+            .help("Show what to try and everything macOS answered")
             .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
-                AppleIntelligenceFailureDetails(details: details)
+                AppleIntelligenceFailureDetails(nextSteps: store.nextSteps, details: failureDetails)
             }
     }
 
@@ -130,8 +131,8 @@ struct OverviewAppleIntelligenceRow: View {
             .disabled(true)
         } else {
             HStack(spacing: AppStyle.Spacing.xSmall) {
-                if let failureDetails {
-                    detailsButton(failureDetails)
+                if failureDetails != nil || !store.nextSteps.isEmpty {
+                    detailsButton
                 }
                 if store.offersDownloadAgain {
                     downloadButton
@@ -171,15 +172,19 @@ struct OverviewAppleIntelligenceRow: View {
         }
     }
 
+    /// Download Again, or Remove Profile when there is nothing of Purge's to
+    /// bring back and lifting the block is all the click does.
     private var downloadButton: some View {
-        Button("Download Again") {
+        Button(store.undoTitle) {
             Task {
                 await store.downloadAgain()
                 diskStore.refresh()
             }
         }
         .buttonStyle(.purge(.secondary, size: .small))
-        .help("Remove the profile and ask macOS to download the models again")
+        .help(store.undoOnlyLiftsBlock
+            ? String(localized: "Remove the profile so macOS can download and update the models again")
+            : String(localized: "Remove the profile and ask macOS to download the models again"))
     }
 
     private var detail: String {
@@ -214,6 +219,8 @@ struct OverviewAppleIntelligenceRow: View {
             return String(localized: "Removed")
         case .someLeft(let removed, let left, let reason, _):
             return String(localized: "Removed \(removed), but \(left) stayed: \(reason)")
+        case .stopped(let removed, let left):
+            return String(localized: "Stopped: removed \(removed), \(left) left on this Mac")
         case .profileNotInstalled:
             return String(localized: "The profile wasn't installed, so nothing was removed")
         case .notReady(let reason, _):
@@ -399,38 +406,59 @@ struct OverviewAppleIntelligenceConfirmation: View {
     }
 }
 
-/// Everything macOS answered when a removal or a download request failed,
-/// with a button that copies it. The row has room for the short reason only,
-/// and a report with half an error code can't be acted on (#343).
+/// What to try after a removal or a download request failed, then everything
+/// macOS answered, with a button that copies it. The row has room for the
+/// short reason only, and a report with half an error code can't be acted on
+/// (#343).
 struct AppleIntelligenceFailureDetails: View {
+    let nextSteps: [String]
     /// The Purge and macOS versions, then one line per failed request, as the
-    /// service worded them.
-    let details: String
+    /// service worded them, then what the service logged. Nil when macOS
+    /// accepted every request and simply hasn't finished.
+    let details: String?
 
     @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-            Text("This is everything macOS answered. If you report the problem, copy it into the report.")
-                .font(AppStyle.Typography.callout)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(verbatim: details)
-                .font(AppStyle.Typography.metadata.monospaced())
-                .foregroundStyle(AppColors.textPrimary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            HStack {
-                Spacer()
-                Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
-                    FinderReveal.copyText(details)
-                    copied = true
+            if !nextSteps.isEmpty {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                    Text("What you can try")
+                        .font(AppStyle.Typography.headline)
+                        .foregroundStyle(AppColors.textPrimary)
+                    ForEach(Array(nextSteps.enumerated()), id: \.offset) { index, step in
+                        Text(verbatim: "\(index + 1). \(step)")
+                            .font(AppStyle.Typography.callout)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .buttonStyle(.purge(.secondary, size: .small))
+            }
+            if let details {
+                Text("This is everything macOS answered. If you report the problem, copy it into the report.")
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    Text(verbatim: details)
+                        .font(AppStyle.Typography.metadata.monospaced())
+                        .foregroundStyle(AppColors.textPrimary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 280)
+                HStack {
+                    Spacer()
+                    Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
+                        FinderReveal.copyText(details)
+                        copied = true
+                    }
+                    .buttonStyle(.purge(.secondary, size: .small))
+                }
             }
         }
         .padding(AppStyle.Spacing.medium)
-        .frame(width: 400)
+        .frame(width: 440)
     }
 }
