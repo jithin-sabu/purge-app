@@ -586,8 +586,9 @@ struct UninstallView: View {
             if case .group(let group, let apps) = entry { return .group(group, sortedApps(apps)) }
             return entry
         }
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
         func bytes(_ entry: AppListEntry) -> Int64 {
-            entry.apps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) }
+            displayedSize(for: entry.apps, savedPaths: savedPaths).bytes
         }
         func newest(_ entry: AppListEntry) -> Date? { entry.apps.compactMap(\.lastOpened).max() }
         func byName(_ lhs: AppListEntry, _ rhs: AppListEntry) -> Bool {
@@ -722,11 +723,15 @@ struct UninstallView: View {
         }
     }
 
-    /// Size sorts key on the total shown on each tile (bundle + all leftovers).
-    /// `currentSort` holds them back as Name until every app is measured, or the
-    /// grid would reshuffle tile by tile as the background pass lands.
+    /// Size sorts key on the total shown on each tile (bundle + all leftovers),
+    /// including the saved total an app from the last scan shows. `currentSort`
+    /// holds them back as Name until every app is measured, or the grid would
+    /// reshuffle tile by tile as the background pass lands.
     private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
-        currentSort.sorted(apps, bytes: store.removableBytes(for:))
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
+        return currentSort.sorted(apps) { app in
+            displayedSize(for: app, isFromLastScan: savedPaths.contains(app.bundleURL.path)).bytes
+        }
     }
 
     /// Relative date for the active date sort. Last-used sorts say "Not opened"
