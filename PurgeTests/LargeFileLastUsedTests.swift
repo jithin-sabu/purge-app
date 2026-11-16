@@ -300,10 +300,53 @@ struct LargeFileLastUsedTests {
 
         ledger.watch(first, checks: [0.3])
         ledger.watch(second, checks: [0.3])
+        // Lets the last check on the first file run before its times move.
+        _ = ledger.entry(for: first)
         setTimes(first, access: Date(), modification: Date(timeIntervalSince1970: modification))
         try await Task.sleep(for: .milliseconds(600))
 
         #expect(ledger.entry(for: first) == nil)
+    }
+
+    @Test("Showing another file keeps a read already done on the one before")
+    func nextPreviewKeepsAReadAlreadyDone() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let first = try writeOldFile("first.mov", in: root, daysAgo: 40)
+        let second = try writeOldFile("second.mov", in: root, daysAgo: 40)
+        let modification = try #require(FileAccessLedger.Times(url: first)).modification
+        let ledger = makeLedger(in: root)
+        defer { ledger.flush() }
+
+        ledger.watch(first, checks: [5])
+        setTimes(first, access: Date(), modification: Date(timeIntervalSince1970: modification))
+        ledger.watch(second, checks: [5])
+        // Waits for the last check on the first file.
+        #expect(ledger.entry(for: first) != nil)
+
+        let rows = await scan(root, staleDays: 30, ledger: ledger)
+        #expect(rows.contains { $0.path.lastPathComponent == "first.mov" })
+    }
+
+    @Test("A preview that overlaps a thumbnail keeps the user's date")
+    func overlappingPreviewKeepsUserDate() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let file = try writeOldFile("plan.pdf", in: root, daysAgo: 40)
+        let ledger = makeLedger(in: root)
+        defer { ledger.flush() }
+
+        // A thumbnail moved the access time once already. The panel then
+        // shows the file, and another thumbnail is drawn and recorded before
+        // the panel's first check.
+        try drawThumbnail(of: file, ledger: ledger)
+        let userAccess = try #require(ledger.entry(for: file)).userAccess
+        try await Task.sleep(for: .milliseconds(20))
+        ledger.watch(file, checks: [0.2])
+        try drawThumbnail(of: file, ledger: ledger)
+        try await Task.sleep(for: .milliseconds(500))
+
+        #expect(ledger.entry(for: file)?.userAccess == userAccess)
     }
 
     @Test("A flushed ledger writes nothing later")

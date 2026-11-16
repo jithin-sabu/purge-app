@@ -83,8 +83,9 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
     /// service calls in from the main actor.
     private let queue = DispatchQueue(label: "io.getpurge.file-access-ledger", qos: .utility)
     private var writeScheduled = false
-    /// Raised by each `watch`, so the one before it stops checking.
-    private var watchGeneration = 0
+    /// The file the preview panel shows now. Each `watch` replaces it, and
+    /// the one before stops checking.
+    private var currentWatch: Watch?
 
     init(fileURL: URL, maxEntries: Int = 5_000) {
         self.fileURL = fileURL
@@ -133,30 +134,46 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
     ///
     /// The checks stop at the first move they keep, so a later change, such as
     /// the user opening the file, is the user's own. They also stop when the
-    /// next `watch` starts: the panel shows one file at a time.
+    /// next `watch` starts, because the panel shows one file at a time. The
+    /// file before gets one last check then, for a read already done.
     func watch(_ url: URL, checks: [TimeInterval] = previewChecks) {
-        let before = Times(url: url)
-        let key = Self.key(url)
-        let generation = lock.withLock {
-            watchGeneration += 1
-            return watchGeneration
+        let watch = Watch(url: url, key: Self.key(url), before: Times(url: url))
+        let previous = lock.withLock {
+            defer { currentWatch = watch }
+            return currentWatch
         }
-        let progress = WatchProgress()
+        if let previous {
+            queue.async { [self] in check(previous) }
+        }
         for delay in checks {
             queue.asyncAfter(deadline: .now() + delay) { [self] in
-                guard !progress.isDone,
-                      lock.withLock({ watchGeneration }) == generation,
-                      let before, let after = Times(url: url) else { return }
-                if store(key: key, before: before, after: after, now: Date()) {
-                    progress.isDone = true
-                }
+                guard lock.withLock({ currentWatch === watch }) else { return }
+                check(watch)
             }
         }
     }
 
-    /// Whether a `watch` has kept its move. Read and written on `queue` only.
-    private final class WatchProgress: @unchecked Sendable {
+    /// One file the panel showed. Its `isDone` is read and written on `queue`
+    /// only.
+    private final class Watch: @unchecked Sendable {
+        let url: URL
+        let key: String
+        let before: Times?
         var isDone = false
+
+        init(url: URL, key: String, before: Times?) {
+            self.url = url
+            self.key = key
+            self.before = before
+        }
+    }
+
+    /// Runs on `queue`.
+    private func check(_ watch: Watch) {
+        guard !watch.isDone, let before = watch.before, let after = Times(url: watch.url) else { return }
+        if store(key: watch.key, before: before, after: after, now: Date()) {
+            watch.isDone = true
+        }
     }
 
     /// Keeps the user's access time from before a read that moved it. Runs on
@@ -168,6 +185,9 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
               !Self.matches(before.access, after.access) else { return false }
         return lock.withLock {
             var entries = loadLocked()
+            // Already kept, by a read that overlapped this one, such as a
+            // thumbnail drawn while the panel showed the file.
+            if let earlier = entries[key], earlier.matches(after) { return true }
             // A second read after the first: the user's time is still the
             // one from before the first.
             var userAccess = before.access
