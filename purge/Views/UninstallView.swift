@@ -373,9 +373,11 @@ struct UninstallView: View {
             },
             previewURL: location,
             copyURLs: { key in location(key).map { [$0] } ?? [] },
+            // A saved app from the last scan counts: a search that hides one
+            // clears the highlight rather than handing it to another app.
             stillExists: { key in
                 switch key {
-                case .app(let id): return store.installedApps.contains { $0.id == id }
+                case .app(let id): return app(id) != nil
                 case .group(let id): return store.appSuiteGroups.contains { $0.id == id }
                 }
             },
@@ -422,7 +424,7 @@ struct UninstallView: View {
             trash: { id in store.requestOrphanCleanup(forLeftoverID: id) },
             previewURL: { id in item(id)?.path },
             copyURLs: { id in item(id).map { [$0.path] } ?? [] },
-            stillExists: { id in store.orphanLeftovers.contains { $0.id == id } }
+            stillExists: { id in item(id) != nil }
         )
     }
 

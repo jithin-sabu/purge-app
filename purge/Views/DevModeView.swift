@@ -777,15 +777,15 @@ struct DevToolsView: View {
             },
             previewURL: { locations($0).first },
             copyURLs: locations,
+            // Saved rows from the last scan count: a filter that hides one
+            // clears the highlight rather than handing it on.
             stillExists: { key in
                 switch key {
-                case .tool(let id): return store.devTools.contains { $0.id == id }
-                case .simulator(let id):
-                    return store.simulatorDevices.contains { $0.id == id }
-                        || store.runningSimulatorDevices.contains { $0.id == id }
-                case .runtime(let id): return store.simulatorRuntimes.contains { $0.id == id }
-                case .component(let id): return store.xcodeComponents.contains { $0.id == id }
-                case .project(let id): return store.projectGroups.contains { $0.id == id }
+                case .tool(let id): return tool(id) != nil
+                case .simulator(let id): return simulator(id) != nil
+                case .runtime(let id): return runtime(id) != nil
+                case .component(let id): return component(id) != nil
+                case .project(let id): return group(id) != nil
                 case .artifact(let groupID, let artifactID): return artifact(groupID, artifactID) != nil
                 }
             },

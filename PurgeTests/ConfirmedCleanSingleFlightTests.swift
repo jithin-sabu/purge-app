@@ -38,7 +38,7 @@ struct ConfirmedCleanSingleFlightTests {
         defer { scans.cleanUp() }
         let store = scans.makeStore()
         store.isDeleting = true
-        store.deletionSheetCandidates = [Self.candidate()]
+        store.presentDeletionSheet(candidates: [Self.candidate()])
 
         store.userConfirmedDeletionFromPrimarySheet()
         await waitUntil { store.errorMessage != nil }

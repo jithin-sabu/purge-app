@@ -100,6 +100,56 @@ struct KeyboardDeletionStoreTests {
         #expect(store.scanSelection.cacheIDs == [ticked.id])
     }
 
+    /// A second confirm, such as a double click or Return while the sheet
+    /// closes, finds the sheet closed and does nothing. Before the guard it
+    /// fell back to every ticked row once the first confirm had cleared the
+    /// one row it was opened for.
+    @Test func aSecondConfirmAddsNothing() async throws {
+        let caches = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+            .appendingPathComponent("Library/Caches", isDirectory: true)
+        let picked = cacheRow(caches.appendingPathComponent("com.purge.test.picked-\(UUID().uuidString)", isDirectory: true))
+        let ticked = cacheRow(caches.appendingPathComponent("com.purge.test.ticked-\(UUID().uuidString)", isDirectory: true))
+        let scans = FakeScans()
+        scans.hasAccess = true
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = scans.makeStore(fileDeleter: FileDeleter(trash: trash.trash))
+        store.cacheItems = [picked, ticked]
+        store.setCacheSelected(id: ticked.id, isSelected: true)
+
+        #expect(store.presentKeyboardDeletionSheet(.cache(id: picked.id)))
+        store.userConfirmedDeletionFromPrimarySheet()
+        store.userConfirmedDeletionFromPrimarySheet()
+        await waitUntil { store.lastDeletionReport != nil && !store.isDeleting }
+
+        #expect(trash.trashedPaths == [picked.path.standardizedFileURL.path])
+        #expect(store.scanSelection.cacheIDs == [ticked.id])
+    }
+
+    /// ⌘⌫ on a folder `FileDeleter` would delete permanently, here a simulator
+    /// device folder, is refused by the store, not only by the view.
+    @Test func aPermanentlyDeletedPathIsRefused() throws {
+        let home = try makeHome()
+        defer { try? fm.removeItem(at: home) }
+        let device = home.appendingPathComponent("CoreSimulator/Devices/\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: device, withIntermediateDirectories: true)
+        let tool = DevTool(
+            definitionKey: "simulator-device",
+            toolName: "Simulator",
+            paths: [device],
+            sizeBytes: 1_000,
+            isDetected: true,
+            safetyInfo: Self.safeInfo
+        )
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        store.devTools = [tool]
+
+        #expect(!store.presentKeyboardDeletionSheet(.devTool(id: tool.id)))
+        #expect(!store.showDeletionSheet)
+    }
+
     @Test func rowsThatCantGoToTheTrashAreRefused() throws {
         let home = try makeHome()
         defer { try? fm.removeItem(at: home) }
@@ -169,6 +219,28 @@ struct KeyboardDeletionStoreTests {
         #expect(trash.trashedPaths == [picked.path.standardizedFileURL.path])
         #expect(store.largeFiles.map(\.id) == [ticked.id])
         #expect(store.largeFileSelection.ids == [ticked.id])
+    }
+
+    /// A file excluded while its one-row sheet is open is not moved: the
+    /// confirm runs the same exclusion check Delete Selected does.
+    @Test func aFileExcludedWhileTheSheetIsOpenStays() async throws {
+        let home = try makeHome()
+        defer { try? fm.removeItem(at: home) }
+        let picked = try largeFile(home.appendingPathComponent("Downloads/picked.bin"))
+        defer { _ = ExcludedPathsStore.remove(path: picked.path) }
+        let scans = FakeScans()
+        scans.hasAccess = true
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = scans.makeStore(fileDeleter: FileDeleter(home: home, trash: trash.trash))
+        store.largeFiles = [picked]
+
+        #expect(store.presentLargeFileDeletionSheet(for: picked))
+        store.excludeLargeFileFromScans(picked)
+        await store.confirmLargeFileDeletion()
+
+        #expect(trash.trashedPaths.isEmpty)
+        #expect(store.lastDeletionReport == nil)
     }
 
     @Test func closingTheLargeFilesSheetDropsTheOneFile() throws {

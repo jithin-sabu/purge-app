@@ -196,7 +196,7 @@ struct AppCachesView: View {
             trash: { id in store.presentKeyboardDeletionSheet(.cache(id: id)) },
             previewURL: { id in locations(id).first },
             copyURLs: locations,
-            stillExists: { id in liveItem(id) != nil }
+            stillExists: { id in anyItem(id) != nil }
         )
     }
 

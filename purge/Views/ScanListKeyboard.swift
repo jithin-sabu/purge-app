@@ -45,7 +45,8 @@ struct ScanListKeyActions<ID: Hashable> {
     var copyURLs: (ID) -> [URL]
     /// Whether the row is still in the scan results at all, as opposed to only
     /// hidden by a filter or search. A row that left them, as after a trash,
-    /// hands the highlight to the next row.
+    /// hands the highlight to the next row. A saved row from the last scan
+    /// still exists: a filter that hides it clears the highlight instead.
     var stillExists: (ID) -> Bool
     /// The group a nested row sits in, for ← and for a group that closes.
     var parent: (ID) -> ID? = { _ in nil }
@@ -105,6 +106,14 @@ final class ScanListKeyboardController: ScanListKeyResponder {
     private var blocked: () -> Bool = { false }
     /// The order the highlight was last reconciled against.
     private var reconciledOrder: [RowID] = []
+
+    /// Answers "is this row on screen" in place of the anchors. Only tests set
+    /// it, since no row views exist there.
+    var rowVisibilityOverride: ((RowID) -> Bool)?
+
+    private func isRowOnScreen(_ id: RowID) -> Bool {
+        rowVisibilityOverride?(id) ?? anchors.isOnScreen(id)
+    }
 
     var window: NSWindow? { anchors.window }
 
@@ -176,13 +185,17 @@ final class ScanListKeyboardController: ScanListKeyResponder {
 
     private func performKey(_ key: ScanListKey, isRepeat: Bool) -> Bool {
         guard let actions else { return false }
-        let current = highlight.id.flatMap { orderSet.contains($0) ? $0 : nil }
+        // A current row scrolled out of sight counts as none, for every key:
+        // nothing ticks, trashes, previews or copies a row the user can't see.
+        // A click makes its row current without the ring, so after a scroll
+        // the user may not know which row that is.
+        let current = highlight.id.flatMap { orderSet.contains($0) && isRowOnScreen($0) ? $0 : nil }
 
         switch key {
         case .up:
-            return move(.up)
+            return move(.up, from: current)
         case .down:
-            return move(.down)
+            return move(.down, from: current)
         case .left, .right:
             if let current {
                 if key == .right, actions.expand(current) { return true }
@@ -194,7 +207,7 @@ final class ScanListKeyboardController: ScanListKeyResponder {
                     }
                 }
             }
-            if actions.arrowsStepSideways { return move(key == .left ? .left : .right) }
+            if actions.arrowsStepSideways { return move(key == .left ? .left : .right, from: current) }
             // Nothing to open or close: swallow the key so the List underneath
             // doesn't act on it, but only when a row is current.
             return current != nil
@@ -205,12 +218,13 @@ final class ScanListKeyboardController: ScanListKeyResponder {
             if !acted { NSSound.beep() }
             return true
         case .space:
+            // Holding Space must not close the preview its first press opened.
+            guard !isRepeat else { return QuickLookPreview.isVisible || current != nil }
             if QuickLookPreview.isVisible {
                 QuickLookPreview.close()
                 return true
             }
             guard let current else { return false }
-            guard !isRepeat else { return true }
             if let url = actions.previewURL(current) {
                 QuickLookPreview.show(url: url)
             } else {
@@ -243,8 +257,7 @@ final class ScanListKeyboardController: ScanListKeyResponder {
 
     /// An arrow. A highlight scrolled out of sight counts as none, so the key
     /// starts from the first row on screen instead of yanking the list back.
-    private func move(_ direction: ScanListHighlight.Direction) -> Bool {
-        let from = highlight.id.flatMap { orderSet.contains($0) && anchors.isOnScreen($0) ? $0 : nil }
+    private func move(_ direction: ScanListHighlight.Direction, from: RowID?) -> Bool {
         let firstVisible = order.first { anchors.isMostlyVisible($0) }
         guard let next = ScanListHighlight.moved(from: from, direction, in: rows, firstVisible: firstVisible) else {
             return false

@@ -1346,6 +1346,10 @@ final class PurgeStore: ObservableObject {
     }
 
     func userConfirmedDeletionFromPrimarySheet() {
+        // Only the open sheet's confirm counts. A second confirm (a double
+        // click, Return during the close) would otherwise find the ⌘⌫ row's
+        // override already cleared and stage every ticked row instead (#96).
+        guard showDeletionSheet else { return }
         let picks = deletionSheetCandidates ?? deletionCandidates
         let keepsOtherSelections = deletionSheetKeepsOtherSelections
         guard !picks.isEmpty else {
@@ -2618,6 +2622,8 @@ final class PurgeStore: ObservableObject {
     }
 
     func confirmLargeFileDeletion() async {
+        // Only the open sheet's confirm counts; see `userConfirmedDeletionFromPrimarySheet`.
+        guard showLargeFileDeletionSheet else { return }
         // Read before closing: closing the sheet drops the ⌘⌫ override.
         let targets = largeFileDeletionSheetFiles
         showLargeFileDeletionSheet = false

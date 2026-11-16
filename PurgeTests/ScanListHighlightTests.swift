@@ -227,8 +227,12 @@ struct ScanListKeyTests {
 @MainActor
 @Suite("Scan list ring follows the keyboard")
 struct ScanListRingTests {
-    private func controller(toggled: @escaping (String) -> Void = { _ in }) -> ScanListKeyboardController {
+    private func controller(
+        toggled: @escaping (String) -> Void = { _ in },
+        onScreen: Bool = true
+    ) -> ScanListKeyboardController {
         let controller = ScanListKeyboardController()
+        controller.rowVisibilityOverride = { _ in onScreen }
         controller.update(
             rows: [["a"], ["b"], ["c"]],
             actions: ScanListKeyActions(
@@ -284,6 +288,22 @@ struct ScanListRingTests {
         let controller = controller()
         #expect(!controller.perform(.toggle, isRepeat: false))
         #expect(controller.highlight.id == nil)
+        #expect(!controller.highlight.showsRing)
+    }
+
+    /// A current row scrolled out of sight counts as none: a click made it
+    /// current without the ring, so Return must not untick a row the user
+    /// can't see.
+    @Test
+    func aKeyOnARowOffScreenDoesNothing() {
+        var toggled: [String] = []
+        let controller = controller(toggled: { toggled.append($0) }, onScreen: false)
+        controller.highlight("b")
+
+        #expect(!controller.perform(.toggle, isRepeat: false))
+        #expect(!controller.perform(.trash, isRepeat: false))
+        #expect(!controller.perform(.copy, isRepeat: false))
+        #expect(toggled.isEmpty)
         #expect(!controller.highlight.showsRing)
     }
 }
