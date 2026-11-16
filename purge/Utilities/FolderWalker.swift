@@ -736,7 +736,12 @@ nonisolated enum DirectoryListing {
 
     /// nil when the folder cannot be opened. Links are listed as neither file
     /// nor folder and never followed.
-    static func entries(of path: String) -> [ListingEntry]? {
+    /// `extendedAttributes` is for tests, which pass a bit no kernel takes
+    /// to check the listing without them.
+    static func entries(
+        of path: String,
+        extendedAttributes: attrgroup_t = SharedBlocks.attributes
+    ) -> [ListingEntry]? {
         let fd = DirectoryReader.openDirectory(path)
         guard fd >= 0 else { return nil }
         defer { close(fd) }
@@ -746,17 +751,28 @@ nonisolated enum DirectoryListing {
             | attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_ACCTIME)
             | attrgroup_t(ATTR_CMN_FLAGS) | attrgroup_t(ATTR_CMN_ERROR)
         list.fileattr = attrgroup_t(ATTR_FILE_ALLOCSIZE) | attrgroup_t(ATTR_FILE_DATALENGTH)
-        list.forkattr = SharedBlocks.attributes
-        let options = SharedBlocks.attributes == 0 ? UInt64(0) : UInt64(FSOPT_ATTR_CMN_EXTENDED)
+        list.forkattr = extendedAttributes
+        var options = extendedAttributes == 0 ? UInt64(0) : UInt64(FSOPT_ATTR_CMN_EXTENDED)
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 16)
         defer { buffer.deallocate() }
         var entries: [ListingEntry] = []
+        var entriesRead = 0
         while true {
             let count = getattrlistbulk(fd, &list, buffer, bufferSize, options)
             if count < 0, errno == EINTR { continue }
+            // A first call that fails with the extended attributes is tried once
+            // more without them, and the files then show their whole size. APFS,
+            // HFS+, exFAT and FAT all take them; this covers a file system that
+            // doesn't. A folder that can't be read fails again and is nil.
+            if count < 0, options != 0, entriesRead == 0 {
+                list.forkattr = 0
+                options = 0
+                continue
+            }
             // A listing that fails part way is not passed off as the folder.
             if count < 0 { return nil }
             guard count > 0 else { break }
+            entriesRead += Int(count)
             var entry = buffer
             for _ in 0..<count {
                 let length = Int(entry.load(as: UInt32.self))

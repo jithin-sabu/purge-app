@@ -129,6 +129,25 @@ struct LargeFileCloneTests {
         #expect(try #require(byName["plain.mov"]).allocatedBytes == allocated(plain))
     }
 
+    /// A file system that refuses the extended attributes still lists its
+    /// files, without clone state, so they show their whole size. A bit no
+    /// kernel knows, which fails the listing with `ERANGE`, stands in for
+    /// such a file system.
+    @Test
+    func aListingWithoutTheExtendedAttributesStillListsTheFolder() throws {
+        let root = try makeRoot()
+        defer { try? fm.removeItem(at: root.deletingLastPathComponent()) }
+        let plain = root.appendingPathComponent("plain.mov")
+        try write(300_000, to: plain)
+
+        let entries = try #require(DirectoryListing.entries(of: root.path, extendedAttributes: 0x8000_0000))
+        let entry = try #require(entries.first { $0.name == "plain.mov" })
+        #expect(entry.sharedBlocks.flags == nil)
+        #expect(entry.sharedBlocks.cloneCount == nil)
+        #expect(entry.logicalBytes == 300_000)
+        #expect(entry.allocatedBytes == (try allocated(plain)))
+    }
+
     // MARK: Rows
 
     /// The Finder case: a file and its duplicate. One sits in the walked
