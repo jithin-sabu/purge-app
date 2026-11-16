@@ -2,7 +2,8 @@ import Foundation
 
 /// How macOS downloads a set again: the subscription Download Again sends.
 /// Aliases and usages are what pared's catalog ships for macOS 27, except that
-/// a language alias is resolved on the Mac when the request is sent (#179).
+/// a language alias is resolved on the Mac when the request is sent (#179),
+/// and an alias macOS no longer knows is left out (#385).
 nonisolated struct AppleIntelligenceRecovery: Equatable, Sendable {
     /// What a usage alias is asked for. macOS defines each alias's values under
     /// `/System/Library/UnifiedAssetFramework/UsageAliases/<alias>/`, one plist
@@ -20,17 +21,18 @@ nonisolated struct AppleIntelligenceRecovery: Equatable, Sendable {
     let usageAliases: [String: AliasValue]
     let assetSetUsages: [String: [String: String]]
 
-    /// The aliases as the subscription sends them, each language alias
-    /// resolved by `language`.
-    func resolvedUsageAliases(language: (String) -> String) -> [String: String] {
-        var resolved: [String: String] = [:]
+    /// The values to try for each alias, in order: `languageValues` for a
+    /// language alias, the one fixed value otherwise. The worker keeps the
+    /// first value macOS knows and leaves out an alias it knows none of (#385).
+    func usageAliasCandidates(languageValues: [String]) -> [String: [String]] {
+        var candidates: [String: [String]] = [:]
         for (alias, value) in usageAliases {
             switch value {
-            case .language: resolved[alias] = language(alias)
-            case .fixed(let fixed): resolved[alias] = fixed
+            case .language: candidates[alias] = languageValues
+            case .fixed(let fixed): candidates[alias] = [fixed]
             }
         }
-        return resolved
+        return candidates
     }
 }
 
@@ -71,6 +73,9 @@ nonisolated enum AppleIntelligenceCatalog {
             title: String(localized: "Image generation models"),
             recovery: AppleIntelligenceRecovery(
                 name: "imageGeneration",
+                // macOS 27.2 removed the GenerativePlayground alias, so there
+                // the subscription goes with KeyboardEmojiGenerator alone. On
+                // 27.0 both ask for the same three FM.Visual models (#385).
                 usageAliases: [
                     "VisualGeneration.GenerativePlayground": .language,
                     "VisualGeneration.KeyboardEmojiGenerator": .language,

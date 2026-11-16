@@ -77,7 +77,6 @@ final class AppleIntelligenceModelStore: ObservableObject {
             await AppleIntelligenceWorker.run($0, $1, timeout: $2)
         }
         var siriLanguage: () -> String? = { AppleIntelligenceAliasLanguage.siriLanguage() }
-        var definedAliasValues: (String) -> Set<String> = { AppleIntelligenceAliasLanguage.defined(for: $0) }
         var recordRemoval: ([AppleIntelligenceModelSet], AppleIntelligenceReading, Int64?) -> Void = {
             CleanupHistoryStore.shared.appendAppleIntelligenceRemoval(sets: $0, bytesBefore: $1, freedShownBytes: $2)
         }
@@ -563,14 +562,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
             "subscriber": AppleIntelligenceCatalog.subscriber,
             "names": AppleIntelligenceCatalog.sets.map(\.recovery.name),
         ], 60)
-        let siriLanguage = services.siriLanguage()
+        let languageValues = AppleIntelligenceAliasLanguage.values(siriLanguage: services.siriLanguage())
         let subscriptions: [[String: Any]] = sets.map { set -> [String: Any] in
             [
                 "name": set.recovery.name,
-                "usageAliases": set.recovery.resolvedUsageAliases { alias in
-                    AppleIntelligenceAliasLanguage.value(
-                        for: alias, siriLanguage: siriLanguage, definedValues: services.definedAliasValues)
-                },
+                "usageAliasCandidates": set.recovery.usageAliasCandidates(languageValues: languageValues),
                 "assetSetUsages": set.recovery.assetSetUsages,
             ]
         }

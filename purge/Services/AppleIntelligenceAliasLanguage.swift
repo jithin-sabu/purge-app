@@ -7,10 +7,17 @@ import Foundation
 /// also Apple Intelligence's: the two share one Language setting. Purge does
 /// the same, and falls back to English for a language the alias does not
 /// define, which is what it sent before and keeps the models usable.
+///
+/// Purge only lists the values to try. The worker keeps the first one macOS
+/// knows for each alias and leaves out an alias macOS no longer knows (#385):
+/// the alias folders on disk are not the whole answer, since macOS also
+/// accepts the values a release moved to `UsageAliases/Deprecated`, and 27.2
+/// removed `VisualGeneration.GenerativePlayground` altogether.
 nonisolated enum AppleIntelligenceAliasLanguage {
-    /// One folder per alias, one plist per value it accepts.
-    static let usageAliasesDirectory = "/System/Library/UnifiedAssetFramework/UsageAliases"
     static let english = "language_en"
+    /// What an alias that has no language value is asked for, such as
+    /// `spatialPhotos.relive.main`. Tried last, after English.
+    static let defaultValue = "default"
 
     /// Siri's language as System Settings stores it, such as `en-US`, `pt-BR`
     /// or `zh-TW`. Nil when it has never been set.
@@ -32,22 +39,16 @@ nonisolated enum AppleIntelligenceAliasLanguage {
         return values
     }
 
-    /// The first candidate `alias` defines on this Mac, else English.
-    static func value(
-        for alias: String,
-        siriLanguage: String?,
-        definedValues: (String) -> Set<String> = { defined(for: $0) }
-    ) -> String {
-        guard let siriLanguage else { return english }
-        let defined = definedValues(alias)
-        return candidates(for: siriLanguage).first { defined.contains($0) } ?? english
-    }
-
-    /// The values macOS ships for `alias`: the plist names in its folder.
-    /// Empty when the folder is missing or unreadable, which falls back to English.
-    static func defined(for alias: String, directory: String = usageAliasesDirectory) -> Set<String> {
-        let folder = (directory as NSString).appendingPathComponent(alias)
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { return [] }
-        return Set(names.filter { $0.hasSuffix(".plist") }.map { String($0.dropLast(".plist".count)) })
+    /// Every value a language alias is tried with, in order: the Siri
+    /// language's own values, then English, then `default`. The
+    /// `_useDefault_false` and 27.2's `isIFPEnabled_` values are never sent:
+    /// what they change is not known, and the plain ones still work.
+    static func values(siriLanguage: String?) -> [String] {
+        var values: [String] = []
+        for value in (siriLanguage.map(candidates(for:)) ?? []) + [english, defaultValue]
+        where !values.contains(value) {
+            values.append(value)
+        }
+        return values
     }
 }

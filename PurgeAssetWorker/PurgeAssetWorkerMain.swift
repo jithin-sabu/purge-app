@@ -8,7 +8,8 @@ import Foundation
 ///
 /// Ops: `load`, `asset-type` {assetSet}, `reset` {assetSets}, `unsubscribe`
 /// {subscriber, names}, `subscribe` {subscriber, subscriptions: [{name,
-/// usageAliases, assetSetUsages}]}. Every op refuses what it is not given:
+/// usageAliasCandidates, assetSetUsages}]}, where each alias lists the values
+/// to try in order and gets the first this macOS knows. Every op refuses what it is not given:
 /// a reset with no sets is never sent, because the service reads that as all.
 @main
 enum PurgeAssetWorkerMain {
@@ -110,16 +111,39 @@ enum PurgeAssetWorkerMain {
                 throw UnifiedAssetCalls.CallError("no subscriptions")
             }
             var subscriptions: [AnyObject] = []
+            var sentAliases: [String: [String: String]] = [:]
+            var leftOut: [String: [String]] = [:]
             for request in requests {
                 let name = try string(request, "name")
                 let usages = request["assetSetUsages"] as? [String: [String: String]] ?? [:]
-                let aliases = request["usageAliases"] as? [String: String] ?? [:]
+                let candidates = request["usageAliasCandidates"] as? [String: [String]] ?? [:]
+                // Each alias gets the first value this macOS knows. One it knows
+                // no value for is left out rather than failing the whole request,
+                // the way 27.2's removed GenerativePlayground alias did (#385).
+                var aliases: [String: String] = [:]
+                for alias in candidates.keys.sorted() {
+                    if let value = try UnifiedAssetCalls.firstKnownValue(forAlias: alias, candidates: candidates[alias] ?? []) {
+                        aliases[alias] = value
+                    } else {
+                        leftOut[name, default: []].append(alias)
+                    }
+                }
+                // A subscription with nothing left in it would ask for nothing.
+                guard !aliases.isEmpty || !usages.isEmpty else {
+                    throw UnifiedAssetCalls.CallError(
+                        "this macOS knows none of the usage aliases for \(name): \(candidates.keys.sorted().joined(separator: ", "))")
+                }
+                sentAliases[name] = aliases
                 subscriptions.append(try UnifiedAssetCalls.makeSubscription(name: name, assetSetUsages: usages, usageAliases: aliases))
             }
             try UnifiedAssetCalls.send([
                 "Operation": "Subscribe", "Subscriber": subscriber, "Subscriptions": subscriptions, "UserInitiated": true,
             ], timeout: 60)
-            return ["subscribed": requests.compactMap { $0["name"] as? String }]
+            return [
+                "subscribed": requests.compactMap { $0["name"] as? String },
+                "usageAliases": sentAliases,
+                "leftOut": leftOut,
+            ]
 
         default:
             throw UnifiedAssetCalls.CallError("unknown op \(op)")

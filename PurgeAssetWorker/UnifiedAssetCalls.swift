@@ -59,6 +59,22 @@ enum UnifiedAssetCalls {
         return message(set, "autoAssetType") as? String
     }
 
+    /// The first of `candidates` that macOS accepts for the usage alias, or nil
+    /// when it accepts none of them. Each is tried as a subscription holding
+    /// that alias alone, through the same `isValid:error:` check every
+    /// subscription already passes, so this needs nothing more from the
+    /// framework. A value a release moved to `UsageAliases/Deprecated` still
+    /// passes. Nil is how an alias macOS removed shows up, as
+    /// `VisualGeneration.GenerativePlayground` did in 27.2 (#385). A missing
+    /// class or method still throws.
+    static func firstKnownValue(forAlias alias: String, candidates: [String]) throws -> String? {
+        for value in candidates {
+            let subscription = try newSubscription(name: "purge.aliasCheck", assetSetUsages: [:], usageAliases: [alias: value])
+            if try validationError(subscription) == nil { return value }
+        }
+        return nil
+    }
+
     /// Sends one operation to the subscription service and waits for its reply.
     /// `config` carries "Operation" and its arguments. Throws on a missing
     /// interface, a transport error, a timeout, or an error reply.
@@ -109,6 +125,14 @@ enum UnifiedAssetCalls {
     /// arguments, and checked against the configuration manager before it is sent.
     static func makeSubscription(name: String, assetSetUsages: [String: [String: String]],
                                  usageAliases: [String: String]) throws -> AnyObject {
+        let subscription = try newSubscription(name: name, assetSetUsages: assetSetUsages, usageAliases: usageAliases)
+        if let rejection = try validationError(subscription) { throw rejection }
+        return subscription
+    }
+
+    /// A `UAFAssetSetSubscription`, not yet validated.
+    private static func newSubscription(name: String, assetSetUsages: [String: [String: String]],
+                                        usageAliases: [String: String]) throws -> AnyObject {
         try load()
         guard let type = NSClassFromString("UAFAssetSetSubscription") else {
             throw CallError("UAFAssetSetSubscription is missing")
@@ -117,11 +141,9 @@ enum UnifiedAssetCalls {
             throw CallError("UAFAssetSetSubscription is not NSSecureCoding, so it cannot cross XPC")
         }
         let initSelector = Selector(("initWithName:assetSets:usageAliases:"))
-        let validSelector = Selector(("isValid:error:"))
-        guard let initMethod = class_getInstanceMethod(type, initSelector),
-              let validMethod = class_getInstanceMethod(type, validSelector)
-        else { throw CallError("UAFAssetSetSubscription initializer or validator is missing") }
-
+        guard let initMethod = class_getInstanceMethod(type, initSelector) else {
+            throw CallError("UAFAssetSetSubscription initializer is missing")
+        }
         guard let allocated = message(type as AnyObject, "alloc") else {
             throw CallError("UAFAssetSetSubscription could not be allocated")
         }
@@ -133,14 +155,26 @@ enum UnifiedAssetCalls {
         )?.takeRetainedValue() else {
             throw CallError("UAFAssetSetSubscription returned nil")
         }
+        return subscription
+    }
 
+    /// Why macOS rejects `subscription`, or nil when it accepts it. Throws only
+    /// when the validator itself is missing.
+    private static func validationError(_ subscription: AnyObject) throws -> Error? {
+        let validSelector = Selector(("isValid:error:"))
+        guard let validMethod = class_getInstanceMethod(type(of: subscription), validSelector) else {
+            throw CallError("UAFAssetSetSubscription validator is missing")
+        }
         let manager = try configurationManager()
         typealias Validate = @convention(c) (AnyObject, Selector, AnyObject, AutoreleasingUnsafeMutablePointer<AnyObject?>) -> ObjCBool
         let validate = unsafeBitCast(method_getImplementation(validMethod), to: Validate.self)
         var returnedError: AnyObject?
         let valid = validate(subscription, validSelector, manager, &returnedError).boolValue
-        if let returnedError = returnedError as? NSError { throw returnedError }
-        guard valid else { throw CallError("macOS rejected the subscription \(name)") }
-        return subscription
+        if let returnedError = returnedError as? NSError { return returnedError }
+        guard valid else {
+            let name = message(subscription, "name") as? String ?? "?"
+            return CallError("macOS rejected the subscription \(name)")
+        }
+        return nil
     }
 }

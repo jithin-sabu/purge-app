@@ -359,7 +359,6 @@ struct AppleIntelligenceModelStoreTests {
             services.read = { current.get() }
             services.installedBlocks = { [blocks] in blocks }
             services.siriLanguage = { [siriLanguage] in siriLanguage }
-            services.definedAliasValues = { _ in ["language_en", "language_zh", "language_zh_TW"] }
             services.recordRemoval = { [self] sets, _, _ in self.recorded.append(sets) }
             services.runWorker = { [self] op, input, _ in
                 switch op {
@@ -405,8 +404,8 @@ struct AppleIntelligenceModelStoreTests {
     }
 
     /// Run whole: with no profile to lift, Download Again subscribes to the
-    /// recorded sets that are absent, with each language alias resolved for
-    /// the Siri language, and leaves a present set alone.
+    /// recorded sets that are absent, with each language alias's values in
+    /// the Siri language first, and leaves a present set alone.
     @Test(.enabled(if: Store.isSupported, "the download is gated to macOS 27 on Apple silicon"))
     @MainActor func downloadAgainSubscribesToTheRemovedSetsInTheSiriLanguage() async throws {
         Store.saveRemovedSetNames([catalog[0].name, catalog[1].name, catalog[4].name], to: defaults.defaults)
@@ -421,10 +420,10 @@ struct AppleIntelligenceModelStoreTests {
         await store.downloadAgain()
 
         #expect(mac.subscribed.compactMap { $0["name"] as? String } == [catalog[0], catalog[4]].map(\.recovery.name))
-        let aliases = mac.subscribed.first?["usageAliases"] as? [String: String]
-        #expect(aliases == ["com.apple.Settings.AppleIntelligence": "language_zh_TW"])
-        let spatial = mac.subscribed.last?["usageAliases"] as? [String: String]
-        #expect(spatial == ["spatialPhotos.relive.main": "default"])
+        let aliases = mac.subscribed.first?["usageAliasCandidates"] as? [String: [String]]
+        #expect(aliases == ["com.apple.Settings.AppleIntelligence": ["language_zh_TW", "language_zh", "language_en", "default"]])
+        let spatial = mac.subscribed.last?["usageAliasCandidates"] as? [String: [String]]
+        #expect(spatial == ["spatialPhotos.relive.main": ["default"]])
         #expect(store.lastOutcome == .downloadRequested)
         // Set 1 is on the Mac, so the record let go of it at the reading.
         #expect(Store.loadRemovedSetNames(from: defaults.defaults) == [catalog[0].name, catalog[4].name])
