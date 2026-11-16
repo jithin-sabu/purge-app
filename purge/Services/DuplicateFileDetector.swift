@@ -22,10 +22,10 @@ import Foundation
 /// Trash is a thin backstop for that.
 ///
 /// **Hard links** are collapsed before bucketing: two names for one inode are not
-/// two copies, and deleting one frees nothing. **APFS clones** are not detectable
-/// this way — they have distinct inodes but share storage, so a clone pair is
-/// reported as a duplicate whose reclaimable bytes overstate what deleting
-/// actually frees. There is no cheap public API for block sharing.
+/// two copies, and deleting one frees nothing. **APFS clones** are left out
+/// the same way (#376): a file that shares all its blocks with another full
+/// clone, such as a copy made with Finder's Duplicate, has its own inode but
+/// no blocks of its own, so deleting it frees nothing either.
 ///
 /// `nonisolated` is load-bearing, not tidiness — same reason as `LargeFileScanner`.
 /// The project builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without
@@ -122,6 +122,13 @@ nonisolated final class DuplicateFileDetector {
             // the folders Large Files scans, and overstating recoverable space is
             // the failure this feature cannot afford.
             guard linkCount(for: url) == 1 else { continue }
+
+            // A full clone is left out for the same reason (#376). While any
+            // other clone stays, its blocks stay too, so its group would
+            // promise space that trashing it never gives back. A copy that was
+            // written to after it was cloned shares only some blocks and is
+            // still compared.
+            guard !SharedBlocks.state(ofFileAt: url.path).isFullClone else { continue }
 
             // One file can still have two rows when a folder on the way is a
             // symlink: one inode by two paths, each with a link count of 1. They

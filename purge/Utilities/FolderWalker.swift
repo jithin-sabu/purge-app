@@ -439,29 +439,69 @@ nonisolated enum SharedBlocks {
     /// One file read on its own, without following a link: `allocated` when
     /// the volume says nothing or the file can't be read.
     static func countedBytes(ofFileAt path: String, allocated: Int64) -> Int64 {
-        guard attributes & attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT) != 0 else { return allocated }
+        state(ofFileAt: path).countedBytes(allocated: allocated)
+    }
+}
+
+/// One file's shared blocks, read on their own or from a listing: Large Files
+/// rows and Duplicates (#376), and the sizes a contents clean books.
+nonisolated extension SharedBlocks {
+    /// What the volume reports about one file's shared blocks. Both are nil
+    /// when it reports nothing.
+    struct FileState {
+        var flags: UInt64?
+        var cloneCount: UInt32?
+
+        static let unknown = FileState(flags: nil, cloneCount: nil)
+
+        /// The file shares all its blocks with at least one other full clone,
+        /// so moving it to the Trash gives back nothing while they stay.
+        var isFullClone: Bool {
+            guard let flags, flags & UInt64(EF_SHARES_ALL_BLOCKS) != 0, let cloneCount else { return false }
+            return cloneCount > 1
+        }
+
+        /// A full clone's share of `allocated`, and all of it for any other
+        /// file, a purgeable one included.
+        func countedBytes(allocated: Int64) -> Int64 {
+            SharedBlocks.countedBytes(allocated: allocated, flags: flags, cloneCount: cloneCount)
+        }
+    }
+
+    /// Reads one file's flags and clone count with `getattrlist`, without
+    /// following a link. `.unknown` when it can't be read.
+    static func state(ofFileAt path: String) -> FileState {
+        guard attributes != 0 else { return .unknown }
         var list = attrlist()
         list.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         list.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
         list.forkattr = attributes
+        // Length, returned set, then a UInt64 and a UInt32.
         var buffer = [UInt8](repeating: 0, count: 64)
         let options = UInt32(FSOPT_NOFOLLOW) | UInt32(FSOPT_ATTR_CMN_EXTENDED)
-        return buffer.withUnsafeMutableBytes { raw -> Int64 in
-            guard let base = raw.baseAddress, getattrlist(path, &list, base, raw.count, options) == 0 else {
-                return allocated
-            }
-            // A 4-byte length, the returned set, then the attributes by bit.
+        return buffer.withUnsafeMutableBytes { raw -> FileState in
+            guard let base = raw.baseAddress,
+                  getattrlist(path, &list, base, raw.count, options) == 0 else { return .unknown }
             var field = base + 4
             let returned = field.loadUnaligned(as: attribute_set_t.self)
             field += MemoryLayout<attribute_set_t>.size
-            guard returned.forkattr & attrgroup_t(ATTR_CMNEXT_EXT_FLAGS) != 0,
-                  returned.forkattr & attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT) != 0
-            else { return allocated }
-            let flags = field.loadUnaligned(as: UInt64.self)
-            field += MemoryLayout<UInt64>.size
-            let cloneCount = field.loadUnaligned(as: UInt32.self)
-            return countedBytes(allocated: allocated, flags: flags, cloneCount: cloneCount)
+            return readState(from: &field, returned: returned)
         }
+    }
+
+    /// Reads the flags and clone count where `field` points, in the order the
+    /// kernel packs them, and moves `field` past them.
+    static func readState(from field: inout UnsafeMutableRawPointer, returned: attribute_set_t) -> FileState {
+        var state = FileState.unknown
+        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_EXT_FLAGS) != 0 {
+            state.flags = field.loadUnaligned(as: UInt64.self)
+            field += MemoryLayout<UInt64>.size
+        }
+        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT) != 0 {
+            state.cloneCount = field.loadUnaligned(as: UInt32.self)
+            field += MemoryLayout<UInt32>.size
+        }
+        return state
     }
 }
 
@@ -623,16 +663,7 @@ nonisolated final class DirectoryReader {
             allocated = field.loadUnaligned(as: Int64.self)
             field += MemoryLayout<Int64>.size
         }
-        var flags: UInt64?
-        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_EXT_FLAGS) != 0 {
-            flags = field.loadUnaligned(as: UInt64.self)
-            field += MemoryLayout<UInt64>.size
-        }
-        var cloneCount: UInt32?
-        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT) != 0 {
-            cloneCount = field.loadUnaligned(as: UInt32.self)
-        }
-        let counted = SharedBlocks.countedBytes(allocated: max(0, allocated), flags: flags, cloneCount: cloneCount)
+        let counted = SharedBlocks.readState(from: &field, returned: returned).countedBytes(allocated: max(0, allocated))
         if counting == .regularFiles {
             guard type == VREG.rawValue else { return }
             reading.blocks += counted
@@ -684,6 +715,9 @@ nonisolated struct ListingEntry {
     /// The `UF_HIDDEN` flag, which hides an entry without a leading dot.
     let isHiddenFlagSet: Bool
     let allocatedBytes: Int64
+    /// What the volume says about the blocks the entry shares with clones
+    /// (#376).
+    let sharedBlocks: SharedBlocks.FileState
     /// The data's length, `fileSize` in `URLResourceValues`.
     let logicalBytes: Int64
     let accessDate: Date
@@ -712,11 +746,13 @@ nonisolated enum DirectoryListing {
             | attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_ACCTIME)
             | attrgroup_t(ATTR_CMN_FLAGS) | attrgroup_t(ATTR_CMN_ERROR)
         list.fileattr = attrgroup_t(ATTR_FILE_ALLOCSIZE) | attrgroup_t(ATTR_FILE_DATALENGTH)
+        list.forkattr = SharedBlocks.attributes
+        let options = SharedBlocks.attributes == 0 ? UInt64(0) : UInt64(FSOPT_ATTR_CMN_EXTENDED)
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 16)
         defer { buffer.deallocate() }
         var entries: [ListingEntry] = []
         while true {
-            let count = getattrlistbulk(fd, &list, buffer, bufferSize, 0)
+            let count = getattrlistbulk(fd, &list, buffer, bufferSize, options)
             if count < 0, errno == EINTR { continue }
             // A listing that fails part way is not passed off as the folder.
             if count < 0 { return nil }
@@ -732,7 +768,8 @@ nonisolated enum DirectoryListing {
     }
 
     /// Fields in the order `getattrlistbulk` packs them: common attributes by
-    /// bit, then file attributes by bit.
+    /// bit, then file attributes by bit, then the extended common attributes
+    /// by bit.
     private static func parse(_ entry: UnsafeMutableRawPointer) -> ListingEntry? {
         var field = entry + 4
         let returned = field.loadUnaligned(as: attribute_set_t.self)
@@ -775,13 +812,16 @@ nonisolated enum DirectoryListing {
         var logical: Int64 = 0
         if returned.fileattr & attrgroup_t(ATTR_FILE_DATALENGTH) != 0 {
             logical = field.loadUnaligned(as: Int64.self)
+            field += MemoryLayout<Int64>.size
         }
+        let sharedBlocks = SharedBlocks.readState(from: &field, returned: returned)
         return ListingEntry(
             name: name,
             isDirectory: type == VDIR.rawValue,
             isRegularFile: type == VREG.rawValue,
             isHiddenFlagSet: flags & UInt32(UF_HIDDEN) != 0,
             allocatedBytes: max(0, allocated),
+            sharedBlocks: sharedBlocks,
             logicalBytes: max(0, logical),
             accessDate: accessed,
             modificationDate: modified

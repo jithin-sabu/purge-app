@@ -254,7 +254,7 @@ nonisolated final class LargeFileScanner {
                 if walkedRootPrefix == nil {
                     walkedRootPrefix = fileURL.deletingLastPathComponent().path + "/"
                 }
-                units.append((fileURL, (try? fileURL.resourceValues(forKeys: resourceKeys)).map(Seen.init)))
+                units.append((fileURL, (try? fileURL.resourceValues(forKeys: resourceKeys)).map { Seen($0, url: fileURL) }))
             }
             let prefix = walkedRootPrefix
 
@@ -348,8 +348,17 @@ nonisolated final class LargeFileScanner {
                     let provider = LargeFileScanSummary.CloudProvider.provider(for: fileURL, isUbiquitous: isUbiquitous, home: home)
                     return ([.cloudOnly(provider, bytes: Int64(logical))], false)
                 }
+                // A file that shares all its blocks with clones shows its share,
+                // so a file duplicated in Finder adds up to one copy (#376).
+                // The size floor still reads the whole allocated size: a copy
+                // of a big file is a big file to the person looking for it.
+                // Read only for a file past the floor, since a root's own
+                // entries cost a call each.
+                let rowBytes = size >= minBytes
+                    ? values.allocatedBytes.map { values.sharedBlocks().countedBytes(allocated: $0) }
+                    : nil
                 guard let file = listed(
-                    fileURL, size: size, lastUsed: max(accessed, modified),
+                    fileURL, size: size, rowBytes: rowBytes, lastUsed: max(accessed, modified),
                     minBytes: minBytes, staleDays: staleDays, now: now,
                     installedApps: installedApps, isExcluded: isExcluded,
                     home: home, downloadOnly: walk.downloadOnly
@@ -455,8 +464,12 @@ nonisolated final class LargeFileScanner {
         let accessDate: Date
         let modificationDate: Date
         let isPackage: () -> Bool
+        /// The blocks a file shares with clones. `URLResourceValues` has no
+        /// key for them, so for an entry read that way they are asked of the
+        /// file when the walk needs them.
+        let sharedBlocks: () -> SharedBlocks.FileState
 
-        init(_ values: URLResourceValues) {
+        init(_ values: URLResourceValues, url: URL) {
             // A package reads as a folder here, as it did in the walk's checks.
             isDirectory = values.isDirectory == true || values.isPackage == true
             isRegularFile = values.isRegularFile == true
@@ -466,6 +479,7 @@ nonisolated final class LargeFileScanner {
             modificationDate = values.contentModificationDate ?? .distantPast
             let isPackage = values.isPackage == true
             self.isPackage = { isPackage }
+            sharedBlocks = { SharedBlocks.state(ofFileAt: url.path) }
         }
 
         init(_ entry: ListingEntry, url: URL) {
@@ -476,6 +490,8 @@ nonisolated final class LargeFileScanner {
             accessDate = entry.accessDate
             modificationDate = entry.modificationDate
             isPackage = { (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true }
+            let sharedBlocks = entry.sharedBlocks
+            self.sharedBlocks = { sharedBlocks }
         }
     }
 
@@ -517,10 +533,12 @@ nonisolated final class LargeFileScanner {
     }
 
     /// The checks every listed item passes, file or bundle, and the row it
-    /// becomes. Nil when the item stays off the list.
+    /// becomes. Nil when the item stays off the list. `size` is what the size
+    /// floor compares, and the row shows `rowBytes` when given (#376).
     private static func listed(
         _ fileURL: URL,
         size: Int64,
+        rowBytes: Int64? = nil,
         lastUsed: Date,
         minBytes: Int64,
         staleDays: Int,
@@ -571,7 +589,7 @@ nonisolated final class LargeFileScanner {
 
         return LargeFile(
             path: fileURL.standardizedFileURL,
-            sizeBytes: size,
+            sizeBytes: rowBytes ?? size,
             lastUsed: lastUsed,
             category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
             syncsWithICloud: syncsWithICloud,
