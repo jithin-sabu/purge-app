@@ -137,6 +137,7 @@ final class PurgeStore: ObservableObject {
         case devTools = "Dev Tools"
         case largeFiles = "Large Files"
         case uninstaller = "App Uninstaller"
+        case photos = "Photos"
         case settings = "Settings"
         case about = "About"
 
@@ -149,6 +150,7 @@ final class PurgeStore: ObservableObject {
             case .devTools: return "hammer"
             case .largeFiles: return "tray.full"
             case .uninstaller: return "trash"
+            case .photos: return "photo.on.rectangle"
             case .settings: return "gearshape"
             case .about: return "info.circle"
             }
@@ -157,10 +159,10 @@ final class PurgeStore: ObservableObject {
         /// The sidebar groups the scan tabs by what Purge may do with what they find:
         /// caches it can clean, and the user's own things it only helps review.
         static let cleanTabs: [Tab] = [.appCaches, .devTools]
-        static let reviewTabs: [Tab] = [.largeFiles, .uninstaller]
+        static let reviewTabs: [Tab] = [.largeFiles, .uninstaller, .photos]
         static let utilityTabs: [Tab] = [.settings, .about]
 
-        /// The tabs ⌘1 … ⌘5 switch to, in sidebar order. Settings has ⌘, already.
+        /// The tabs ⌘1 … ⌘6 switch to, in sidebar order. Settings has ⌘, already.
         static let keyboardTabs: [Tab] = [.overview] + cleanTabs + reviewTabs
     }
 

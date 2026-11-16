@@ -25,6 +25,13 @@ struct ContentView: View {
     /// relaunch would silently hide most of the list on next open, with the only clue
     /// a few characters in a field the user has long forgotten typing.
     @State private var largeFilesSearchQuery = ""
+    @StateObject private var photosModel: PhotosLibraryStore
+
+    @MainActor
+    init(isLifecycleActive: Bool = true, photosModel: PhotosLibraryStore? = nil) {
+        self.isLifecycleActive = isLifecycleActive
+        _photosModel = StateObject(wrappedValue: photosModel ?? PhotosLibraryStore())
+    }
 
     /// Mirror of `store.largeFileDuplicates.index`, needed because the page header
     /// subtitle counts the same rows the Duplicates filter shows. The index lives
@@ -388,7 +395,7 @@ struct ContentView: View {
         case .devTools: categories = [.devTools]
         case .largeFiles: categories = [.largeFiles]
         case .uninstaller: categories = [.apps, .leftovers]
-        case .overview, .settings, .about: return .none
+        case .overview, .photos, .settings, .about: return .none
         }
         let phases = categories.map(store.overviewPhase(for:))
         // The Uninstaller covers two scans. Once one is redone and the other still
@@ -447,6 +454,8 @@ struct ContentView: View {
             largeFilesTabBody
         case .uninstaller:
             uninstallerTabBody
+        case .photos:
+            PhotosLibraryView(model: photosModel, isLifecycleActive: isLifecycleActive)
         case .settings:
             settingsTabBody
         }
@@ -624,11 +633,15 @@ struct ContentView: View {
             subtitleAccessory: parts == nil ? nil : folders,
             subtitleTail: parts.map { String(localized: "· \($0.tail)") }
         ) {
-            PageHeaderActionBar(
-                tab: store.selectedTab,
-                scanSelection: store.scanSelection,
-                largeFileSelection: store.largeFileSelection
-            )
+            if store.selectedTab == .photos {
+                PhotosHeaderActions(model: photosModel)
+            } else {
+                PageHeaderActionBar(
+                    tab: store.selectedTab,
+                    scanSelection: store.scanSelection,
+                    largeFileSelection: store.largeFileSelection
+                )
+            }
         }
     }
 
@@ -694,6 +707,8 @@ struct ContentView: View {
             return saved ?? uninstallerPageSubtitle
         case .settings:
             return nil
+        case .photos:
+            return String(localized: "Select individual items to review before removing")
         case .about:
             return nil
         }

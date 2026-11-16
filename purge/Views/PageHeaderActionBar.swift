@@ -103,7 +103,7 @@ struct PageHeaderActionBar: View {
             return store.hasFullDiskAccess ? largeFilesScan : nil
         case .uninstaller:
             return store.hasFullDiskAccess ? uninstallerScan : nil
-        case .settings, .about:
+        case .photos, .settings, .about:
             return nil
         }
     }
@@ -221,7 +221,7 @@ struct PageHeaderActionBar: View {
             return store.hasFullDiskAccess ? deleteSelectedLargeFiles : nil
         case .uninstaller:
             return store.hasFullDiskAccess ? uninstallerPrimary : nil
-        case .settings, .about:
+        case .photos, .settings, .about:
             return nil
         }
     }

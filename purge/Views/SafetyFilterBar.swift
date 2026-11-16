@@ -33,7 +33,7 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    /// ⌥⌘1 … ⌥⌘3. Plain ⌘1 … ⌘5 switch sidebar tabs.
+    /// ⌥⌘1 … ⌥⌘3. Plain ⌘1 … ⌘6 switch sidebar tabs.
     var shortcutDigit: Character {
         switch self {
         case .all: return "1"

@@ -20,6 +20,10 @@ patient, but safety reports get priority over everything else.
 
 ## How Purge protects you
 
+- **Photos Library.** Selected library items go through PhotoKit to Photos' Recently Deleted,
+  recoverable for 30 days unless permanently deleted sooner. iCloud Photos syncs
+  their removal to every device using the library. RAW+JPEG pairs and burst picks
+  are protected, and Photos is never part of automatic cleaning.
 - **Trash by default.** Files and folders are moved to the macOS Trash, so
   you can put them back until you empty it yourself. Purge has no button that
   empties the Trash. Some removals are for good. iOS simulators

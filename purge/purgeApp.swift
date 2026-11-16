@@ -283,7 +283,7 @@ private struct UninstallPurgeMenuItem: View {
     }
 }
 
-/// View > Overview … App Uninstaller on ⌘1 … ⌘5. Brings the window back first
+/// View > Overview … Photos on ⌘1 … ⌘6. Brings the window back first
 /// and waits for onboarding, the same as Settings…
 private struct TabMenuItems: View {
     let store: PurgeStore

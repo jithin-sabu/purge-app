@@ -120,6 +120,12 @@ Downloaded models are often the largest files on a Mac and are easy to forget. T
 
 Purge understands Ollama's content-addressed storage, so a model's size counts only the bytes that would actually be reclaimed rather than blobs shared with another model. A Hugging Face model is its whole cache folder, so a blob two snapshots share is counted once and never removed from under the other. Models always go to the Trash and are never part of Clean Safe Items or a scheduled clean. When an app keeps its own list of installed models that Purge can't update, the row says the app may still show the model as installed.
 
+### Photos Library
+
+Open **Photos** under Review to grant Photos access and review videos (largest known originals first), burst members, screenshots and screen recordings. Nothing starts selected. Photos' burst picks and representatives are kept; RAW+JPEG pairs are review-only because PhotoKit cannot remove just one original. Unknown sizes appear last, and iCloud originals are never downloaded.
+
+Selected items go through PhotoKit to Photos' **Recently Deleted**, recoverable for 30 days unless permanently deleted sooner. With iCloud Photos, removal syncs to every device using the library. Photos is separate from Scan Everything, Clean Safe Items, scheduled cleaning and filesystem cleanup history. Original sizes are not claimed as immediately freed disk space.
+
 ### App Uninstaller
 
 Dragging an app to the Trash leaves most of it behind: caches, preferences, containers, saved state, logs, cookies and website data, and login helpers pile up on disk. The Uninstaller removes the app and those leftovers in one pass.
@@ -187,7 +193,7 @@ Settings is a tab in the sidebar (⌘,) with five groups:
 |----------|--------|
 | ⌘R | Scan the current tab (Scan Everything on the Overview) |
 | ⇧⌘R | Scan Everything, from any tab |
-| ⌘1–⌘5 | Go to Overview, App Caches, Dev Tools, Large Files, or App Uninstaller |
+| ⌘1–⌘6 | Go to Overview, App Caches, Dev Tools, Large Files, App Uninstaller, or Photos |
 | ⌥⌘1–⌥⌘3 | Filter by All, Safe to Clean, or Check First, on App Caches and Dev Tools |
 | ⌘F | Search on Large Files and App Uninstaller |
 | ⌘, | Open Settings |
