@@ -150,7 +150,12 @@ and the one change it makes that outlasts the app:
   Settings. It only points the model downloads at a dead local address so
   macOS does not fetch them again. It stays in Device Management until you
   choose Download Again or remove it there. Download Again also asks macOS
-  for the models back.
+  for the models back. When a removal took nothing, the same button reads
+  Remove Profile and only removes the profile.
+- **One log read, after a failure only.** When a request fails, Purge reads
+  what the asset service, `assetsubscriptiond`, logged meanwhile with
+  `log show`, so the row's Details can show it. Private values stay redacted,
+  and nothing leaves the Mac unless you copy it into a report.
 - **Nothing automatic.** Neither scheduled cleaning nor Clean Safe Items ever
   touches the models.
 

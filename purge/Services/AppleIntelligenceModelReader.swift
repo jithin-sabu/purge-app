@@ -494,6 +494,14 @@ nonisolated enum AppleIntelligenceWorker {
         func detailLine(op: String, subject: String) -> String {
             "\(op) \(subject): \(error ?? "no reason given")"
         }
+
+        /// The connection to the service broke rather than the service saying
+        /// no. The service starts on demand and can go away mid-request, so
+        /// these are worth asking again; a release or a subscription asked
+        /// twice is the same request.
+        var isConnectionDrop: Bool {
+            AppleIntelligenceWorker.connectionProblem(domain: domain, code: code) != nil
+        }
     }
 
     /// The three ways the connection to macOS's asset service fails, in plain
@@ -516,11 +524,18 @@ nonisolated enum AppleIntelligenceWorker {
     /// The text behind the row's Details button, made to be pasted into a bug
     /// report: the Purge and macOS versions, then one line per failed call.
     /// The lines are the service's own words, so they stay as they came.
-    static func details(_ lines: [String], purge: String = AppleIntelligenceWorker.purgeVersion,
+    /// `serviceLog` is what the asset service itself logged meanwhile, which is
+    /// the only place its reason shows when it drops the connection (#343).
+    static func details(_ lines: [String], serviceLog: [String] = [],
+                        purge: String = AppleIntelligenceWorker.purgeVersion,
                         system: String = ProcessInfo.processInfo.operatingSystemVersionString) -> String? {
         guard !lines.isEmpty else { return nil }
         // A blank line between requests: each one wraps over several lines.
-        return (["Purge \(purge), macOS \(system)"] + lines).joined(separator: "\n\n")
+        var parts = ["Purge \(purge), macOS \(system)"] + lines
+        if !serviceLog.isEmpty {
+            parts.append((["assetsubscriptiond log:"] + serviceLog).joined(separator: "\n"))
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     static var purgeVersion: String {
@@ -615,6 +630,45 @@ nonisolated enum AppleIntelligenceWorker {
                            error: String(localized: "The asset service call stopped without an answer (status \(Int(output.status)))"))
         }
         return outcome(fromReply: reply)
+    }
+}
+
+/// What macOS's asset service, `assetsubscriptiond`, logged while Purge's
+/// requests ran. When the service drops the connection, the worker gets only
+/// NSCocoaErrorDomain 4097 and the reason is in this log (#343), so a failed
+/// request's details carry it. Read with `log show`, which keeps private
+/// values redacted; nothing is read unless a request failed.
+nonisolated enum AppleIntelligenceServiceLog {
+    /// The service's request handling (`UAFXPCService`, which also logs a
+    /// client it turns away and a relaunch), its faults, and its errors about
+    /// releasing. Its other errors are routine catalog checks, dozens a minute.
+    static let predicate = #"process == "assetsubscriptiond" AND (eventMessage CONTAINS "UAFXPCService" OR messageType == fault OR (messageType == error AND (eventMessage CONTAINS[c] "reset" OR eventMessage CONTAINS[c] "eliminat" OR eventMessage CONTAINS[c] "unauthorized")))"#
+
+    static let maxLines = 30
+    static let maxLineLength = 400
+
+    static func lines(since start: Date) async -> [String] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        guard let output = await ProcessRunner.runAsync(
+            executablePath: "/usr/bin/log",
+            arguments: ["show", "--start", formatter.string(from: start.addingTimeInterval(-2)),
+                        "--predicate", predicate, "--style", "compact"],
+            timeout: 30
+        ), output.succeeded else { return [] }
+        return parse(output.stdoutText)
+    }
+
+    /// One line per entry, newest last, each cut to a readable length. A
+    /// message's continuation lines and the header are left out.
+    static func parse(_ text: String) -> [String] {
+        let entries = text.split(whereSeparator: \.isNewline).map(String.init).filter { line in
+            line.first?.isNumber == true
+        }
+        return entries.suffix(maxLines).map { line in
+            line.count > maxLineLength ? String(line.prefix(maxLineLength)) + "…" : line
+        }
     }
 }
 

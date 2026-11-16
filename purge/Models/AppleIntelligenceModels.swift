@@ -202,6 +202,8 @@ nonisolated enum AppleIntelligenceOutcome: Equatable, Sendable {
     /// `reason` is short enough for the row. `details` is everything macOS
     /// answered, for the Details button; nil when Purge has no more to say (#343).
     case someLeft(removed: Int, left: Int, reason: String, details: String?)
+    /// The user stopped the removal between sets, and nothing failed.
+    case stopped(removed: Int, left: Int)
     /// The profile was never installed, so nothing was released.
     case profileNotInstalled
     case notReady(String, details: String?)
@@ -217,8 +219,34 @@ nonisolated enum AppleIntelligenceOutcome: Equatable, Sendable {
         switch self {
         case .someLeft(_, _, _, let details), .notReady(_, let details), .downloadRequestFailed(_, let details):
             return details
-        case .removed, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled:
+        case .removed, .stopped, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled:
             return nil
+        }
+    }
+
+    /// What the user can do after a failed Remove or Download Again, for the
+    /// row's Details. `undoTitle` is the title the button that lifts the block
+    /// has right now, so the steps name the button the row shows.
+    ///
+    /// A restart comes first: it lets go of a model something still holds
+    /// (RemoveMacAI's issue 38) and of a download stuck on the block (its issue
+    /// 109). The second step is what got the removal through on the macOS 27.3
+    /// beta, where the service dropped every release (its issue 123, #343).
+    func nextSteps(undoTitle: String) -> [String] {
+        switch self {
+        case .someLeft:
+            return [
+                String(localized: "Restart your Mac, then click Remove again."),
+                String(localized: "If they still stay, click \(undoTitle), leave your Mac on until macOS has finished downloading the models, then click Remove again."),
+            ]
+        case .downloadRequestFailed:
+            return [
+                String(localized: "Restart your Mac, then click Download Again."),
+                String(localized: "The profile is gone, so macOS also downloads the models by itself when you use a feature that needs them."),
+            ]
+        case .removed, .stopped, .notReady, .profileNotInstalled, .downloadRequested, .downloadNotStarted,
+             .profileStillInstalled:
+            return []
         }
     }
 }

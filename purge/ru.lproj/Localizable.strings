@@ -1053,7 +1053,15 @@
 "Show all" = "Показать все";
 "Show all items (⌥⌘1)" = "Показать все элементы (⌥⌘1)";
 "Show check-first items (⌥⌘3)" = "Показать элементы для проверки (⌥⌘3)";
-"Show everything macOS answered" = "Показать полный ответ macOS";
+"Show what to try and everything macOS answered" = "Показать, что можно попробовать, и полный ответ macOS";
+"What you can try" = "Что можно попробовать";
+"Restart your Mac, then click Remove again." = "Перезагрузите Mac и снова нажмите «Удалить».";
+"If they still stay, click %@, leave your Mac on until macOS has finished downloading the models, then click Remove again." = "Если модели всё равно остались, нажмите «%@», не выключайте Mac, пока macOS не скачает модели, и снова нажмите «Удалить».";
+"Restart your Mac, then click Download Again." = "Перезагрузите Mac и снова нажмите «Скачать снова».";
+"The profile is gone, so macOS also downloads the models by itself when you use a feature that needs them." = "Профиля больше нет, поэтому macOS сама скачает модели, когда вы воспользуетесь функцией, которой они нужны.";
+"Remove Profile" = "Удалить профиль";
+"Remove the profile so macOS can download and update the models again" = "Удалить профиль, чтобы macOS снова могла скачивать и обновлять модели";
+"Stopped: removed %lld, %lld left on this Mac" = "Остановлено: удалено %lld, на этом Mac осталось %lld";
 "Show in Dev Tools" = "Показать в инструментах разработчика";
 "Show in Finder" = "Показать в Finder";
 "Show in Finder\n%@" = "Показать в Finder\n%@";
