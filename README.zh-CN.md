@@ -14,6 +14,7 @@
   </p>
 
 <p>
+  <a href="https://purgemac.com"><img src="https://img.shields.io/badge/website-purgemac.com-blueviolet?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PHBhdGggZD0iTTIgMTJoMjAiLz48cGF0aCBkPSJNMTIgMmExNS4zIDE1LjMgMCAwIDEgNCAxMCAxNS4zIDE1LjMgMCAwIDEtNCAxMCAxNS4zIDE1LjMgMCAwIDEtNC0xMCAxNS4zIDE1LjMgMCAwIDEgNC0xMHoiLz48L3N2Zz4K" alt="网站" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jithin-sabu/purge-app/build.yml?branch=main&label=build" alt="构建状态" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="许可证：MIT" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=red" alt="最新版本" /></a>
@@ -391,7 +392,7 @@ Purge 不使用 AI。你扫描或清理的任何内容都不会发送给 AI 服�
 Purge 会删除文件，所以安全就是重点。以下几点值得了解：
 
 - **默认移到废纸篓**：文件和文件夹会移到 macOS 废纸篓，Purge 从不清空废纸篓。在你自己清空之前都可以恢复。iOS 模拟器和模拟器运行时通过 `simctl` 永久移除。Xcode 的 Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple 智能模型由 Apple 的资源服务释放，之后可以在 Purge 里重新下载。你选择通过包管理器移除的命令行工具和 Homebrew cask 应用会由该管理器永久删除。Docker Desktop 的数据文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
-- **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。[安全页面](https://purgemac.com/safety)列出了每个允许清理的位置，以及清理永远不会碰的所有内容，由应用的源代码生成。
+- **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。[安全页面](https://purgemac.com/safety/)列出了每个允许清理的位置，以及清理永远不会碰的所有内容，由应用的源代码生成。
 - **由你决定清理什么**：Purge 会显示哪些空间可以回收，由你决定清理哪些。
 - **root 辅助程序，默认关闭**：为了移动管理员安装的应用，Purge 可以安装一个以 root 身份运行的小型辅助程序。在你开启 **移除管理员锁定的应用，无需重复输入密码** 并在系统设置中批准之前，它一直是关闭的。它只做一件事：把卸载工具已批准的路径，或残留的 macOS 更新文件，移到你的废纸篓。它的源码在 `PurgeHelper/` 中。
 - **开源**：完整的删除逻辑（包括允许列表）都在这个仓库中，你可以阅读，也可以自己从源码构建。
