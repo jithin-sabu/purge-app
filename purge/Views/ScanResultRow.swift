@@ -271,7 +271,7 @@ struct ScanResultRow: View {
                 .font(AppStyle.Typography.headline)
                 .lineLimit(1)
 
-            Text(LocalizedStringKey(safetyInfo.explanation))
+            Text(safetyInfo.explanation)
                 .lineLimit(explanationLineLimit)
                 .truncationMode(.tail)
                 .font(AppStyle.Typography.metadata)

@@ -1246,10 +1246,10 @@ struct UninstallView: View {
             Image(systemName: symbol)
                 .font(.system(size: 38))
                 .foregroundStyle(AppColors.textSecondary)
-            Text(LocalizedStringKey(title))
+            Text(title)
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
             if let detail {
-                Text(LocalizedStringKey(detail))
+                Text(detail)
                     .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -1374,7 +1374,7 @@ private struct UninstallItemRow: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(LocalizedStringKey(item.safetyInfo.headline))
+                Text(item.safetyInfo.headline)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)

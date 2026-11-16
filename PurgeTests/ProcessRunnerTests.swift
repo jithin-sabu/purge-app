@@ -65,6 +65,45 @@ struct ProcessRunnerTests {
         #expect(Date().timeIntervalSince(started) < 15)
     }
 
+    /// After Foundation reaps a child, macOS can give its process ID to another program.
+    /// A timeout that fires while a grandchild still holds the pipes must not signal that
+    /// ID (#182).
+    @Test("No signal goes to a child that has already exited")
+    func noSignalAfterExit() async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try process.run()
+        process.waitUntilExit()
+
+        #expect(!ProcessRunner.signalIfRunning(process, SIGTERM))
+        #expect(!ProcessRunner.signalIfRunning(process, SIGKILL))
+    }
+
+    @Test("A running child still gets the signal")
+    func signalsRunningChild() async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["600"]
+        try process.run()
+        defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+
+        #expect(ProcessRunner.signalIfRunning(process, SIGTERM))
+        process.waitUntilExit()
+        #expect(process.terminationReason == .uncaughtSignal)
+        #expect(process.terminationStatus == SIGTERM)
+    }
+
+    /// The child exits at once, but a background grandchild keeps both pipes open, so the
+    /// runner reaches its timeout after the child is gone. It must still give up in time.
+    @Test("A grandchild holding the pipes after the child exits still times out")
+    func grandchildHoldingPipesTimesOut() async throws {
+        let started = Date()
+        let result = try #require(runShell("/bin/sleep 8 & exit 0", timeout: 1))
+
+        #expect(result.timedOut)
+        #expect(Date().timeIntervalSince(started) < 15)
+    }
+
     @Test("Exit status and stderr survive a failing command")
     func reportsFailure() async throws {
         let result = try #require(runShell("/bin/echo oops >&2; exit 3"))

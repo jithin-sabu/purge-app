@@ -1804,7 +1804,7 @@ private struct NeedsAdministratorPanel: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .accessibilityHidden(true)
 
-                Text(LocalizedStringKey(title))
+                Text(title)
                     .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .multilineTextAlignment(.center)
@@ -1816,7 +1816,7 @@ private struct NeedsAdministratorPanel: View {
                         .multilineTextAlignment(.center)
                 }
 
-                Text(LocalizedStringKey(explanation))
+                Text(explanation)
                     .font(AppStyle.Typography.sectionTitle.weight(.regular))
                     .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
