@@ -107,6 +107,13 @@ final class FakeScans {
         held.forEach { $0.finish() }
     }
 
+    /// Sends more events to every held App Caches scan, which stays open.
+    func yieldGeneral(_ events: [CacheScanEvent]) {
+        for continuation in heldGeneral {
+            events.forEach { continuation.yield($0) }
+        }
+    }
+
     /// Sends events to every held Dev Tools scan, which stays open.
     func yieldDeveloper(_ events: [DeveloperScanEvent]) {
         for continuation in heldDeveloper {

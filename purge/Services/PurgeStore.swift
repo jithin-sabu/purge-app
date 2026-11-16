@@ -5589,17 +5589,19 @@ final class PurgeStore: ObservableObject {
     /// at least one location has a resolved non-zero size, so they never appear and
     /// then vanish. A row's safety level (and any mid-scan user override or selection)
     /// is pinned to what was already published, so rows never switch sections mid-scan.
+    /// The pin only ever holds a more cautious level. A folder that joins a published
+    /// Safe row at Check First makes the row Check First, or Clean Safe Items and
+    /// scheduled cleans would move it with the Safe ones (#378).
     private func publishedCacheItems(from staged: [CacheItem]) -> [CacheItem] {
         let previousByID = Dictionary(cacheItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return staged.compactMap { item in
             let sized = item.locations.filter { $0.sizeBytes > 0 }
             guard !sized.isEmpty else { return nil }
             var published = sized.count == item.locations.count ? item : item.withLocations(sized)
-            if let previous = previousByID[published.id] {
-                if previous.safetyInfo.level != published.safetyInfo.level {
-                    published.safetyInfo = previous.safetyInfo
-                    published.appName = previous.appName
-                }
+            if let previous = previousByID[published.id],
+               previous.safetyInfo.level.sortOrder > published.safetyInfo.level.sortOrder {
+                published.safetyInfo = previous.safetyInfo
+                published.appName = previous.appName
             }
             // Hard safety net: only the two eligible risk tiers (safe / check
             // first) may surface. Anything else — an unclassified folder, or a
