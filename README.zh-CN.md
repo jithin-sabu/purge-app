@@ -26,6 +26,11 @@
 </p>
 
   <p>
+    网站：<a href="https://purgemac.com">purgemac.com</a><br/>
+    WIRED 报道：<a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/">This Totally Free App Can Free Up Space on Your Mac</a>
+  </p>
+
+  <p>
     <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>下载</b></a>
     &nbsp;·&nbsp;
     <a href="#安装">安装指南</a>
@@ -391,7 +396,7 @@ Purge 不使用 AI。你扫描或清理的任何内容都不会发送给 AI 服�
 Purge 会删除文件，所以安全就是重点。以下几点值得了解：
 
 - **默认移到废纸篓**：文件和文件夹会移到 macOS 废纸篓，Purge 从不清空废纸篓。在你自己清空之前都可以恢复。iOS 模拟器和模拟器运行时通过 `simctl` 永久移除。Xcode 的 Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple 智能模型由 Apple 的资源服务释放，之后可以在 Purge 里重新下载。你选择通过包管理器移除的命令行工具和 Homebrew cask 应用会由该管理器永久删除。Docker Desktop 的数据文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
-- **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。[安全页面](https://purgemac.com/safety)列出了每个允许清理的位置，以及清理永远不会碰的所有内容，由应用的源代码生成。
+- **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。[安全页面](https://purgemac.com/safety/)列出了每个允许清理的位置，以及清理永远不会碰的所有内容，由应用的源代码生成。
 - **由你决定清理什么**：Purge 会显示哪些空间可以回收，由你决定清理哪些。
 - **root 辅助程序，默认关闭**：为了移动管理员安装的应用，Purge 可以安装一个以 root 身份运行的小型辅助程序。在你开启 **移除管理员锁定的应用，无需重复输入密码** 并在系统设置中批准之前，它一直是关闭的。它只做一件事：把卸载工具已批准的路径，或残留的 macOS 更新文件，移到你的废纸篓。它的源码在 `PurgeHelper/` 中。
 - **开源**：完整的删除逻辑（包括允许列表）都在这个仓库中，你可以阅读，也可以自己从源码构建。

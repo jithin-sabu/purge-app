@@ -26,6 +26,11 @@
 </p>
 
   <p>
+    Website: <a href="https://purgemac.com">purgemac.com</a><br/>
+    Featured in WIRED: <a href="https://www.wired.com/story/this-totally-free-app-can-free-up-space-on-your-mac-purge/">This Totally Free App Can Free Up Space on Your Mac</a>
+  </p>
+
+  <p>
     <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>Download</b></a>
     &nbsp;·&nbsp;
     <a href="#installation">Install guide</a>
@@ -387,7 +392,7 @@ Purge does not use AI. Nothing you scan or clean is sent to an AI service.
 Purge deletes files, so safety is the point. A few things worth knowing:
 
 - **Trash by default**: Files and folders move to the macOS Trash, and Purge never empties it. You can restore them until you empty the Trash yourself. iOS simulators and simulator runtimes are deleted permanently through `simctl`. Xcode's Metal Toolchain is deleted permanently through `xcodebuild -deleteComponent` and downloads again when a project needs it. Time Machine local snapshots are deleted permanently through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again from Purge. Command-line tools and Homebrew cask apps you choose to remove through their package manager are deleted by that manager, permanently. Docker Desktop's data folder goes to the Trash. Purge does not run `docker system prune`.
-- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety) lists every allowed location and everything cleaning will never touch, generated from the app's source.
+- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety/) lists every allowed location and everything cleaning will never touch, generated from the app's source.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Root helper, off by default**: To move apps an administrator installed, Purge can install a small helper that runs as root. It stays off until you turn on **Remove admin-locked apps without a password** and approve it in System Settings. It does one thing: it moves a path the uninstaller approved, or a leftover macOS update file, to your Trash. Its source is in `PurgeHelper/`.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
