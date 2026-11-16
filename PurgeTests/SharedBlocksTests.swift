@@ -3,10 +3,9 @@ import Foundation
 import Testing
 @testable import Purge
 
-/// Scan sizes count an APFS clone set once and leave out purgeable files
-/// (#131). Real clones are made in temporary folders only, never the user's
+/// Scan sizes count an APFS clone set once (#131). Real clones are made in temporary folders only, never the user's
 /// own (#171).
-@Suite("Clones and purgeable files in scan sizes")
+@Suite("Clones in scan sizes")
 struct SharedBlocksTests {
     private let fm = FileManager.default
 
@@ -23,13 +22,14 @@ struct SharedBlocksTests {
         #expect(SharedBlocks.countedBytes(allocated: 90_112, flags: 0, cloneCount: 1) == 90_112)
     }
 
+    /// Only one of macOS's free-space figures counts purgeable space as free,
+    /// and at 0 a folder of such files fell out of the scan.
     @Test
-    func aPurgeableFileCountsNothing() {
+    func aPurgeableFileCountsLikeAnyOther() {
         let purgeable = UInt64(EF_IS_PURGEABLE)
-        #expect(SharedBlocks.countedBytes(allocated: 90_112, flags: purgeable, cloneCount: 1) == 0)
-        // Even a clone: macOS already counts the space as free.
-        let both = purgeable | UInt64(EF_SHARES_ALL_BLOCKS) | UInt64(EF_MAY_SHARE_BLOCKS)
-        #expect(SharedBlocks.countedBytes(allocated: 90_112, flags: both, cloneCount: 2) == 0)
+        #expect(SharedBlocks.countedBytes(allocated: 90_112, flags: purgeable, cloneCount: 1) == 90_112)
+        let clone = purgeable | UInt64(EF_SHARES_ALL_BLOCKS) | UInt64(EF_MAY_SHARE_BLOCKS)
+        #expect(SharedBlocks.countedBytes(allocated: 90_112, flags: clone, cloneCount: 2) == 45_056)
     }
 
     @Test
@@ -149,6 +149,62 @@ struct SharedBlocksTests {
         let bytes = try allocated(original)
         let changedBytes = try allocated(changed)
         #expect(FolderSizing.walkedSize(at: base, skipsPackages: false).bytes == 2 * ((bytes + 1) / 2) + changedBytes)
+    }
+
+    /// A file read on its own counts its share too, and a link counts as itself.
+    @Test(.enabled(if: countsClones))
+    func aSingleFileCountsItsShare() throws {
+        let base = try makeTemporaryDirectory()
+        defer { try? fm.removeItem(at: base) }
+        let original = base.appendingPathComponent("original")
+        let lone = base.appendingPathComponent("lone")
+        try write(200_000, to: original)
+        try write(200_000, to: lone)
+        try clone(original, to: base.appendingPathComponent("copy"))
+        let bytes = try allocated(original)
+
+        #expect(SharedBlocks.countedBytes(ofFileAt: original.path, allocated: bytes) == (bytes + 1) / 2)
+        #expect(SharedBlocks.countedBytes(ofFileAt: lone.path, allocated: bytes) == bytes)
+        let missing = base.appendingPathComponent("missing").path
+        #expect(SharedBlocks.countedBytes(ofFileAt: missing, allocated: 4_096) == 4_096)
+    }
+
+    /// A folder emptied entry by entry books what its row showed: the walker's
+    /// size for a folder of clones and a clone's share for a file, not `du`'s.
+    @Test(.enabled(if: countsClones))
+    func aContentsCleanBooksWhatTheRowShowed() throws {
+        let base = try makeTemporaryDirectory()
+        defer { try? fm.removeItem(at: base) }
+        let original = base.appendingPathComponent("original")
+        let copy = base.appendingPathComponent("copy")
+        let folder = base.appendingPathComponent("folder", isDirectory: true)
+        try write(300_000, to: original)
+        try clone(original, to: copy)
+        try clone(original, to: folder.appendingPathComponent("inside"))
+        let bytes = try allocated(original)
+
+        let sizes = FileDeleter.contentsEntrySizes([original, copy, folder])
+        #expect(sizes[original] == (bytes + 2) / 3)
+        #expect(sizes[copy] == (bytes + 2) / 3)
+        #expect(sizes[folder] == FolderSizing.measuredSize(at: folder))
+        #expect((sizes[folder] ?? .max) < bytes)
+    }
+
+    /// The loose-weight gate checks a bundle's walked size against its floor at
+    /// delete time. Counting a clone's share can only take a bundle under the
+    /// floor, so the gate refuses more, never less.
+    @Test(.enabled(if: countsClones))
+    func aClonedWeightBundleCanOnlyFallUnderTheGateFloor() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? fm.removeItem(at: home) }
+        let bundle = home.appendingPathComponent(".cache/Model.mlpackage", isDirectory: true)
+        let weights = bundle.appendingPathComponent("weights.bin")
+        try write(400_000, to: weights)
+        let floor = try allocated(weights) * 3 / 4
+
+        #expect(AIModelScanPolicy.isEligibleLooseWeight(bundle, home: home, sizeFloor: floor))
+        try clone(weights, to: home.appendingPathComponent("elsewhere/weights.bin"))
+        #expect(!AIModelScanPolicy.isEligibleLooseWeight(bundle, home: home, sizeFloor: floor))
     }
 
     /// Scans size their rows through the walker, so a row of clones shows what
