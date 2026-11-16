@@ -24,7 +24,7 @@ struct DevToolsView: View {
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
     /// view never observes the highlight; only the rows do.
-    @State private var keyboard = ScanListKeyboardController<DevRowKey>()
+    @State private var keyboard = ScanListKeyboardController()
 
     /// A row the keyboard can stand on. Project headers and their folders are
     /// rows of their own, as in Finder's list view.
@@ -1441,7 +1441,7 @@ struct DevToolsView: View {
                 // without re-rendering the list container.
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
                     TriStateCheckbox(title: "", state: projectSelectTriState(forGroupID: group.id)) {
-                        keyboard.highlight(.project(group.id))
+                        keyboard.highlight(DevRowKey.project(group.id))
                         toggleProjectEligibleSelection(groupID: group.id)
                     }
                     .accessibilityLabel("Select all \(group.displayName) items")
@@ -1449,7 +1449,7 @@ struct DevToolsView: View {
                 .frame(width: 24)
 
                 Button {
-                    keyboard.highlight(.project(group.id))
+                    keyboard.highlight(DevRowKey.project(group.id))
                     toggleProjectExpanded(group.id)
                 } label: {
                     HStack(alignment: .center, spacing: AppStyle.Spacing.small) {

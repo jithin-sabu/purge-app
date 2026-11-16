@@ -28,7 +28,7 @@ struct AppCachesView: View {
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
     /// view never observes the highlight; only the rows do.
-    @State private var keyboard = ScanListKeyboardController<String>()
+    @State private var keyboard = ScanListKeyboardController()
 
     @AppStorage(SafetyFilter.appCachesKey) private var filterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage(SortOption.appCachesKey) private var sortRaw: String = SortOption.sizeDesc.rawValue

@@ -227,8 +227,8 @@ struct ScanListKeyTests {
 @MainActor
 @Suite("Scan list ring follows the keyboard")
 struct ScanListRingTests {
-    private func controller(toggled: @escaping (String) -> Void = { _ in }) -> ScanListKeyboardController<String> {
-        let controller = ScanListKeyboardController<String>()
+    private func controller(toggled: @escaping (String) -> Void = { _ in }) -> ScanListKeyboardController {
+        let controller = ScanListKeyboardController()
         controller.update(
             rows: [["a"], ["b"], ["c"]],
             actions: ScanListKeyActions(
@@ -247,7 +247,7 @@ struct ScanListRingTests {
     func aClickMakesTheRowCurrentWithoutTheRing() {
         let controller = controller()
         controller.highlight("b")
-        #expect(controller.highlight.id == "b")
+        #expect(controller.highlight.id == AnyHashable("b"))
         #expect(!controller.highlight.showsRing)
     }
 
@@ -260,7 +260,7 @@ struct ScanListRingTests {
 
         #expect(controller.perform(.toggle, isRepeat: false))
         #expect(toggled == ["b"])
-        #expect(controller.highlight.id == "b")
+        #expect(controller.highlight.id == AnyHashable("b"))
         #expect(controller.highlight.showsRing)
     }
 
@@ -274,7 +274,7 @@ struct ScanListRingTests {
         controller.highlight("a")
         #expect(!controller.highlight.showsRing)
         controller.highlight("c")
-        #expect(controller.highlight.id == "c")
+        #expect(controller.highlight.id == AnyHashable("c"))
         #expect(!controller.highlight.showsRing)
     }
 

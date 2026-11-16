@@ -31,7 +31,7 @@ struct LargeFilesView: View {
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
     /// view never observes the highlight; only the rows do.
-    @State private var keyboard = ScanListKeyboardController<String>()
+    @State private var keyboard = ScanListKeyboardController()
 
     /// Pseudo-category shared with the real category chips via
     /// `store.largeFileCategoryFilter`, so chip selection stays single-select
@@ -825,7 +825,7 @@ private struct DuplicateGroupCard: View {
     /// Observed by the child rows, not here — the container itself must not
     /// re-render on selection.
     let selection: LargeFileSelection
-    let keyboard: ScanListKeyboardController<String>
+    let keyboard: ScanListKeyboardController
     let onToggle: (String) -> Void
     let onExclude: (LargeFile) -> Void
     let onExcludeFolder: (LargeFile) -> Void
@@ -1070,7 +1070,7 @@ private struct LargeFileRow: View {
     /// container, whose re-render is what reverts the scroll position.
     @ObservedObject var selection: LargeFileSelection
     /// Not observed here: the ring observes the highlight by itself.
-    let keyboard: ScanListKeyboardController<String>
+    let keyboard: ScanListKeyboardController
     /// How many byte-identical copies of this file the scan found, nil when it
     /// isn't part of a duplicate group. Passed as a plain value rather than by
     /// observing the index object: it only changes when the whole index does, and

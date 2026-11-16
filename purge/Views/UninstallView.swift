@@ -130,8 +130,8 @@ struct UninstallView: View {
 
     /// The keyboard highlight and keys (#96), one per section. Held as plain
     /// references so this view never observes a highlight; only the rows do.
-    @State private var appsKeyboard = ScanListKeyboardController<AppRowKey>()
-    @State private var leftoversKeyboard = ScanListKeyboardController<String>()
+    @State private var appsKeyboard = ScanListKeyboardController()
+    @State private var leftoversKeyboard = ScanListKeyboardController()
 
     /// A tile or row the keyboard can stand on: an app, or a vendor's group.
     enum AppRowKey: Hashable {
@@ -987,7 +987,7 @@ struct UninstallView: View {
             activityLabel: activityLabel(for: app),
             isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
             isFromLastScan: isFromLastScan,
-            onHighlight: { [appsKeyboard] in appsKeyboard.highlight(.app(app.id)) }
+            onHighlight: { [appsKeyboard] in appsKeyboard.highlight(AppRowKey.app(app.id)) }
         ) {
             store.toggleAppSelected(id: app.id)
         }
@@ -1010,11 +1010,11 @@ struct UninstallView: View {
                 isExpanded: isExpanded,
                 canSelect: !live.isEmpty,
                 onToggleExpanded: {
-                    appsKeyboard.highlight(.group(group.id))
+                    appsKeyboard.highlight(AppRowKey.group(group.id))
                     toggleListGroup(group.id)
                 },
                 onToggleSelection: {
-                    appsKeyboard.highlight(.group(group.id))
+                    appsKeyboard.highlight(AppRowKey.group(group.id))
                     toggleGroupSelection(apps)
                 }
             )
@@ -1095,11 +1095,11 @@ struct UninstallView: View {
                 isOpen: openGridGroupID == group.id,
                 canSelect: !live.isEmpty,
                 onToggleOpen: {
-                    appsKeyboard.highlight(.group(group.id))
+                    appsKeyboard.highlight(AppRowKey.group(group.id))
                     toggleGridGroup(group.id)
                 },
                 onToggleSelection: {
-                    appsKeyboard.highlight(.group(group.id))
+                    appsKeyboard.highlight(AppRowKey.group(group.id))
                     toggleGroupSelection(apps)
                 }
             )
@@ -1115,7 +1115,7 @@ struct UninstallView: View {
             activityLabel: activityLabel(for: app),
             isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
             isFromLastScan: isFromLastScan,
-            onHighlight: { [appsKeyboard] in appsKeyboard.highlight(.app(app.id)) }
+            onHighlight: { [appsKeyboard] in appsKeyboard.highlight(AppRowKey.app(app.id)) }
         ) {
             store.toggleAppSelected(id: app.id)
         }

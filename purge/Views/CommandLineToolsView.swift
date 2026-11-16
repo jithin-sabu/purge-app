@@ -11,7 +11,7 @@ struct CommandLineToolsSection: View {
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
     /// view never observes the highlight; only the rows do.
-    @State private var keyboard = ScanListKeyboardController<String>()
+    @State private var keyboard = ScanListKeyboardController()
 
     private var standalone: [StandaloneCommandLineTool] { store.commandLineTools.standalone }
     private var managed: [PackageManagerTool] { store.commandLineTools.managed }

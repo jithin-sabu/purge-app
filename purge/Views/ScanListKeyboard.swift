@@ -15,10 +15,16 @@ import SwiftUI
 // Rows are kept in view by asking the row's own AppKit view to scroll itself
 // visible, never through ScrollViewReader (see `LargeFilesView.resultsList`).
 
+// The two classes here hold row ids as `AnyHashable` and are not generic. A
+// generic class's deinit crashed the Swift 6.3 optimizer in CI's Release build
+// (swiftlang/swift#90150: generic class, MainActor default isolation, a macOS
+// 13 target). Tabs still pass their own id types; `ScanListKeyActions` and the
+// modifiers below convert at the edge.
+
 /// Which row of a scan list is current. Observed only by the rows.
 @MainActor
-final class ScanHighlight<ID: Hashable>: ObservableObject {
-    @Published var id: ID?
+final class ScanHighlight: ObservableObject {
+    @Published var id: AnyHashable?
     /// Whether the ring shows on the current row. Like a browser's
     /// `:focus-visible`, it shows once a list key is pressed and hides on the
     /// next click: a click still makes its row current, without the ring.
@@ -54,6 +60,27 @@ struct ScanListKeyActions<ID: Hashable> {
     var arrowsStepSideways = false
 }
 
+extension ScanListKeyActions {
+    /// The same actions on `AnyHashable` row ids, as the controller keeps them.
+    /// An id of another type matches no row.
+    func erased() -> ScanListKeyActions<AnyHashable> {
+        let row: (AnyHashable) -> ID? = { $0.base as? ID }
+        return ScanListKeyActions<AnyHashable>(
+            toggle: { row($0).map(toggle) ?? false },
+            trash: { row($0).map(trash) ?? false },
+            previewURL: { row($0).flatMap(previewURL) },
+            copyURLs: { row($0).map(copyURLs) ?? [] },
+            stillExists: { row($0).map(stillExists) ?? false },
+            parent: { row($0).flatMap(parent).map(AnyHashable.init) },
+            expand: { row($0).map(expand) ?? false },
+            collapse: { row($0).map(collapse) ?? false },
+            openGroup: { row($0).map(openGroup) ?? false },
+            closeGroup: { row($0).map(closeGroup) ?? false },
+            arrowsStepSideways: arrowsStepSideways
+        )
+    }
+}
+
 /// What the app-wide monitor needs from the controller of the tab that shows.
 @MainActor
 protocol ScanListKeyResponder: AnyObject {
@@ -65,24 +92,30 @@ protocol ScanListKeyResponder: AnyObject {
 }
 
 @MainActor
-final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
-    let highlight = ScanHighlight<ID>()
+final class ScanListKeyboardController: ScanListKeyResponder {
+    typealias RowID = AnyHashable
+
+    let highlight = ScanHighlight()
     let anchors = ScanRowAnchorRegistry()
 
-    private(set) var rows: [[ID]] = []
-    private var order: [ID] = []
-    private var orderSet: Set<ID> = []
-    private var actions: ScanListKeyActions<ID>?
+    private(set) var rows: [[RowID]] = []
+    private var order: [RowID] = []
+    private var orderSet: Set<RowID> = []
+    private var actions: ScanListKeyActions<RowID>?
     private var blocked: () -> Bool = { false }
     /// The order the highlight was last reconciled against.
-    private var reconciledOrder: [ID] = []
+    private var reconciledOrder: [RowID] = []
 
     var window: NSWindow? { anchors.window }
 
     var isBlocked: Bool { blocked() || !FirstRunGate.hasCompletedOnboarding }
 
     /// Called from the tab's body with the rows as drawn now.
-    func update(rows: [[ID]], actions: ScanListKeyActions<ID>, isBlocked: @escaping () -> Bool) {
+    func update<ID: Hashable>(rows: [[ID]], actions: ScanListKeyActions<ID>, isBlocked: @escaping () -> Bool) {
+        update(erasedRows: rows.map { $0.map(AnyHashable.init) }, actions: actions.erased(), isBlocked: isBlocked)
+    }
+
+    func update(erasedRows rows: [[RowID]], actions: ScanListKeyActions<RowID>, isBlocked: @escaping () -> Bool) {
         self.rows = rows
         self.actions = actions
         self.blocked = isBlocked
@@ -95,7 +128,11 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
 
     /// A click on a row makes it the current one, without the ring. No scroll:
     /// it is on screen.
-    func highlight(_ id: ID) {
+    func highlight<ID: Hashable>(_ id: ID) {
+        highlightRow(AnyHashable(id))
+    }
+
+    private func highlightRow(_ id: RowID) {
         if highlight.showsRing { highlight.showsRing = false }
         guard highlight.id != id else { return }
         highlight.id = id
@@ -103,12 +140,12 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
     }
 
     /// The list appeared with this order.
-    func orderDidAppear(_ order: [ID]) {
+    func orderDidAppear(_ order: [RowID]) {
         reconciledOrder = order
     }
 
     /// The list's order changed: a filter, a search, a scan, a trash, a group.
-    func orderDidChange(to newOrder: [ID]) {
+    func orderDidChange(to newOrder: [RowID]) {
         let oldOrder = reconciledOrder
         reconciledOrder = newOrder
         guard let current = highlight.id, let actions else { return }
@@ -125,7 +162,7 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
             if QuickLookPreview.isVisible { QuickLookPreview.close() }
             return
         }
-        anchors.requestScroll(to: AnyHashable(next), from: nil, direction: nil)
+        anchors.requestScroll(to: next, from: nil, direction: nil)
         followWithPreview(next)
     }
 
@@ -207,8 +244,8 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
     /// An arrow. A highlight scrolled out of sight counts as none, so the key
     /// starts from the first row on screen instead of yanking the list back.
     private func move(_ direction: ScanListHighlight.Direction) -> Bool {
-        let from = highlight.id.flatMap { orderSet.contains($0) && anchors.isOnScreen(AnyHashable($0)) ? $0 : nil }
-        let firstVisible = order.first { anchors.isMostlyVisible(AnyHashable($0)) }
+        let from = highlight.id.flatMap { orderSet.contains($0) && anchors.isOnScreen($0) ? $0 : nil }
+        let firstVisible = order.first { anchors.isMostlyVisible($0) }
         guard let next = ScanListHighlight.moved(from: from, direction, in: rows, firstVisible: firstVisible) else {
             return false
         }
@@ -216,15 +253,15 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
         return true
     }
 
-    private func moveHighlight(to next: ID, from: ID?, direction: ScanListHighlight.Direction) {
-        anchors.requestScroll(to: AnyHashable(next), from: from.map(AnyHashable.init), direction: direction)
+    private func moveHighlight(to next: RowID, from: RowID?, direction: ScanListHighlight.Direction) {
+        anchors.requestScroll(to: next, from: from, direction: direction)
         guard highlight.id != next else { return }
         highlight.id = next
         followWithPreview(next)
     }
 
     /// With the preview open, it follows the highlight, as in Finder.
-    private func followWithPreview(_ id: ID) {
+    private func followWithPreview(_ id: RowID) {
         guard QuickLookPreview.isVisible else { return }
         if let url = actions?.previewURL(id) {
             QuickLookPreview.update(url: url)
@@ -443,9 +480,9 @@ enum ScanListRingPlacement {
 }
 
 /// Draws the highlight ring on the current row.
-private struct ScanListHighlightRing<ID: Hashable>: View {
-    @ObservedObject var highlight: ScanHighlight<ID>
-    let id: ID
+private struct ScanListHighlightRing: View {
+    @ObservedObject var highlight: ScanHighlight
+    let id: AnyHashable
     let cornerRadius: CGFloat
     let placement: ScanListRingPlacement
 
@@ -472,12 +509,17 @@ extension View {
     /// Wires a scan list to the keys. `rows` is the order as drawn: one id per
     /// row in a list, up to four per row in a grid.
     func scanListKeyboard<ID: Hashable>(
-        _ controller: ScanListKeyboardController<ID>,
+        _ controller: ScanListKeyboardController,
         rows: [[ID]],
         actions: ScanListKeyActions<ID>,
         isBlocked: @escaping () -> Bool
     ) -> some View {
-        modifier(ScanListKeyboardModifier(controller: controller, rows: rows, actions: actions, isBlocked: isBlocked))
+        modifier(ScanListKeyboardModifier(
+            controller: controller,
+            rows: rows.map { $0.map(AnyHashable.init) },
+            actions: actions.erased(),
+            isBlocked: isBlocked
+        ))
     }
 
     /// Marks a row of a keyboard-wired scan list: the ring when it is current,
@@ -485,27 +527,28 @@ extension View {
     /// its padding, so the ring follows the card's edge.
     func scanListRow<ID: Hashable>(
         _ id: ID,
-        in controller: ScanListKeyboardController<ID>,
+        in controller: ScanListKeyboardController,
         cornerRadius: CGFloat = AppStyle.Radius.lg,
         ring placement: ScanListRingPlacement = .outside
     ) -> some View {
-        background(ScanRowAnchor(id: AnyHashable(id), registry: controller.anchors))
+        let rowID = AnyHashable(id)
+        return background(ScanRowAnchor(id: rowID, registry: controller.anchors))
             .overlay(ScanListHighlightRing(
-                highlight: controller.highlight, id: id, cornerRadius: cornerRadius, placement: placement
+                highlight: controller.highlight, id: rowID, cornerRadius: cornerRadius, placement: placement
             ))
     }
 }
 
-private struct ScanListKeyboardModifier<ID: Hashable>: ViewModifier {
-    let controller: ScanListKeyboardController<ID>
-    let rows: [[ID]]
-    let actions: ScanListKeyActions<ID>
+private struct ScanListKeyboardModifier: ViewModifier {
+    let controller: ScanListKeyboardController
+    let rows: [[AnyHashable]]
+    let actions: ScanListKeyActions<AnyHashable>
     let isBlocked: () -> Bool
 
     func body(content: Content) -> some View {
         let order = rows.flatMap { $0 }
         // Not observed state: the monitor reads it when a key comes in.
-        let _ = controller.update(rows: rows, actions: actions, isBlocked: isBlocked)
+        let _ = controller.update(erasedRows: rows, actions: actions, isBlocked: isBlocked)
         content
             .onAppear { ScanListKeyMonitor.shared.activate(controller) }
             .onDisappear { ScanListKeyMonitor.shared.deactivate(controller) }
@@ -515,9 +558,9 @@ private struct ScanListKeyboardModifier<ID: Hashable>: ViewModifier {
 
 /// Reconciles the highlight when the order changes. The previous order is
 /// kept on the controller, not in view state, so nothing here redraws the List.
-private struct OrderChangeObserver<ID: Hashable>: ViewModifier {
-    let order: [ID]
-    let controller: ScanListKeyboardController<ID>
+private struct OrderChangeObserver: ViewModifier {
+    let order: [AnyHashable]
+    let controller: ScanListKeyboardController
 
     func body(content: Content) -> some View {
         content
