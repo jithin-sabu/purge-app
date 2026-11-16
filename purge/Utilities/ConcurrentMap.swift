@@ -132,6 +132,14 @@ extension ConcurrentMap {
     /// `onValues` runs on a reading thread with the walk's lock held, so it
     /// must be quick. Blocks the calling thread; once `isCancelled` turns true
     /// it stops and returns the values handed out so far.
+    ///
+    /// Kept out of line, and `roots` is read once and copied into a buffer of
+    /// its own. In 1.16.0 the walk was inlined into Large Files' async scan,
+    /// and the optimized build let `items` take over `roots`' buffer without a
+    /// copy: growing `items` freed the buffer `roots` still pointed at. A root
+    /// folder with one visible entry then made the walk read a root that did
+    /// not exist, and Purge crashed a few seconds after every launch.
+    @inline(never)
     static func tree<Item, Value>(
         _ roots: [Item],
         width: Int,
@@ -139,11 +147,14 @@ extension ConcurrentMap {
         onValues: (([Value]) -> Void)? = nil,
         read: (Item) -> [TreeStep<Value, Item>]
     ) -> [Value] {
+        let rootCount = roots.count
         // Each node's steps, with children replaced by their node's index; nil
         // until the node is read.
-        var nodes: [[TreeStep<Value, Int>]?] = Array(repeating: nil, count: roots.count)
-        var items: [Item] = roots
-        var queue = Array(roots.indices.reversed())
+        var nodes: [[TreeStep<Value, Int>]?] = Array(repeating: nil, count: rootCount)
+        var items: [Item] = []
+        items.reserveCapacity(rootCount)
+        items.append(contentsOf: roots)
+        var queue = Array((0..<rootCount).reversed())
         var busy = 0
         let condition = NSCondition()
 
@@ -157,7 +168,7 @@ extension ConcurrentMap {
             var ready: [Value] = []
             while true {
                 if path.isEmpty {
-                    guard nextRoot < roots.count else { break }
+                    guard nextRoot < rootCount else { break }
                     path.append((nextRoot, 0))
                     nextRoot += 1
                 }

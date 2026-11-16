@@ -289,6 +289,26 @@ struct ConcurrentMapTests {
         #expect(delivered.all == [1, 2, 3])
     }
 
+    /// The shape that crashed 1.16.0 on launch: one root, read from an async
+    /// function the way Large Files reads it, whose only entry grows the walk
+    /// past the root array's first buffer.
+    @Test(arguments: [1, 2, 3, 40])
+    func aTreeFromAnAsyncScanWalksOnlyItsOwnRoot(entries: Int) async {
+        enum Folder { case top, entry(Int) }
+        let stop = CancellationFlag()
+        let values = await withTaskCancellationHandler {
+            ConcurrentMap.tree([Folder.top], width: 8, isCancelled: { stop.isRaised }) { folder -> [TreeStep<[Int], Folder>] in
+                switch folder {
+                case .top: return (0..<entries).map { .child(.entry($0)) }
+                case .entry(let index): return [.value([index])]
+                }
+            }
+        } onCancel: {
+            stop.raise()
+        }
+        #expect(values == (0..<entries).map { [$0] })
+    }
+
     @Test
     func aCancelledTreeStops() {
         let values = ConcurrentMap.tree([0], width: 4, isCancelled: { true }, read: steps)
