@@ -56,6 +56,10 @@ nonisolated final class LargeFileScanner {
     /// The rows as `scanStream` gives them, then one `.finished` with what the
     /// walk skipped: cloud-only placeholders, media libraries and roots it
     /// couldn't list (#230). A cancelled scan ends without the summary.
+    ///
+    /// `accessLedger` gives back the access times Purge's own Quick Look
+    /// previews and thumbnails moved (#373). It defaults to the shared one;
+    /// tests pass their own.
     func scanEvents(
         minBytes: Int64,
         staleDays: Int,
@@ -66,7 +70,8 @@ nonisolated final class LargeFileScanner {
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
         exclusions: ScanExclusions? = nil,
-        isExcluded: (@Sendable (URL) -> Bool)? = nil
+        isExcluded: (@Sendable (URL) -> Bool)? = nil,
+        accessLedger: FileAccessLedger? = nil
     ) -> AsyncStream<LargeFileScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
@@ -88,6 +93,7 @@ nonisolated final class LargeFileScanner {
                     home: home,
                     exclusions: exclusions,
                     isExcluded: isExcluded ?? { ExcludedPathsStore.isExcluded($0) },
+                    accessLedger: accessLedger ?? .shared,
                     continuation: continuation
                 )
             }
@@ -121,6 +127,7 @@ nonisolated final class LargeFileScanner {
         home: URL,
         exclusions: ScanExclusions?,
         isExcluded: @Sendable (URL) -> Bool,
+        accessLedger: FileAccessLedger,
         continuation: AsyncStream<LargeFileScanEvent>.Continuation
     ) async {
         let fm = FileManager.default
@@ -319,8 +326,13 @@ nonisolated final class LargeFileScanner {
                 // iCloud placeholder reports 0 here and a large logical `fileSize`;
                 // falling through on 0 would list files that aren't on this Mac.
                 let size = values.allocatedBytes ?? values.logicalBytes ?? 0
-                let accessed = values.accessDate
+                // Quick Look moves the access time when Purge previews a
+                // file or draws its thumbnail. The ledger gives back the one
+                // from before (#373).
                 let modified = values.modificationDate
+                let accessed = accessLedger.userAccess(
+                    of: fileURL, access: values.accessDate, modification: modified
+                )
 
                 // The placeholder still counts, under the provider that holds
                 // it, so the empty state can say the files exist but take no

@@ -143,9 +143,13 @@ nonisolated final class DuplicateFileDetector {
     }
 
     /// Stages 2 and 3 for one size bucket.
+    ///
+    /// Both reads run with access-time updates off. A file not read since it
+    /// was written would otherwise read "Last used Today" at the next scan
+    /// (#373).
     private static func confirmedGroups(paths: [Candidate], size: Int64) async -> [DuplicateGroup] {
         let sampled = await digest(paths) { url in
-            sampleDigest(of: url, size: size)
+            AccessTimeUpdates.off { sampleDigest(of: url, size: size) }
         }
         // Only sample-collisions are worth a full read; everything else is
         // already proven distinct.
@@ -156,7 +160,7 @@ nonisolated final class DuplicateFileDetector {
         if Task.isCancelled { return [] }
 
         let full = await digest(contested) { url in
-            fullDigest(of: url)
+            AccessTimeUpdates.off { fullDigest(of: url) }
         }
 
         return full.compactMap { digest, members in
