@@ -110,6 +110,21 @@ nonisolated enum ProcessRunner {
         }
     }
 
+    /// Sends `signal` to the child only while it is still ours (#182).
+    ///
+    /// The pipes can outlive the child: a grandchild that inherited them keeps them open
+    /// after the child exits. Foundation reaps an exited child on its own, and from then on
+    /// its process ID is free for macOS to give to another program. `isRunning` turns false
+    /// when Foundation reaps it, so checking it first keeps the signal off that program.
+    /// Until the reap the ID still names our child, even as a zombie.
+    ///
+    /// - Returns: `false` when the child had already exited and nothing was sent.
+    @discardableResult
+    static func signalIfRunning(_ process: Process, _ signal: Int32) -> Bool {
+        guard process.isRunning else { return false }
+        return kill(process.processIdentifier, signal) == 0
+    }
+
     private static func makeNonBlocking(_ fd: Int32) {
         let flags = fcntl(fd, F_GETFL, 0)
         guard flags >= 0 else { return }
@@ -144,11 +159,11 @@ nonisolated enum ProcessRunner {
                 result.timedOut = true
                 if !sentTerm {
                     sentTerm = true
-                    process.terminate()
+                    signalIfRunning(process, SIGTERM)
                 } else if !sentKill {
                     sentKill = true
                     // SIGTERM is only queued for a stopped process; SIGKILL always lands.
-                    kill(process.processIdentifier, SIGKILL)
+                    signalIfRunning(process, SIGKILL)
                 } else {
                     return result
                 }
