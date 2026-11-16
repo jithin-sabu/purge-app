@@ -59,10 +59,12 @@ enum AppSortOption: String, CaseIterable, Identifiable {
         return first.lowercased() + text.dropFirst()
     }
 
-    func sorted(_ apps: [InstalledApp]) -> [InstalledApp] {
+    /// `bytes` is the figure each tile shows, so the size sorts order by what
+    /// the user sees: the bundle plus its leftovers once they are measured.
+    func sorted(_ apps: [InstalledApp], bytes: (InstalledApp) -> Int64) -> [InstalledApp] {
         switch self {
-        case .largest: return apps.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
-        case .smallest: return apps.sorted { $0.bundleSizeBytes < $1.bundleSizeBytes }
+        case .largest: return apps.sorted { bytes($0) > bytes($1) }
+        case .smallest: return apps.sorted { bytes($0) < bytes($1) }
         case .nameAZ: return apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         case .recentlyUsed: return apps.sorted(by: Self.newerUse)
         }
@@ -720,18 +722,11 @@ struct UninstallView: View {
         }
     }
 
-    /// Size sorts key on the total shown on each tile (bundle + all leftovers),
-    /// but only once every app is measured — otherwise the grid would reshuffle
-    /// tile by tile as the background pass lands. Name and date never wait.
+    /// Size sorts key on the total shown on each tile (bundle + all leftovers).
+    /// `currentSort` holds them back as Name until every app is measured, or the
+    /// grid would reshuffle tile by tile as the background pass lands.
     private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
-        switch currentSort {
-        case .largest where store.hasMeasuredAllRemovableTotals:
-            return apps.sorted { store.removableBytes(for: $0) > store.removableBytes(for: $1) }
-        case .smallest where store.hasMeasuredAllRemovableTotals:
-            return apps.sorted { store.removableBytes(for: $0) < store.removableBytes(for: $1) }
-        default:
-            return currentSort.sorted(apps)
-        }
+        currentSort.sorted(apps, bytes: store.removableBytes(for:))
     }
 
     /// Relative date for the active date sort. Last-used sorts say "Not opened"

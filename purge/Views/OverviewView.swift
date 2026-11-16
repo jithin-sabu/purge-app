@@ -396,11 +396,11 @@ private struct OverviewCategoryRow: View {
         case .waiting where !isRecorded:
             // Nothing saved to show until its scan lands.
             EmptyView()
-        case _ where isEmptyLargeFiles:
+        case .ready where isEmptyLargeFiles, .notScanned where isEmptyLargeFiles:
             // "0%  0 bytes" gives the user nothing to act on. The filters do.
             Button(String(localized: "Change filter")) { store.selectedTab = .largeFiles }
                 .buttonStyle(.purge(.secondary))
-        default:
+        case .scanning, .waiting, .ready, .notScanned:
             HStack(spacing: AppStyle.Spacing.small) {
                 Text(OverviewCategoryStyle.shareText(share))
                     .font(AppStyle.Typography.metadata.numbers)

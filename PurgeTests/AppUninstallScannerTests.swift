@@ -190,7 +190,7 @@ struct AppSortOptionTests {
         let fresh = app(name: "Slack", opened: Date(timeIntervalSince1970: 2_000))
         let unknown = app(name: "Mystery", opened: nil)
 
-        let newestFirst = AppSortOption.recentlyUsed.sorted([stale, unknown, fresh, alsoStale])
+        let newestFirst = AppSortOption.recentlyUsed.sorted([stale, unknown, fresh, alsoStale], bytes: \.bundleSizeBytes)
         #expect(newestFirst.map(\.name) == ["Slack", "arc", "Zoom", "Mystery"])
     }
 
@@ -205,12 +205,12 @@ struct AppSortOptionTests {
         #expect(AppSortOption.nameAZ.activityLabel(for: opened, now: now) == nil)
     }
 
-    private func app(name: String, opened: Date?) -> InstalledApp {
+    private func app(name: String, opened: Date?, bundleBytes: Int64 = 1) -> InstalledApp {
         InstalledApp(
             name: name,
             bundleURL: URL(fileURLWithPath: "/Applications/\(name).app"),
             bundleID: nil,
-            bundleSizeBytes: 1,
+            bundleSizeBytes: bundleBytes,
             isRunning: false,
             lastOpened: opened
         )
@@ -232,7 +232,22 @@ struct AppSortOptionTests {
             bundleSizeBytes: 1,
             isRunning: false
         )
-        let sorted = AppSortOption.nameAZ.sorted([older, newer])
+        let sorted = AppSortOption.nameAZ.sorted([older, newer], bytes: \.bundleSizeBytes)
         #expect(sorted.map(\.name) == ["Arc", "zoom"])
+    }
+
+    /// The size sorts order by the figure on each tile, bundle plus leftovers,
+    /// not the bundle alone (#186). A small app with large leftovers comes first.
+    @Test
+    func sizeSortsUseTheFigureEachTileShows() {
+        let bigBundle = app(name: "Big Bundle", opened: nil, bundleBytes: 500)
+        let bigLeftovers = app(name: "Big Leftovers", opened: nil, bundleBytes: 100)
+        let shown: [String: Int64] = [bigBundle.id: 600, bigLeftovers.id: 900]
+        let bytes: (InstalledApp) -> Int64 = { shown[$0.id] ?? $0.bundleSizeBytes }
+
+        #expect(AppSortOption.largest.sorted([bigBundle, bigLeftovers], bytes: bytes).map(\.name)
+            == ["Big Leftovers", "Big Bundle"])
+        #expect(AppSortOption.smallest.sorted([bigLeftovers, bigBundle], bytes: bytes).map(\.name)
+            == ["Big Bundle", "Big Leftovers"])
     }
 }

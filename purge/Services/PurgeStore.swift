@@ -899,9 +899,12 @@ final class PurgeStore: ObservableObject {
                 switch category {
                 case .appCaches:
                     scanSelection.cacheIDs = Set(cacheItems.filter(countsAsSafeCleanup).map(\.id))
-                default:
+                case .devTools:
                     scanSelection.devToolIDs = Set(devTools.filter(countsAsSafeCleanup).map(\.id))
                     scanSelection.artifactIDs = Set(projectGroups.flatMap(\.artifacts).filter(countsAsSafeCleanup).map(\.id))
+                case .largeFiles, .apps, .leftovers:
+                    // Returned above: these rows have no safe figure to select.
+                    break
                 }
             }
         }
@@ -4687,7 +4690,9 @@ final class PurgeStore: ObservableObject {
                     projectGroupsFound += 1
                     coalesce.ingest(group)
                     scheduleProjectGroupFlush(coalesce: coalesce, generation: generation)
-                default:
+                case .devToolFound, .devToolSizeResolved, .simulatorFound, .simulatorSizeResolved,
+                     .runningSimulatorsFound, .simulatorRuntimeFound, .xcodeComponentFound:
+                    // The developer scan's stream carries these; project discovery never sends them.
                     break
                 }
             }
