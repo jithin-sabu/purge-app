@@ -247,6 +247,28 @@ struct LargeFileLastUsedTests {
         #expect(ledger.entry(for: file) != nil)
     }
 
+    @Test("An open after the walk saw the file shows the new date at once")
+    func openDuringScanShowsNewDate() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let file = try writeOldFile("memo.pdf", in: root, daysAgo: 40)
+        let seen = try #require(FileAccessLedger.Times(url: file))
+        let ledger = makeLedger(in: root)
+        defer { ledger.flush() }
+        try drawThumbnail(of: file, ledger: ledger)
+        let opened = Date().addingTimeInterval(-2 * day)
+        setTimes(file, access: opened, modification: Date(timeIntervalSince1970: seen.modification))
+
+        let shown = ledger.userAccess(
+            of: file,
+            access: Date(timeIntervalSince1970: seen.access),
+            modification: Date(timeIntervalSince1970: seen.modification)
+        )
+
+        #expect(abs(shown.timeIntervalSince(opened)) < 0.001)
+        #expect(ledger.entry(for: file) == nil)
+    }
+
     /// A file not read since it was written: the user's first plain `read()`
     /// would move the access time, but not after Quick Look's has. Kept, the
     /// entry would show the file older than it is for good.

@@ -105,7 +105,8 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
         // The walk read these times a moment ago, and Quick Look may have read
         // the file since. Only the file as it is now can say the user opened
         // it, or it was written, since Purge's read.
-        if let current = Times(url: url), entry.matches(current) {
+        let current = Times(url: url)
+        if let current, entry.matches(current) {
             return Date(timeIntervalSince1970: entry.userAccess)
         }
         lock.withLock {
@@ -115,7 +116,8 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
             loaded = entries
             scheduleWriteLocked()
         }
-        return access
+        // As the file is now: an open since the walk shows at once.
+        return current.map { Date(timeIntervalSince1970: $0.access) } ?? access
     }
 
     /// Notes what a read of Purge's did to the file at `url`, from its times
