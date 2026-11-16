@@ -14,7 +14,7 @@
   </p>
 
 <p>
-  <a href="https://purgemac.com"><img src="https://img.shields.io/badge/website-purgemac.com-000000" alt="Сайт" /></a>
+  <a href="https://purgemac.com"><img src="https://img.shields.io/badge/website-purgemac.com-blueviolet" alt="Сайт" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jithin-sabu/purge-app/build.yml?branch=main&label=build" alt="Статус сборки" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="Лицензия: MIT" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=red" alt="Последняя версия" /></a>
