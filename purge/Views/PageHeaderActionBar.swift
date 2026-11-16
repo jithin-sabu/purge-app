@@ -257,7 +257,7 @@ struct PageHeaderActionBar: View {
             selectedCount: count,
             isDisabled: count == 0 || store.isDeleting
         ) {
-            store.showDeletionSheet = true
+            store.presentSelectedDeletionSheet()
         }
     }
 

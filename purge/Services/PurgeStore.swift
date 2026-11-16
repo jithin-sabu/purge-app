@@ -321,7 +321,15 @@ final class PurgeStore: ObservableObject {
     /// See `ScanSelection` — decoupled selection for the App Caches / Dev Tools tabs.
     let scanSelection = ScanSelection()
     @Published var isScanningLargeFiles = false
-    @Published var showLargeFileDeletionSheet = false
+    @Published var showLargeFileDeletionSheet = false {
+        didSet {
+            guard !showLargeFileDeletionSheet else { return }
+            largeFileDeletionOverride = nil
+        }
+    }
+    /// The one file ⌘⌫ opened the Large Files sheet for. Nil means the sheet acts
+    /// on the selection. Cleared whenever the sheet closes (#96).
+    private(set) var largeFileDeletionOverride: [LargeFile]?
     /// The duplicate-cleanup review awaiting confirmation, or nil when closed.
     /// Drives a `.sheet(item:)`.
     @Published var pendingDuplicateCleanup: DuplicateCleanupRequest?
@@ -466,9 +474,21 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var pendingProjectArtifactPaths: Set<String> = []
     @Published var isDeleting = false
     @Published var errorMessage: String?
-    @Published var showDeletionSheet = false
+    /// Closing the sheet by any route (Cancel, Esc, the binding) drops its
+    /// override, so a single row opened from the keyboard can never come back as
+    /// the list of a later Clean Selected (#96).
+    @Published var showDeletionSheet = false {
+        didSet {
+            guard !showDeletionSheet else { return }
+            deletionSheetCandidates = nil
+            deletionSheetKeepsOtherSelections = false
+        }
+    }
     /// When set (e.g. tab-scoped cleanup), the confirmation sheet lists these instead of `deletionCandidates`.
     @Published var deletionSheetCandidates: [DeletionCandidate]?
+    /// True while the sheet shows one row opened with ⌘⌫. Its clean then unticks
+    /// only what it removed, instead of every tick in App Caches and Dev Tools.
+    private(set) var deletionSheetKeepsOtherSelections = false
     @Published var lastDeletionReport: DeletionReport?
     /// Live session behind the cleanup overlay for manual "Clean Selected" runs.
     /// Presented in `.cleaning` when deletion starts; flips to `.complete` in place.
@@ -701,6 +721,8 @@ final class PurgeStore: ObservableObject {
     /// After the primary confirm sheet runs, extra warnings may enqueue here.
     private var stagedDeletionCandidates: [DeletionCandidate]?
     private var stagedDeletionTrigger: CleanupTrigger = .manual
+    /// Set when the staged clean came from a ⌘⌫ sheet for one row (#96).
+    private var stagedDeletionKeepsOtherSelections = false
     /// Holds candidates between the primary sheet and the second high-risk alert.
     private var highRiskDeletionStagingCandidates: [DeletionCandidate]?
 
@@ -1233,9 +1255,54 @@ final class PurgeStore: ObservableObject {
         showDeletionSheet = true
     }
 
+    /// A row ⌘⌫ can act on in App Caches or Dev Tools (#96).
+    enum KeyboardDeletionTarget: Equatable {
+        case cache(id: String)
+        case devTool(id: String)
+        case artifact(id: String)
+    }
+
+    /// ⌘⌫ on one row (#96). Opens the same confirm sheet Clean Selected opens,
+    /// built from the same candidates, for this row alone, so it goes the same way:
+    /// the sheet, the friction alerts, then `FileDeleter.deleteItems` and
+    /// `DeletionSafetyPolicy.evaluate`. Its clean unticks only what it removed.
+    ///
+    /// False, and nothing opens, when the row is no longer listed (a saved row
+    /// from the last scan never is), a tool was not found on this Mac, or any part
+    /// would be deleted permanently instead of moved to the Trash. Simulators,
+    /// runtimes and Xcode components have no target case for that reason.
+    @discardableResult
+    func presentKeyboardDeletionSheet(_ target: KeyboardDeletionTarget) -> Bool {
+        guard !isDeleting, !isShowingReviewOrCleaning, !isAnotherSheetOpen else { return false }
+        let candidates: [DeletionCandidate]
+        switch target {
+        case .cache(let id):
+            guard let item = cacheItems.first(where: { $0.id == id }) else { return false }
+            candidates = DeletionCandidate.deletionCandidates(forCache: item)
+        case .devTool(let id):
+            guard let tool = devTools.first(where: { $0.id == id }), tool.isDetected else { return false }
+            candidates = tool.paths.map { devToolDeletionCandidate(tool, path: $0) }
+        case .artifact(let id):
+            guard let artifact = projectGroups.lazy.flatMap(\.artifacts).first(where: { $0.id == id }) else { return false }
+            candidates = [artifactDeletionCandidate(artifact)]
+        }
+        guard !candidates.isEmpty, permanentlyDeletedCandidateIDs(in: candidates).isEmpty else { return false }
+        presentDeletionSheet(candidates: candidates)
+        deletionSheetKeepsOtherSelections = true
+        return true
+    }
+
+    /// Clean Selected: the sheet lists the ticked rows, never a leftover override.
+    func presentSelectedDeletionSheet() {
+        deletionSheetCandidates = nil
+        deletionSheetKeepsOtherSelections = false
+        showDeletionSheet = true
+    }
+
     func dismissDeletionSheet() {
         showDeletionSheet = false
         deletionSheetCandidates = nil
+        deletionSheetKeepsOtherSelections = false
     }
 
     func presentDeletionSheetResolvingGit(candidates: [DeletionCandidate]) async {
@@ -1279,12 +1346,18 @@ final class PurgeStore: ObservableObject {
     }
 
     func userConfirmedDeletionFromPrimarySheet() {
+        // Only the open sheet's confirm counts. A second confirm (a double
+        // click, Return during the close) would otherwise find the ⌘⌫ row's
+        // override already cleared and stage every ticked row instead (#96).
+        guard showDeletionSheet else { return }
         let picks = deletionSheetCandidates ?? deletionCandidates
+        let keepsOtherSelections = deletionSheetKeepsOtherSelections
         guard !picks.isEmpty else {
             dismissDeletionSheet()
             return
         }
         dismissDeletionSheet()
+        stagedDeletionKeepsOtherSelections = keepsOtherSelections
         if picks.contains(where: { $0.safetyInfo.level == .unknown }) {
             highRiskDeletionStagingCandidates = picks
             showHighRiskDeletionSecondConfirm = true
@@ -1306,6 +1379,7 @@ final class PurgeStore: ObservableObject {
     func cancelHighRiskDeletionSecondStep() {
         showHighRiskDeletionSecondConfirm = false
         highRiskDeletionStagingCandidates = nil
+        stagedDeletionKeepsOtherSelections = false
     }
 
     /// The Not Sure alert. Those folders go to the Trash. A simulator, runtime or
@@ -1368,6 +1442,7 @@ final class PurgeStore: ObservableObject {
 
     func cancelDeletionFrictionFlow() {
         stagedDeletionCandidates = nil
+        stagedDeletionKeepsOtherSelections = false
         showMissingLockfileFriction = false
         showUncommittedGitFriction = false
     }
@@ -1403,6 +1478,8 @@ final class PurgeStore: ObservableObject {
     private func executeStagedDeletion(trigger: CleanupTrigger) async {
         guard let staged = stagedDeletionCandidates else { return }
         stagedDeletionCandidates = nil
+        let keepsOtherSelections = stagedDeletionKeepsOtherSelections
+        stagedDeletionKeepsOtherSelections = false
         guard claimConfirmedCleanOrExplain() else { return }
         // Same rule as safe cleanup: a row from a full scan whose access has since
         // been turned off stays where it is. Moving it would prompt.
@@ -1464,7 +1541,11 @@ final class PurgeStore: ObservableObject {
             incrementMovedToTrashTotal(by: movedBytes)
             deselectSkippedItems(report.skippedItems)
             reflectDeletionReportInScanState(report)
-            clearAllSelections()
+            if keepsOtherSelections {
+                dropSelectionsOfRemovedRows()
+            } else {
+                clearAllSelections()
+            }
             if defaults.bool(forKey: Self.pendingOnboardingCelebrationKey) {
                 publishOnboardingCelebrationIfNeeded(movedToTrashBytes: movedBytes)
             } else {
@@ -2147,6 +2228,17 @@ final class PurgeStore: ObservableObject {
         scanSelection.removeAll()
     }
 
+    /// After a ⌘⌫ clean of one row: untick only the rows that left the list, and
+    /// keep every other tick the user made (#96).
+    private func dropSelectionsOfRemovedRows() {
+        scanSelection.cacheIDs.formIntersection(cacheItems.map(\.id))
+        scanSelection.devToolIDs.formIntersection(devTools.filter(\.isDetected).map(\.id))
+        scanSelection.simulatorIDs.formIntersection(simulatorDevices.map(\.id))
+        scanSelection.simulatorRuntimeIDs.formIntersection(simulatorRuntimes.map(\.id))
+        scanSelection.xcodeComponentIDs.formIntersection(xcodeComponents.map(\.id))
+        scanSelection.artifactIDs.formIntersection(projectGroups.flatMap(\.artifacts).map(\.id))
+    }
+
     /// Drop any selections that the safety policy rejected so they don't keep
     /// reappearing in the staged set on the next confirmation.
     private func deselectSkippedItems(_ skipped: [SkippedDeletionItem]) {
@@ -2220,12 +2312,20 @@ final class PurgeStore: ObservableObject {
     /// picking which user document dies is not the app's judgement to make), so
     /// this exists only to say plainly what the selection does before it happens.
     var duplicateGroupsFullyConsumedBySelection: [DuplicateGroup] {
+        duplicateGroupsFullyConsumed(by: largeFileSelection.ids)
+    }
+
+    /// The same check for the files the Large Files sheet lists, which is the
+    /// selection or the one file ⌘⌫ opened it for.
+    var duplicateGroupsFullyConsumedBySheet: [DuplicateGroup] {
+        duplicateGroupsFullyConsumed(by: Set(largeFileDeletionSheetFiles.map(\.id)))
+    }
+
+    private func duplicateGroupsFullyConsumed(by ids: Set<String>) -> [DuplicateGroup] {
         let index = largeFileDuplicates.index
-        guard !index.isEmpty else { return [] }
-        let selected = largeFileSelection.ids
-        guard !selected.isEmpty else { return [] }
+        guard !index.isEmpty, !ids.isEmpty else { return [] }
         return index.groups.filter { group in
-            group.fileIDs.allSatisfy { selected.contains($0) }
+            group.fileIDs.allSatisfy { ids.contains($0) }
         }
     }
 
@@ -2390,7 +2490,29 @@ final class PurgeStore: ObservableObject {
 
     func presentLargeFileDeletionSheet() {
         guard !selectedTrashableLargeFiles.isEmpty else { return }
+        largeFileDeletionOverride = nil
         showLargeFileDeletionSheet = true
+    }
+
+    /// ⌘⌫ on one row (#96): the same sheet and the same route as Delete Selected,
+    /// for this file alone, ticked or not. False, and nothing opens, for a file
+    /// from iCloud Drive's own folder (never offered for the Trash), an excluded
+    /// one, or one no longer listed.
+    @discardableResult
+    func presentLargeFileDeletionSheet(for file: LargeFile) -> Bool {
+        guard file.canMoveToTrash,
+              !ExcludedPathsStore.isExcluded(file.path),
+              largeFiles.contains(where: { $0.id == file.id }),
+              !isDeleting, !isShowingReviewOrCleaning, !isAnotherSheetOpen
+        else { return false }
+        largeFileDeletionOverride = [file]
+        showLargeFileDeletionSheet = true
+        return true
+    }
+
+    /// What the Large Files sheet lists: the ⌘⌫ file, or else the selection.
+    var largeFileDeletionSheetFiles: [LargeFile] {
+        largeFileDeletionOverride ?? selectedTrashableLargeFiles
     }
 
     /// Opens the Remove Download review for the selection, or for `file` alone
@@ -2500,8 +2622,12 @@ final class PurgeStore: ObservableObject {
     }
 
     func confirmLargeFileDeletion() async {
+        // Only the open sheet's confirm counts; see `userConfirmedDeletionFromPrimarySheet`.
+        guard showLargeFileDeletionSheet else { return }
+        // Read before closing: closing the sheet drops the ⌘⌫ override.
+        let targets = largeFileDeletionSheetFiles
         showLargeFileDeletionSheet = false
-        await performLargeFileDeletion(targets: selectedTrashableLargeFiles)
+        await performLargeFileDeletion(targets: targets)
     }
 
     private func performLargeFileDeletion(targets: [LargeFile]) async {
@@ -2964,8 +3090,22 @@ final class PurgeStore: ObservableObject {
     /// Opens the orphan review sheet with the ticked leftovers, each carried in
     /// pre-selected so the sheet's own checkboxes start where the list left off.
     func requestOrphanCleanup() {
-        let items = orphanLeftovers
-            .filter { orphanSelectedIDs.contains($0.id) }
+        requestOrphanCleanup(items: orphanLeftovers.filter { orphanSelectedIDs.contains($0.id) })
+    }
+
+    /// ⌘⌫ on one leftover (#96): the same review sheet and route, for this row
+    /// alone. False when the row is no longer listed or a sheet or clean is up.
+    @discardableResult
+    func requestOrphanCleanup(forLeftoverID id: String) -> Bool {
+        guard let item = orphanLeftovers.first(where: { $0.id == id }),
+              !isShowingReviewOrCleaning, !isAnotherSheetOpen
+        else { return false }
+        requestOrphanCleanup(items: [item])
+        return orphanCleanupPlan != nil
+    }
+
+    private func requestOrphanCleanup(items: [UninstallItem]) {
+        let items = items
             .map { item -> UninstallItem in
                 var copy = item
                 copy.isSelected = true
@@ -3209,6 +3349,18 @@ final class PurgeStore: ObservableObject {
         let managed = selectedPackageManagerTools
         guard !tools.isEmpty || !managed.isEmpty else { return }
         commandLineToolRemovalPlan = CommandLineToolRemovalPlan(tools: tools, managed: managed)
+    }
+
+    /// ⌘⌫ on one standalone tool (#96): the same review sheet and route, for this
+    /// tool alone. A tool a package manager owns is refused, because its manager
+    /// deletes it permanently and ⌘⌫ only ever moves things to the Trash.
+    @discardableResult
+    func requestCommandLineToolRemoval(forToolID id: String) -> Bool {
+        guard let tool = commandLineTools.standalone.first(where: { $0.id == id }),
+              !isDeleting, !isShowingReviewOrCleaning, !isAnotherSheetOpen
+        else { return false }
+        commandLineToolRemovalPlan = CommandLineToolRemovalPlan(tools: [tool], managed: [])
+        return true
     }
 
     /// Closes the sheet, except while the removal runs.
@@ -3477,7 +3629,23 @@ final class PurgeStore: ObservableObject {
     /// unticks any leftover a kept app still claims, so the sheet shows upfront
     /// what the deletion pass would otherwise silently hold back.
     func requestUninstallSelectedApps() async {
-        let apps = selectedApps
+        await requestUninstall(apps: selectedApps)
+    }
+
+    /// ⌘⌫ on one app (#96): the same review sheet and route, for this app alone.
+    /// A Homebrew cask app is refused: its sheet's default button is Homebrew's
+    /// permanent uninstall, and ⌘⌫ only ever moves things to the Trash. Returns
+    /// nil when refused, else the task building the plan.
+    @discardableResult
+    func requestUninstall(appID id: String) -> Task<Void, Never>? {
+        guard let app = installedApps.first(where: { $0.id == id }),
+              app.homebrewCask == nil,
+              !isBuildingUninstallPlan, !isDeleting, !isShowingReviewOrCleaning, !isAnotherSheetOpen
+        else { return nil }
+        return Task { await requestUninstall(apps: [app]) }
+    }
+
+    private func requestUninstall(apps: [InstalledApp]) async {
         guard !apps.isEmpty, !isBuildingUninstallPlan, !isDeleting else { return }
         isBuildingUninstallPlan = true
         defer { isBuildingUninstallPlan = false }
