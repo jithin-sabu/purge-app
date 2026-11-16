@@ -77,6 +77,8 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
     /// service calls in from the main actor.
     private let queue = DispatchQueue(label: "io.getpurge.file-access-ledger", qos: .utility)
     private var writeScheduled = false
+    /// Raised by each `watch`, so the one before it stops checking.
+    private var watchGeneration = 0
 
     init(fileURL: URL, maxEntries: Int = 5_000) {
         self.fileURL = fileURL
@@ -105,51 +107,86 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
     }
 
     /// Notes what a read of Purge's did to the file at `url`, from its times
-    /// right before and right after the read. Nothing is kept when the access
-    /// time didn't move, or when the file was written in between.
+    /// right before and right after the read.
     func record(url: URL, before: Times?, after: Times?, now: Date = Date()) {
-        guard let before, let after,
-              Self.matches(before.modification, after.modification),
-              !Self.matches(before.access, after.access) else { return }
+        guard let before, let after else { return }
         let key = Self.key(url)
         queue.async { [self] in
-            lock.withLock {
-                var entries = loadLocked()
-                // A second read after the first: the user's time is still the
-                // one from before the first.
-                var userAccess = before.access
-                if let earlier = entries[key],
-                   Self.matches(earlier.causedAccess, before.access),
-                   Self.matches(earlier.modification, before.modification) {
-                    userAccess = earlier.userAccess
-                }
-                entries[key] = Entry(
-                    causedAccess: after.access,
-                    userAccess: userAccess,
-                    modification: after.modification,
-                    recorded: now.timeIntervalSince1970
-                )
-                if entries.count > maxEntries {
-                    let oldest = entries.sorted { $0.value.recorded < $1.value.recorded }
-                        .prefix(entries.count - maxEntries)
-                    for (path, _) in oldest { entries[path] = nil }
-                }
-                loaded = entries
-                scheduleWriteLocked()
-            }
+            _ = store(key: key, before: before, after: after, now: now)
         }
     }
 
     /// Notes what a read in another process does to the file at `url` over
     /// the next few seconds, for a reader that gives no sign when it is done:
-    /// the Quick Look panel. Call it before the read starts. A change after the
-    /// last check, such as the user opening the file, is the user's own.
+    /// the Quick Look panel. Call it before the read starts.
+    ///
+    /// The checks stop at the first move they keep, so a later change, such as
+    /// the user opening the file, is the user's own. They also stop when the
+    /// next `watch` starts: the panel shows one file at a time.
     func watch(_ url: URL, checks: [TimeInterval] = previewChecks) {
         let before = Times(url: url)
+        let key = Self.key(url)
+        let generation = lock.withLock {
+            watchGeneration += 1
+            return watchGeneration
+        }
+        let progress = WatchProgress()
         for delay in checks {
             queue.asyncAfter(deadline: .now() + delay) { [self] in
-                record(url: url, before: before, after: Times(url: url))
+                guard !progress.isDone,
+                      lock.withLock({ watchGeneration }) == generation,
+                      let before, let after = Times(url: url) else { return }
+                if store(key: key, before: before, after: after, now: Date()) {
+                    progress.isDone = true
+                }
             }
+        }
+    }
+
+    /// Whether a `watch` has kept its move. Read and written on `queue` only.
+    private final class WatchProgress: @unchecked Sendable {
+        var isDone = false
+    }
+
+    /// Keeps the user's access time from before a read that moved it. Runs on
+    /// `queue`. False when nothing was kept: the access time didn't move, the
+    /// file was written in between, or the file had not been read since it
+    /// was written.
+    private func store(key: String, before: Times, after: Times, now: Date) -> Bool {
+        guard Self.matches(before.modification, after.modification),
+              !Self.matches(before.access, after.access) else { return false }
+        return lock.withLock {
+            var entries = loadLocked()
+            // A second read after the first: the user's time is still the
+            // one from before the first.
+            var userAccess = before.access
+            if let earlier = entries[key],
+               Self.matches(earlier.causedAccess, before.access),
+               Self.matches(earlier.modification, before.modification) {
+                userAccess = earlier.userAccess
+            } else if before.access < before.modification - Self.matchTolerance {
+                // Not read since it was written. The user's first plain
+                // `read()` would have moved the access time; after Quick
+                // Look's it won't, so an entry could outlast the user's own
+                // use and make the file look older than it is. Quick Look's
+                // time shows instead, which keeps the file out of an age
+                // filter rather than in it.
+                return false
+            }
+            entries[key] = Entry(
+                causedAccess: after.access,
+                userAccess: userAccess,
+                modification: after.modification,
+                recorded: now.timeIntervalSince1970
+            )
+            if entries.count > maxEntries {
+                let oldest = entries.sorted { $0.value.recorded < $1.value.recorded }
+                    .prefix(entries.count - maxEntries)
+                for (path, _) in oldest { entries[path] = nil }
+            }
+            loaded = entries
+            scheduleWriteLocked()
+            return true
         }
     }
 
@@ -159,7 +196,8 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
         return lock.withLock { loadLocked()[Self.key(url)] }
     }
 
-    /// Waits for every pending record and writes the file now.
+    /// Waits for every pending record and writes the file now, if anything
+    /// changed. The write that was due later is then skipped.
     func flush() {
         queue.sync { writeNow() }
     }
@@ -192,6 +230,7 @@ nonisolated final class FileAccessLedger: @unchecked Sendable {
 
     private func writeNow() {
         let entries: [String: Entry]? = lock.withLock {
+            guard writeScheduled else { return nil }
             writeScheduled = false
             return loaded
         }
