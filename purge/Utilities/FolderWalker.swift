@@ -11,9 +11,16 @@ import Foundation
 ///
 /// It reads only. It opens folders to list them and never follows a link.
 ///
-/// What it counts matches `du -sk`:
+/// What it counts matches `du -sk`, except for APFS clones and purgeable files
+/// (#131):
 /// - every entry's allocated blocks, folders and links included, rounded up to
 ///   a kilobyte for the whole folder;
+/// - a file that is a full clone of others counts for an equal share of the
+///   blocks they all share, so a set of clones adds up to one copy wherever
+///   the copies are, and a clone of a file outside the folder counts for its
+///   share only (`SharedBlocks`);
+/// - nothing for a file APFS marks purgeable, which macOS already counts as
+///   free space;
 /// - a file with several hard links once per folder asked about (a `du` run
 ///   counts it once per run; scans gave each folder its own run);
 /// - nothing under a folder it cannot open, and no figure at all for a folder
@@ -68,8 +75,8 @@ nonisolated final class FolderWalker: @unchecked Sendable {
     /// The bytes allocated to the regular files under `root`, and the latest
     /// time one was read or changed, the way `FolderSizing.walkedSize` sums them
     /// file by file: every file counted, hard links and hidden files too, links
-    /// never followed, packages walked into. Nothing for a root that is not a
-    /// readable folder.
+    /// never followed, packages walked into. Clones and purgeable files count as
+    /// `SharedBlocks` says. Nothing for a root that is not a readable folder.
     func fileTotals(of root: String, isCancelled: () -> Bool = { Task.isCancelled }) -> (bytes: Int64, lastUsed: Date) {
         let request = Request(rootCount: 1, counting: .regularFiles, staysOnVolume: false, onRootDone: nil)
         walk([root], request: request, isCancelled: isCancelled)
@@ -378,6 +385,58 @@ nonisolated struct FileKey: Hashable {
     let fileID: UInt64
 }
 
+/// How much of a file's allocated space deleting it gives back on APFS (#131).
+///
+/// The allocated size counts blocks a file shares with its clones. A copy made
+/// with `clonefile` (Finder's Duplicate, `cp -c`, Xcode's build copies) reports
+/// the full size while it takes no new space, so adding up allocated sizes
+/// promised more than a clean could free: DerivedData on one Mac summed to
+/// 5.06 GB file by file and 4.09 GB with this rule.
+///
+/// - A file that shares all its blocks with `n` full clones, itself included,
+///   counts `allocated / n`. The clones add up to one copy wherever they are,
+///   and a clone of something outside the scan counts only its share.
+/// - A file that shares only some of its blocks has no count of who it shares
+///   them with, so it counts in full, as before.
+/// - A purgeable file counts nothing: macOS already counts its space as free
+///   and gives it back by itself when space runs low.
+///
+/// It reads `EF_SHARES_ALL_BLOCKS`, `EF_IS_PURGEABLE` and the clone count,
+/// never `ATTR_CMNEXT_PRIVATESIZE`, which walked a folder about 70% slower.
+/// On a volume that reports none of them, such as HFS+ or exFAT, every file
+/// counts its allocated size.
+nonisolated enum SharedBlocks {
+    /// The extended attributes asked for in each listing: flags and clone
+    /// count, or flags alone, or nothing, whichever this kernel takes. A bit
+    /// it doesn't know fails the whole listing with `EINVAL`.
+    static let attributes: attrgroup_t = {
+        let full = attrgroup_t(ATTR_CMNEXT_EXT_FLAGS) | attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT)
+        for candidate in [full, attrgroup_t(ATTR_CMNEXT_EXT_FLAGS)] where accepts(candidate) {
+            return candidate
+        }
+        return 0
+    }()
+
+    private static func accepts(_ forkattr: attrgroup_t) -> Bool {
+        var list = attrlist()
+        list.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        list.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
+        list.forkattr = forkattr
+        var buffer = [UInt8](repeating: 0, count: 64)
+        let options = UInt32(FSOPT_NOFOLLOW) | UInt32(FSOPT_ATTR_CMN_EXTENDED)
+        return buffer.withUnsafeMutableBytes { getattrlist("/", &list, $0.baseAddress, $0.count, options) } == 0
+    }
+
+    /// `flags` and `cloneCount` are nil when the volume did not report them.
+    static func countedBytes(allocated: Int64, flags: UInt64?, cloneCount: UInt32?) -> Int64 {
+        guard let flags else { return allocated }
+        if flags & UInt64(EF_IS_PURGEABLE) != 0 { return 0 }
+        guard flags & UInt64(EF_SHARES_ALL_BLOCKS) != 0, let cloneCount, cloneCount > 1 else { return allocated }
+        let clones = Int64(cloneCount)
+        return (allocated + clones - 1) / clones
+    }
+}
+
 /// Lists one directory with `getattrlistbulk`. One per walker thread, since it
 /// keeps a buffer.
 nonisolated final class DirectoryReader {
@@ -399,8 +458,13 @@ nonisolated final class DirectoryReader {
             list.commonattr |= attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_ACCTIME)
         }
         list.fileattr = attrgroup_t(ATTR_FILE_LINKCOUNT) | attrgroup_t(ATTR_FILE_ALLOCSIZE)
+        list.forkattr = SharedBlocks.attributes
         return list
     }
+
+    /// `FSOPT_ATTR_CMN_EXTENDED` when `SharedBlocks` asks for anything, so
+    /// `forkattr` is read as the extended common attributes.
+    private static let options = SharedBlocks.attributes == 0 ? UInt64(0) : UInt64(FSOPT_ATTR_CMN_EXTENDED)
 
     deinit {
         buffer.deallocate()
@@ -432,8 +496,8 @@ nonisolated final class DirectoryReader {
         while true {
             let count: Int32
             switch counting {
-            case .du: count = getattrlistbulk(fd, &attributes, buffer, Self.bufferSize, 0)
-            case .regularFiles: count = getattrlistbulk(fd, &attributesWithTimes, buffer, Self.bufferSize, 0)
+            case .du: count = getattrlistbulk(fd, &attributes, buffer, Self.bufferSize, Self.options)
+            case .regularFiles: count = getattrlistbulk(fd, &attributesWithTimes, buffer, Self.bufferSize, Self.options)
             }
             if count < 0, errno == EINTR { continue }
             if count < 0 {
@@ -453,7 +517,8 @@ nonisolated final class DirectoryReader {
     }
 
     /// Reads the fields in the order `getattrlistbulk` packs them: common
-    /// attributes by bit, then file attributes by bit.
+    /// attributes by bit, then file attributes by bit, then the extended
+    /// common attributes by bit.
     private func parse(
         _ entry: UnsafeMutableRawPointer,
         prefix: String,
@@ -515,14 +580,25 @@ nonisolated final class DirectoryReader {
         var allocated: Int64 = 0
         if returned.fileattr & attrgroup_t(ATTR_FILE_ALLOCSIZE) != 0 {
             allocated = field.loadUnaligned(as: Int64.self)
+            field += MemoryLayout<Int64>.size
         }
+        var flags: UInt64?
+        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_EXT_FLAGS) != 0 {
+            flags = field.loadUnaligned(as: UInt64.self)
+            field += MemoryLayout<UInt64>.size
+        }
+        var cloneCount: UInt32?
+        if returned.forkattr & attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT) != 0 {
+            cloneCount = field.loadUnaligned(as: UInt32.self)
+        }
+        let counted = SharedBlocks.countedBytes(allocated: max(0, allocated), flags: flags, cloneCount: cloneCount)
         if counting == .regularFiles {
             guard type == VREG.rawValue else { return }
-            reading.blocks += max(0, allocated)
+            reading.blocks += counted
             reading.latest = max(reading.latest, latest)
             return
         }
-        let blocks = (max(0, allocated) + 511) / 512
+        let blocks = (counted + 511) / 512
         if links > 1 {
             reading.linkedFiles.append((FileKey(device: device, fileID: fileID), blocks))
         } else {
