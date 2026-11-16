@@ -6412,6 +6412,21 @@ final class PurgeStore: ObservableObject {
         refreshUserOverridePaths()
 
         let resolved = resolvedAutomaticSafety(for: item)
+
+        // A mid-scan flush republishes `cacheItems` from the staged buffer, and the
+        // pin keeps the more cautious level, so the staged row has to change too or
+        // the next flush brings the old level back (#378). Only a staged row with
+        // exactly the folders the row showed: one that also holds a folder still
+        // being sized keeps its level, which may come from that folder.
+        let shown = Set(item.paths.map { $0.standardizedFileURL.path })
+        stagedGeneralCacheItems = stagedGeneralCacheItems.map { staged in
+            guard Set(staged.paths.map { $0.standardizedFileURL.path }) == shown else { return staged }
+            var reset = staged
+            reset.safetyInfo = resolved
+            reset.appName = resolved.headline
+            return reset
+        }
+
         withAnimation {
             cacheItems[index].safetyInfo = resolved
             cacheItems[index].appName = resolved.headline

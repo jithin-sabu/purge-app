@@ -128,4 +128,72 @@ struct CacheScanFlushFilterTests {
         #expect(await eventually { !store.isScanningGeneral })
         #expect(row()?.safetyInfo.level == .medium)
     }
+
+    /// `blender` is Safe in explanations.json, so Reset to Automatic makes its row Safe.
+    private static let safeKey = "blender"
+
+    /// A row the user marked Check First, as the scan reads it.
+    private static func markedCheckFirst(folder: String) -> CacheItem {
+        row(folder: folder, key: safeKey, level: .medium)
+    }
+
+    /// Reset to Automatic during a scan holds through the flushes after it.
+    /// The flushes republish the staged rows, so the reset has to reach them
+    /// too, or the pin would keep the old Check First level (#378).
+    @Test func aResetDuringTheScanHoldsThroughLaterFlushes() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        scans.hasAccess = true
+        try #require(ExplanationDatabase.record(forKey: Self.safeKey)?.tag == "safe")
+        let marked = Self.markedCheckFirst(folder: "com.purge.test.reset-\(UUID().uuidString)")
+        let other = Self.row(folder: "com.purge.test.reset-other-\(UUID().uuidString)")
+        scans.generalEvents = Self.events(for: [marked])
+        scans.holdsGeneral = true
+        let store = scans.makeStore()
+        func row() -> CacheItem? { store.cacheItems.first { $0.definitionKey == Self.safeKey } }
+
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { row()?.safetyInfo.level == .medium })
+        store.resetCacheItemToAutomatic(id: try #require(row()).id)
+        #expect(row()?.safetyInfo.level == .safe)
+
+        // Another row makes the store flush again.
+        scans.yieldGeneral(Self.events(for: [other]))
+        #expect(await eventually { store.cacheItems.contains { $0.definitionKey == other.definitionKey } })
+        #expect(row()?.safetyInfo.level == .safe)
+
+        scans.finishHeldGeneral()
+        #expect(await eventually { !store.isScanningGeneral })
+        #expect(row()?.safetyInfo.level == .safe)
+    }
+
+    /// A reset reaches only the folders the row showed. A Check First folder
+    /// that was found but not yet sized keeps the row Check First once it
+    /// lands, so Clean Safe Items never takes it.
+    @Test func aResetLeavesAFolderStillBeingSizedCheckFirst() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        scans.hasAccess = true
+        let marked = Self.markedCheckFirst(folder: "com.purge.test.reset-\(UUID().uuidString)")
+        let unsized = Self.row(folder: "com.purge.test.reset-unsized-\(UUID().uuidString)", key: Self.safeKey, level: .medium)
+        scans.generalEvents = Self.events(for: [marked]) + [.found(unsized)]
+        scans.holdsGeneral = true
+        let store = scans.makeStore()
+        func row() -> CacheItem? { store.cacheItems.first { $0.definitionKey == Self.safeKey } }
+        let unsizedPath = unsized.path.standardizedFileURL.path
+
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { row()?.safetyInfo.level == .medium })
+        store.resetCacheItemToAutomatic(id: try #require(row()).id)
+
+        scans.yieldGeneral([.sizeResolved(path: unsizedPath, sizeBytes: 1_000_000, lastModified: .distantPast)])
+        #expect(await eventually { row()?.locations.count == 2 })
+        #expect(row()?.safetyInfo.level == .medium)
+        #expect(!store.manualSafeCleanupCandidates().contains { $0.path.standardizedFileURL.path == unsizedPath })
+
+        scans.finishHeldGeneral()
+        #expect(await eventually { !store.isScanningGeneral })
+        #expect(row()?.safetyInfo.level == .medium)
+        #expect(!store.manualSafeCleanupCandidates().contains { $0.path.standardizedFileURL.path == unsizedPath })
+    }
 }
