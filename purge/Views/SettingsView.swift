@@ -790,7 +790,7 @@ struct SettingsView: View {
         switch loginItemFailure {
         case .enable where startup.launchesAtLogin, .disable where !startup.launchesAtLogin:
             loginItemFailure = nil
-        default:
+        case .enable, .disable, nil:
             break
         }
     }

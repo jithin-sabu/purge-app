@@ -200,14 +200,16 @@ struct MenuBarContentView: View {
     }
 
     private var canClean: Bool {
-        if case .ready = model.state { return true }
-        return false
+        switch model.state {
+        case .ready: return true
+        case .checking, .clear, .cleaning, .cleaned: return false
+        }
     }
 
     private var canScan: Bool {
         switch model.state {
         case .checking, .cleaning: return false
-        default: return true
+        case .clear, .ready, .cleaned: return true
         }
     }
 

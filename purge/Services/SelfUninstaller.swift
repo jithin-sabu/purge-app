@@ -188,7 +188,7 @@ final class SelfUninstaller: ObservableObject, Identifiable {
                 if !dataIsSplit { steps[index].state = .pending }
             case (_, .skipped):
                 steps[index].state = .pending
-            default:
+            case (.part, .failed), (.app, .failed), (_, .pending), (_, .working), (_, .done):
                 break
             }
         }

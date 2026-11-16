@@ -18,7 +18,7 @@ enum BrandRowIcon: Equatable {
             return a == b
         case (.glyph(let a), .glyph(let b)), (.appIcon(let a), .appIcon(let b)):
             return a === b
-        default:
+        case (.symbol, _), (.glyph, _), (.appIcon, _):
             return false
         }
     }

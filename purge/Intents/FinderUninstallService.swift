@@ -45,7 +45,7 @@ enum ExternalUninstallHandler {
             }
             guard let refusal = outcome.refusal else { return }
             offerToAddFolder(folder, title: refusal.title, detail: refusal.detail, urls: urls)
-        default:
+        case .noApp, .severalApps, .insideAnotherApp, .appleApp, .purgeItself:
             guard let refusal = outcome.refusal else { return }
             showRefusal(title: refusal.title, detail: refusal.detail)
         }

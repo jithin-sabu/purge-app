@@ -59,10 +59,12 @@ enum AppSortOption: String, CaseIterable, Identifiable {
         return first.lowercased() + text.dropFirst()
     }
 
-    func sorted(_ apps: [InstalledApp]) -> [InstalledApp] {
+    /// `bytes` is the figure each tile shows, so the size sorts order by what
+    /// the user sees: the bundle plus its leftovers once they are measured.
+    func sorted(_ apps: [InstalledApp], bytes: (InstalledApp) -> Int64) -> [InstalledApp] {
         switch self {
-        case .largest: return apps.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
-        case .smallest: return apps.sorted { $0.bundleSizeBytes < $1.bundleSizeBytes }
+        case .largest: return apps.sorted { bytes($0) > bytes($1) }
+        case .smallest: return apps.sorted { bytes($0) < bytes($1) }
         case .nameAZ: return apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         case .recentlyUsed: return apps.sorted(by: Self.newerUse)
         }
@@ -584,8 +586,9 @@ struct UninstallView: View {
             if case .group(let group, let apps) = entry { return .group(group, sortedApps(apps)) }
             return entry
         }
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
         func bytes(_ entry: AppListEntry) -> Int64 {
-            entry.apps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) }
+            displayedSize(for: entry.apps, savedPaths: savedPaths).bytes
         }
         func newest(_ entry: AppListEntry) -> Date? { entry.apps.compactMap(\.lastOpened).max() }
         func byName(_ lhs: AppListEntry, _ rhs: AppListEntry) -> Bool {
@@ -721,16 +724,13 @@ struct UninstallView: View {
     }
 
     /// Size sorts key on the total shown on each tile (bundle + all leftovers),
-    /// but only once every app is measured — otherwise the grid would reshuffle
-    /// tile by tile as the background pass lands. Name and date never wait.
+    /// including the saved total an app from the last scan shows. `currentSort`
+    /// holds them back as Name until every app is measured, or the grid would
+    /// reshuffle tile by tile as the background pass lands.
     private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
-        switch currentSort {
-        case .largest where store.hasMeasuredAllRemovableTotals:
-            return apps.sorted { store.removableBytes(for: $0) > store.removableBytes(for: $1) }
-        case .smallest where store.hasMeasuredAllRemovableTotals:
-            return apps.sorted { store.removableBytes(for: $0) < store.removableBytes(for: $1) }
-        default:
-            return currentSort.sorted(apps)
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
+        return currentSort.sorted(apps) { app in
+            displayedSize(for: app, isFromLastScan: savedPaths.contains(app.bundleURL.path)).bytes
         }
     }
 
