@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-12: Retry could move a scripts folder that had gained files
 
-**Found internally** in a deletion-safety review before 1.15.0 ([#362](https://github.com/jithin-sabu/purge-app/issues/362)), no report. **Fixed:** [#363](https://github.com/jithin-sabu/purge-app/pull/363), not yet released. **Affected:** v1.15.0.
+**Found internally** in a deletion-safety review before 1.15.0 ([#362](https://github.com/jithin-sabu/purge-app/issues/362)), no report. **Fixed:** [#363](https://github.com/jithin-sabu/purge-app/pull/363), shipped in v1.16.0 (2026-11-16). **Affected:** v1.15.0.
 
 ### What happened
 
