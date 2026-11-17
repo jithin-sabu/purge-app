@@ -247,7 +247,8 @@ enum LargeFileScanPolicy {
     /// a VM bundle (`.pvm`, `.utm`, `.vmwarevm`) that is not in use, under a scan
     /// root or a VM root, and a Safari download bundle in `~/Downloads`. A loose
     /// file in a VM root is never eligible; that walk lists bundles only. Nor is a
-    /// file inside either kind of bundle.
+    /// file inside either kind of bundle, or inside a folder shaped like an
+    /// Ollama store, which the walk skips.
     ///
     /// This is Large Files' own gate, not `DeletionSafetyPolicy.evaluate(_:)`:
     /// these are the user's files, which the cache allowlist refuses by design.
@@ -281,6 +282,14 @@ enum LargeFileScanPolicy {
         let realPath = real.path
         if realPath.contains("/Library/") || isInHomeLibrary(realPath, home: home) { return false }
         if isInsideExcludedDirectory(real) { return false }
+        // Nothing in a folder shaped like an Ollama store is a Large Files
+        // row, whether or not Purge knows the store is Ollama's. A blob
+        // trashed alone breaks every model that uses it.
+        if AIModelScanPolicy.isInsideOllamaStore(std) || AIModelScanPolicy.isInsideOllamaStore(real) { return false }
+        // Nor is the store itself, whatever it is named (`models.pvm`).
+        if isDir.boolValue, AIModelScanPolicy.isOllamaStore(std) || AIModelScanPolicy.isOllamaStore(real) {
+            return false
+        }
 
         func walkedPath(_ root: URL) -> String? {
             walkedFolder(for: root, home: home, volumes: volumes, isLocalDisk: isLocalDisk).map {
