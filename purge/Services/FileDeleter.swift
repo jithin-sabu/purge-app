@@ -290,6 +290,11 @@ nonisolated final class FileDeleter: Sendable {
         var installLeftovers: [URL] = []
         let volumeURL = FileManager.default.homeDirectoryForCurrentUser
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
+        // `evaluate` takes a project folder in a folder the user added (#318)
+        // only while that folder is on the list, so the list is read again from
+        // disk before anything moves. A folder removed in Settings, or on a drive
+        // that went away, is refused.
+        ScanFolders.refreshSnapshot()
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path

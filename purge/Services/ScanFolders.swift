@@ -127,22 +127,6 @@ nonisolated enum ScanFolders {
         return AppFolders.save(kept, to: file)
     }
 
-    /// Whether `path` is one of the saved folders or inside one, available or
-    /// not, by the saved spelling and with links resolved. Clean Safe Items
-    /// and scheduled cleans drop every such path, even from a drive that is
-    /// unplugged now.
-    static func isInsideSavedFolder(_ path: String, saved: [String]) -> Bool {
-        guard !saved.isEmpty else { return false }
-        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
-        return saved.contains { folder in
-            let folderResolved = URL(fileURLWithPath: folder).resolvingSymlinksInPath().standardizedFileURL.path
-            return [path, resolved].contains { candidate in
-                PathContainment.isSameOrInside(candidate, folder)
-                    || PathContainment.isSameOrInside(candidate, folderResolved)
-            }
-        }
-    }
-
     // MARK: Snapshot
 
     /// The walked folders as last read, for `DeletionSafetyPolicy.evaluate`,
@@ -151,26 +135,57 @@ nonisolated enum ScanFolders {
     /// the start of each Dev Projects scan and before each clean. Empty in the
     /// test host until a test binds `snapshotOverride`.
     static var snapshot: [String] {
-        if let snapshotOverride { return snapshotOverride }
-        return snapshotStore.withLock { $0 }
+        if let snapshotOverride { return snapshotOverride.walked }
+        return snapshotStore.withLock { $0.walked }
     }
 
-    /// Reads the list from disk and keeps the walked folders' paths. Off the
-    /// main thread: it asks each folder's disk about its file system.
+    /// Every saved folder as last read, walked or not, such as one on a drive
+    /// that is unplugged now.
+    static var savedSnapshot: [String] {
+        if let snapshotOverride { return snapshotOverride.saved }
+        return snapshotStore.withLock { $0.saved }
+    }
+
+    /// Reads the list from disk and keeps the folders' paths. Off the main
+    /// thread: it asks each folder's disk about its file system.
     @discardableResult
     static func refreshSnapshot(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
-        let roots = roots(home: home)
-        snapshotStore.withLock { $0 = roots.map { $0.standardizedFileURL.path } }
+        let all = entries(home: home)
+        let roots = all.filter(\.isAvailable).map(\.url)
+        let next = Snapshot(
+            walked: roots.map { $0.standardizedFileURL.path },
+            saved: all.map(\.path)
+        )
+        let changed = snapshotStore.withLock { stored -> Bool in
+            defer { stored = next }
+            return stored != next
+        }
+        // `isOfferedForCleanup` keeps `evaluate`'s answers, which read this list.
+        if changed { DeletionSafetyPolicy.clearOfferedForCleanupCache() }
         return roots
     }
 
-    /// The saved paths in the snapshot that hold `path`.
+    /// The walked folder that holds `path`, or nil.
     static func snapshotRoot(holding path: String) -> String? {
         snapshot.first { PathContainment.isSameOrInside(path, $0) }
     }
 
-    /// Tests bind this instead of saving a list.
-    @TaskLocal static var snapshotOverride: [String]?
+    /// Whether `path` is a saved folder or inside one, walked or not. Clean
+    /// Safe Items and scheduled cleans drop every such path, even one on a
+    /// drive that is unplugged now. Compared by spelling only, so nothing on
+    /// disk is read: the caller may be on the main thread, and without Full
+    /// Disk Access a `stat` through a link can raise a prompt.
+    static func isInsideSavedFolder(_ path: String) -> Bool {
+        savedSnapshot.contains { PathContainment.isSameOrInside(path, $0) }
+    }
 
-    private static let snapshotStore = OSAllocatedUnfairLock<[String]>(initialState: [])
+    struct Snapshot: Equatable, Sendable {
+        var walked: [String]
+        var saved: [String]
+    }
+
+    /// Tests bind this instead of saving a list.
+    @TaskLocal static var snapshotOverride: Snapshot?
+
+    private static let snapshotStore = OSAllocatedUnfairLock<Snapshot>(initialState: Snapshot(walked: [], saved: []))
 }

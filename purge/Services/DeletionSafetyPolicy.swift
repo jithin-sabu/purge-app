@@ -556,6 +556,14 @@ enum DeletionSafetyPolicy {
     private nonisolated static let offeredForCleanupLock = NSLock()
     nonisolated static let offeredForCleanupCacheLimit = 20_000
 
+    /// Drops every cached verdict. Called when the folders the user added for
+    /// Dev Projects change (#318), since `evaluate` reads that list.
+    nonisolated static func clearOfferedForCleanupCache() {
+        offeredForCleanupLock.lock()
+        offeredForCleanupCache.removeAll(keepingCapacity: true)
+        offeredForCleanupLock.unlock()
+    }
+
     /// How many verdicts are cached. For tests.
     nonisolated static var offeredForCleanupCacheCount: Int {
         offeredForCleanupLock.lock()
@@ -1434,10 +1442,27 @@ enum DeletionSafetyPolicy {
         return evaluate(resolved) == .blockedNeverDelete
     }
 
-    nonisolated static func isWhitelistedProjectArtifactPath(_ url: URL, home: String) -> Bool {
+    /// A project artifact by the catalog's rule, in the home folder or in a folder
+    /// the user added for Dev Projects (#318). An added folder counts only while it
+    /// is in the list read at the last scan or clean (`ScanFolders.snapshot`; tests
+    /// pass `addedRoots`) and only on a disk attached to this Mac. The bare
+    /// folder-name rule in `evaluate` stays home only.
+    nonisolated static func isWhitelistedProjectArtifactPath(
+        _ url: URL,
+        home: String,
+        addedRoots: [String]? = nil
+    ) -> Bool {
         let standardized = url.standardizedFileURL
         let path = standardized.path
-        guard PathContainment.isSameOrInside(path, home) else { return false }
+        let base: String
+        if PathContainment.isSameOrInside(path, home) {
+            base = home
+        } else if let added = (addedRoots ?? ScanFolders.snapshot).first(where: { PathContainment.isInside(path, $0) }),
+                  AppFolders.isOnLocalDisk(standardized) {
+            base = added
+        } else {
+            return false
+        }
 
         guard let candidates = ProjectArtifactCatalog.rulesByFolderName[standardized.lastPathComponent] else {
             return false
@@ -1452,7 +1477,7 @@ enum DeletionSafetyPolicy {
             let depth = rule.folder.split(separator: "/").count
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
-            guard PathContainment.isSameOrInside(root.path, home) else { continue }
+            guard PathContainment.isSameOrInside(root.path, base) else { continue }
             guard rule.matchesRoot(root) else { continue }
             // Checked here rather than only in the scanner so that no caller can route
             // around it: a `.terraform` folder holding state is never deletable.

@@ -195,6 +195,9 @@ nonisolated enum ProjectCheckFirstReason: Hashable {
     case usedRecently
     /// The activity walk hit its limit, so recent use could not be ruled out.
     case tooBigToCheck
+    /// In a folder the user added in Settings (#318), most often on a drive.
+    /// Never part of Clean Safe Items or scheduled cleans, so the user picks it.
+    case addedFolder
 
     /// One line for the project card header, which says why once for every folder.
     var summary: String {
@@ -203,6 +206,8 @@ nonisolated enum ProjectCheckFirstReason: Hashable {
             return String(localized: "Worked on in the last 6 months, so Purge won't clean it without asking.")
         case .tooBigToCheck:
             return String(localized: "Too big to check for recent changes, so Purge won't clean it without asking.")
+        case .addedFolder:
+            return String(localized: "In a folder you added, so Purge won't clean it without asking.")
         }
     }
 }

@@ -880,6 +880,9 @@ final class PurgeStore: ObservableObject {
         artifact.safetyInfo.level == .safe
             && artifact.reinstallSafety != .missingLockfile
             && artifact.gitStatus == .clean
+            // A folder in a folder the user added is theirs to pick, even when
+            // overridden to Safe (#318).
+            && artifact.checkFirstReason != .addedFolder
     }
 
     /// Opening App Caches or Dev Tools from its Overview row, whose one line is the
@@ -1182,6 +1185,11 @@ final class PurgeStore: ObservableObject {
         return candidates
             .filter { candidate in
                 let path = candidate.path.standardizedFileURL.path
+                // Nothing in a folder the user added for Large Files and Dev
+                // Projects, whatever row it came from and whether or not its
+                // drive is plugged in (#318). Manual and scheduled cleans both
+                // take their list from here.
+                guard !ScanFolders.isInsideSavedFolder(path) else { return false }
                 guard !seenPaths.contains(path) else { return false }
                 seenPaths.insert(path)
                 return true

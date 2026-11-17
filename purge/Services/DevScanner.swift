@@ -1192,7 +1192,7 @@ nonisolated final class DevScanner {
     ) async -> [ProjectGroup] {
         let walkStart = Date()
         let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
-            in: roots ?? Self.projectSearchRoots(home: home),
+            in: roots ?? (Self.projectSearchRoots(home: home) + Self.addedSearchRoots(home: home, access: access)),
             home: home,
             access: access,
             maxDepth: maxDepth,
@@ -1226,6 +1226,23 @@ nonisolated final class DevScanner {
             detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
         )
         return groups
+    }
+
+    /// The folders the user added in Settings (#318), read again from disk, which
+    /// also refreshes the list `DeletionSafetyPolicy.evaluate` reads for this
+    /// scan's rows. Without Full Disk Access only those inside the home folder
+    /// are walked: a folder on another drive raises macOS's removable volume
+    /// prompt, which a limited scan never does. Decided on the path alone, so
+    /// nothing on the drive is read first.
+    nonisolated static func addedSearchRoots(home: URL, access: ScanAccess) -> [URL] {
+        let added = ScanFolders.refreshSnapshot(home: home)
+        switch access {
+        case .full:
+            return added
+        case .limited:
+            let homePath = home.standardizedFileURL.path
+            return added.filter { PathContainment.isInside($0.standardizedFileURL.path, homePath) }
+        }
     }
 
     /// The folders project discovery starts from. Home itself is walked one level
@@ -1611,6 +1628,11 @@ nonisolated final class DevScanner {
         case .none:
             checkFirstReason = nil
         }
+        // A project in a folder the user added is the user's to pick, folder by
+        // folder, whatever its activity says (#318).
+        let reason = ScanFolders.snapshotRoot(holding: rootURL.standardizedFileURL.path) == nil
+            ? checkFirstReason
+            : .addedFolder
 
         let artifactPaths = rows.map(\.path)
         let sizesByPath = FolderSizing.directorySizes(at: artifactPaths, split: .spread)
@@ -1628,12 +1650,12 @@ nonisolated final class DevScanner {
                     sizeBytes: bytes,
                     lastModified: modified,
                     isSelected: false,
-                    safetyInfo: checkFirstReason == nil
+                    safetyInfo: reason == nil
                         ? row.safetyInfo
                         : row.safetyInfo.heldAtCheckFirst(path: row.path),
                     reinstallSafety: row.reinstallSafety,
                     gitStatus: .unknown,
-                    checkFirstReason: checkFirstReason
+                    checkFirstReason: reason
                 )
             )
         }

@@ -418,6 +418,7 @@ nonisolated struct SavedProjectGroup: Codable, Equatable, Sendable {
         switch reason {
         case .usedRecently: return "usedRecently"
         case .tooBigToCheck: return "tooBigToCheck"
+        case .addedFolder: return "addedFolder"
         }
     }
 
@@ -425,6 +426,7 @@ nonisolated struct SavedProjectGroup: Codable, Equatable, Sendable {
         switch name {
         case "usedRecently": return .usedRecently
         case "tooBigToCheck": return .tooBigToCheck
+        case "addedFolder": return .addedFolder
         default: return nil
         }
     }

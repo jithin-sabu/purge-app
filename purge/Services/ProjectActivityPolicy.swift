@@ -163,11 +163,21 @@ nonisolated enum ProjectActivityPolicy {
 
     /// The git dir of the repository holding the project, which may sit above it in
     /// a monorepo. Stops below home: a dotfiles repo at `~` would make every project
-    /// look busy.
+    /// look busy. A project in a folder the user added (#318) is looked for up to
+    /// that folder, the folder itself included, so a project on a drive keeps
+    /// its in-use and recent-work signals.
     static func gitDirectory(forProject projectRoot: URL, access: ScanAccess, home: URL) -> URL? {
         let homePath = home.path
+        let projectPath = projectRoot.standardizedFileURL.path
+        let addedRoot = PathContainment.isInside(projectPath, homePath)
+            ? nil
+            : ScanFolders.snapshotRoot(holding: projectPath)
+        func isWithinBoundary(_ path: String) -> Bool {
+            if let addedRoot { return PathContainment.isSameOrInside(path, addedRoot) }
+            return PathContainment.isInside(path, homePath)
+        }
         var candidate = projectRoot
-        while PathContainment.isInside(candidate.path, homePath) {
+        while isWithinBoundary(candidate.standardizedFileURL.path) {
             let dotGit = candidate.appendingPathComponent(".git", isDirectory: false)
             if modificationDate(dotGit) != nil {
                 guard ProtectedLocations.isReadable(dotGit, access: access, home: home),
