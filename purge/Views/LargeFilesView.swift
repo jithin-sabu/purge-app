@@ -20,6 +20,8 @@ struct LargeFilesView: View {
     /// Bumped when a scan finishes to reset the results List's identity (and thus
     /// its scroll to the top). Kept out of selection so toggles never reset scroll.
     @State private var scanGeneration = 0
+    @State private var hiddenExpanded = false
+    @State private var selectedHiddenPaths = Set<String>()
 
     /// Mirror of `store.largeFileDuplicates.index`, kept as local state rather
     /// than by `@ObservedObject`-ing the index object: this view owns the chip
@@ -421,16 +423,71 @@ struct LargeFilesView: View {
     }
 
     private var listStack: some View {
-        ZStack {
-            listOrPlaceholder
+        VStack(spacing: 0) {
+            ZStack {
+                listOrPlaceholder
 
-            if store.isDeleting && !visibleFiles.isEmpty {
-                CleaningOverlay()
+                if store.isDeleting && !visibleFiles.isEmpty {
+                    CleaningOverlay()
+                }
             }
+            hiddenSection
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The last scan's glass lifts as the first file lands (#283).
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: store.largeFilesLastScan == nil)
+    }
+
+    private var hiddenSection: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            HStack {
+                Button {
+                    hiddenExpanded.toggle()
+                } label: {
+                    Label("Hidden (\(store.hiddenLargeFiles.count))", systemImage: hiddenExpanded ? "chevron.down" : "chevron.right")
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                if hiddenExpanded {
+                    Button("Unhide Selected") {
+                        store.unhideLargeFiles(selectedHiddenPaths)
+                        selectedHiddenPaths.removeAll()
+                    }
+                    .buttonStyle(.purge(.secondary))
+                    .disabled(selectedHiddenPaths.isEmpty || store.isDeleting)
+                }
+            }
+            if hiddenExpanded {
+                if store.hiddenLargeFiles.isEmpty {
+                    Text("Select files and choose Hide Selected to keep them here.")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+                            ForEach(store.hiddenLargeFiles) { file in
+                                Toggle(isOn: Binding(
+                                    get: { selectedHiddenPaths.contains(file.path) },
+                                    set: { selected in
+                                        if selected { selectedHiddenPaths.insert(file.path) }
+                                        else { selectedHiddenPaths.remove(file.path) }
+                                    }
+                                )) {
+                                    VStack(alignment: .leading) {
+                                        Text(file.displayName)
+                                        Text(file.path).font(AppStyle.Typography.metadata).foregroundStyle(AppColors.textSecondary)
+                                    }
+                                }
+                                .toggleStyle(.checkbox)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 180)
+                }
+            }
+        }
+        .padding(AppStyle.Spacing.medium)
     }
 
     /// Large Files keeps only its total between launches, never the file list

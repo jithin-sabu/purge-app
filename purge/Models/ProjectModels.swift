@@ -244,6 +244,19 @@ nonisolated struct ProjectGroup: Identifiable, Hashable {
 
     /// Sorted by descending size elsewhere.
     var artifacts: [ProjectCacheArtifact]
+    /// Captured during scanning, so rendering never walks the filesystem.
+    var repositoryRoot: URL? = nil
+
+    var reviewTitle: String {
+        guard let repositoryRoot else { return displayName }
+        let relative = rootPath.path.replacingOccurrences(of: repositoryRoot.path + "/", with: "", options: .anchored)
+        return rootPath.path == repositoryRoot.path ? repositoryRoot.lastPathComponent
+            : repositoryRoot.lastPathComponent + " / " + relative
+    }
+
+    var latestArtifactModification: Date? {
+        artifacts.map(\.lastModified).filter { $0 > .distantPast }.max()
+    }
 
     var totalBytes: Int64 {
         artifacts.reduce(Int64(0)) { $0 + $1.sizeBytes }

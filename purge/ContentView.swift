@@ -507,7 +507,7 @@ struct ContentView: View {
 
     private var devToolsTabBody: some View {
         DevToolsView(
-            isLoading: store.isScanningDeveloper || store.isScanningAll,
+            isLoading: store.isScanningDeveloper || store.isScanningAll || store.isDeepScanning,
             scanPhase: store.scanPhase,
             usesExternalScrollContainer: tabsUseExternalScrollContainer
         )
@@ -658,6 +658,7 @@ struct ContentView: View {
             }
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
+            if store.isDeepScanning { return store.deepScanStatus }
             if let saved = lastScanSubtitle(
                 showing: [.devTools, .simulators, .runtimes, .xcodeComponents, .projects],
                 step: .cachesAndDevTools,

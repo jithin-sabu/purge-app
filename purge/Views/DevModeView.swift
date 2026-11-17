@@ -410,7 +410,7 @@ struct DevToolsView: View {
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
         let filter = currentSafetyFilter
-        return g.artifacts.indices.filter { filter.matches(g.artifacts[$0].safetyInfo) }
+        return g.artifacts.indices.filter { store.showsRow(g.artifacts[$0], under: filter) }
     }
 
     private func projectSelectTriState(forGroupIndex gi: Int) -> SelectAllTriState {
@@ -602,8 +602,13 @@ struct DevToolsView: View {
         return d
     }
 
+    private var hasDeepScanFindings: Bool {
+        store.developerCleaningEnabled && store.hasFullDiskAccess
+            && (!store.deepScanIssues.isEmpty || !store.deepScanUnknownCaches.isEmpty)
+    }
+
     private var developerListEmpty: Bool {
-        !store.hasLiveDevToolsRows && !hasLastScanRows
+        !store.hasLiveDevToolsRows && !hasLastScanRows && !hasDeepScanFindings
     }
 
     private var showsDeveloperListContent: Bool {
@@ -632,6 +637,7 @@ struct DevToolsView: View {
             && !runtimeSectionVisible
             && !xcodeComponentSectionVisible
             && sortedProjectGroupRows().isEmpty
+            && !hasDeepScanFindings
     }
 
     /// Row counts mirror the dev tools list + chip aggregates (detected tools + all project artifacts),
@@ -647,11 +653,13 @@ struct DevToolsView: View {
     }
 
     var body: some View {
-        Group {
-            if usesExternalScrollContainer {
-                externalScrollBody
-            } else {
-                standardBody
+        VStack(spacing: 0) {
+            Group {
+                if usesExternalScrollContainer {
+                    externalScrollBody
+                } else {
+                    standardBody
+                }
             }
         }
         .background(AppColors.surfaceBase)
@@ -688,7 +696,7 @@ struct DevToolsView: View {
             } else if store.projectGroups.indices.contains(gi) {
                 let group = store.projectGroups[gi]
                 keys.append(.project(group.id))
-                if expandedProjectRoots.contains(group.id) {
+                if sortedVisibleArtifactIndices(forGroup: gi).count > 1, expandedProjectRoots.contains(group.id) {
                     keys += sortedVisibleArtifactIndices(forGroup: gi).map {
                         .artifact(group: group.id, artifact: group.artifacts[$0].id)
                     }
@@ -763,8 +771,10 @@ struct DevToolsView: View {
                 case .project(let id):
                     guard !eligibleArtifactIndices(forGroupID: id).isEmpty else { return false }
                     toggleProjectEligibleSelection(groupID: id)
-                case .artifact:
-                    return false
+                case .artifact(let groupID, let artifactID):
+                    guard artifact(groupID, artifactID) != nil else { return false }
+                    store.setProjectArtifactSelected(groupID: groupID, artifactID: artifactID,
+                        isSelected: !store.scanSelection.artifactIDs.contains(artifactID))
                 }
                 return true
             },
@@ -772,7 +782,12 @@ struct DevToolsView: View {
                 switch key {
                 case .tool(let id): return store.presentKeyboardDeletionSheet(.devTool(id: id))
                 case .artifact(_, let artifactID): return store.presentKeyboardDeletionSheet(.artifact(id: artifactID))
-                case .simulator, .runtime, .component, .project: return false
+                case .project(let id):
+                    guard let gi = projectGroupIndex(forID: id) else { return false }
+                    let visible = sortedVisibleArtifactIndices(forGroup: gi)
+                    guard visible.count == 1 else { return false }
+                    return store.presentKeyboardDeletionSheet(.artifact(id: store.projectGroups[gi].artifacts[visible[0]].id))
+                case .simulator, .runtime, .component: return false
                 }
             },
             previewURL: { locations($0).first },
@@ -794,8 +809,8 @@ struct DevToolsView: View {
                 return nil
             },
             expand: { key in
-                guard case .project(let id) = key, store.projectGroups.contains(where: { $0.id == id }),
-                      !expandedProjectRoots.contains(id)
+                guard case .project(let id) = key, let gi = projectGroupIndex(forID: id),
+                      sortedVisibleArtifactIndices(forGroup: gi).count > 1, !expandedProjectRoots.contains(id)
                 else { return false }
                 toggleProjectExpanded(id)
                 return true
@@ -810,6 +825,10 @@ struct DevToolsView: View {
 
     private func highlightAction(_ key: DevRowKey) -> () -> Void {
         { [keyboard] in keyboard.highlight(key) }
+    }
+
+    private var deepScanFindings: some View {
+        DeveloperScanFindingLinks()
     }
 
     private var standardBody: some View {
@@ -1327,6 +1346,12 @@ struct DevToolsView: View {
                 }
             }
 
+            if hasDeepScanFindings {
+                deepScanFindings
+                    .listRowInsets(ScanListRowInsets.standard)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
             ScanListBottomSpacer()
         }
         .listStyle(.plain)
@@ -1435,100 +1460,69 @@ struct DevToolsView: View {
     @ViewBuilder
     private func projectGroupCard(for group: ProjectGroup, groupIndex _: Int, isExpanded: Bool) -> some View {
         if let currentGroupIndex = store.projectGroups.firstIndex(where: { $0.id == group.id }) {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
-                // Scoped so the group tri-state reflects artifact selection changes
-                // without re-rendering the list container.
+            let visibleIndices = sortedVisibleArtifactIndices(forGroup: currentGroupIndex)
+            let artifacts = visibleIndices.map { store.projectGroups[currentGroupIndex].artifacts[$0] }
+            let singleID = artifacts.count == 1 ? artifacts.first?.id : nil
+            let canExpand = artifacts.count > 1
+            VStack(alignment: .leading, spacing: 0) {
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-                    TriStateCheckbox(title: "", state: projectSelectTriState(forGroupID: group.id)) {
-                        keyboard.highlight(DevRowKey.project(group.id))
-                        toggleProjectEligibleSelection(groupID: group.id)
-                    }
-                    .accessibilityLabel("Select all \(group.displayName) items")
-                }
-                .frame(width: 24)
-
-                Button {
-                    keyboard.highlight(DevRowKey.project(group.id))
-                    toggleProjectExpanded(group.id)
-                } label: {
-                    HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
-                        AdaptiveBrandIconImage(
-                            source: .projectGroup(group),
-                            squareSize: AppStyle.Row.projectGroupIconSize
-                        )
-                        .accessibilityLabel(projectGroupIconAccessibilityLabel(for: group))
-                        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                            Text(group.displayName)
-                                .font(AppStyle.Typography.rowTitle)
-                            Text(projectSummary(groupIndex: currentGroupIndex))
-                                .font(AppStyle.Typography.metadata)
-                                .foregroundStyle(AppColors.textSecondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(formatBytes(visibleGroupByteTotal(groupID: group.id)))
-                            .font(AppStyle.Typography.rowTitle.numbers)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .monospacedDigit()
-                        projectBadge(level: projectLevel(groupIndex: currentGroupIndex))
-                        ZStack {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(AppColors.textSecondary)
-                        }
-                        .frame(width: Self.chevronSize, height: Self.chevronSize)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0), anchor: .center)
-                        .padding(.trailing, AppStyle.Spacing.xSmall)
-                        .accessibilityHidden(true)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isExpanded ? LocalizedStringKey("Collapse project") : LocalizedStringKey("Expand project"))
-                .accessibilityValue(Text(verbatim:
-                    "\(projectLevel(groupIndex: currentGroupIndex).displayName). \(projectSummary(groupIndex: currentGroupIndex))"
-                ))
-            }
-            .padding(.vertical, AppStyle.Spacing.xSmall)
-            .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .frame(minHeight: AppStyle.Row.parentHeight)
-            .scanListRow(DevRowKey.project(group.id), in: keyboard, ring: .inside)
-            // Header only: an overlay across the whole card would swallow the
-            // right-click meant for an individual artifact row.
-            .overlay {
-                ScanRowContextMenu(isMenuActive: .constant(false)) {
-                    [
-                        .action(title: String(localized: "Exclude project from scans")) {
-                            store.excludeProjectGroupFromScans(groupID: group.id)
+                    DeveloperProjectHeader(
+                        group: group,
+                        artifacts: artifacts,
+                        level: projectLevel(groupIndex: currentGroupIndex),
+                        isExpanded: canExpand && isExpanded,
+                        selectionState: projectSelectTriState(forGroupID: group.id),
+                        onToggleSelection: {
+                            keyboard.highlight(DevRowKey.project(group.id))
+                            toggleProjectEligibleSelection(groupID: group.id)
                         },
-                        .separator,
-                    ] + FinderReveal.menuEntries(for: [ScanRowLocation(url: group.rootPath)])
+                        onToggleExpanded: {
+                            keyboard.highlight(DevRowKey.project(group.id))
+                            toggleProjectExpanded(group.id)
+                        },
+                        onSetSafety: singleID.map { id in
+                            { store.setProjectArtifactCategory(groupID: group.id, artifactID: id, level: $0) }
+                        },
+                        onResetToAutomatic: singleID.map { id in
+                            { store.resetProjectArtifactToAutomatic(groupID: group.id, artifactID: id) }
+                        }
+                    )
+                }
+                .scanListRow(DevRowKey.project(group.id), in: keyboard, ring: .inside)
+                // Header only: an overlay across the whole card would swallow the
+                // right-click meant for an individual artifact row.
+                .overlay {
+                    ScanRowContextMenu(isMenuActive: .constant(false)) {
+                        [
+                            .action(title: String(localized: "Exclude project from scans")) {
+                                store.excludeProjectGroupFromScans(groupID: group.id)
+                            },
+                            .separator,
+                        ] + FinderReveal.menuEntries(for: [ScanRowLocation(url: artifacts.count == 1 ? artifacts[0].path : group.rootPath)])
+                    }
+                }
+                // The overlay only answers a secondary click, which VoiceOver and the
+                // keyboard cannot produce.
+                .accessibilityAction(named: Text("Exclude project from scans")) {
+                    store.excludeProjectGroupFromScans(groupID: group.id)
+                }
+                .accessibilityAction(named: Text("Show in Finder")) {
+                    FinderReveal.show(artifacts.count == 1 ? artifacts[0].path : group.rootPath)
+                }
+                .accessibilityAction(named: Text("Copy Path")) {
+                    FinderReveal.copyPaths([artifacts.count == 1 ? artifacts[0].path : group.rootPath])
+                }
+
+                if canExpand && isExpanded {
+                    projectArtifactRows(groupIndex: currentGroupIndex)
+                        .transition(expandCollapseTransition)
                 }
             }
-            // The overlay only answers a secondary click, which VoiceOver and the
-            // keyboard cannot produce.
-            .accessibilityAction(named: Text("Exclude project from scans")) {
-                store.excludeProjectGroupFromScans(groupID: group.id)
-            }
-            .accessibilityAction(named: Text("Show in Finder")) {
-                FinderReveal.show(group.rootPath)
-            }
-            .accessibilityAction(named: Text("Copy Path")) {
-                FinderReveal.copyPaths([group.rootPath])
-            }
-
-            if isExpanded {
-                projectArtifactRows(groupIndex: currentGroupIndex)
-                    .transition(expandCollapseTransition)
-            }
-        }
-        .padding(.bottom, isExpanded ? AppStyle.Spacing.xSmall : 0)
-        .devToolsGroupCardChrome()
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Project \(group.displayName)")
-        .accessibilityHint("Grouped dev tool cleanup targets")
+            .padding(.bottom, canExpand && isExpanded ? AppStyle.Spacing.xSmall : 0)
+            .devToolsGroupCardChrome()
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Project \(group.reviewTitle)")
+            .accessibilityHint("Grouped dev tool cleanup targets")
         }
     }
 
@@ -1538,19 +1532,17 @@ struct DevToolsView: View {
         let filter = currentSafetyFilter
         let artifacts = group.artifacts.filter { filter.matches($0.safetyInfo) }
         let level: SafetyLevel = artifacts.contains { $0.safetyInfo.level == .medium } ? .medium : .safe
-        let summary = artifacts.first(where: { $0.checkFirstReason != nil && $0.safetyInfo.level == .medium })?
-            .checkFirstReason?.summary
-            ?? artifacts.map(\.safetyInfo.headline).joined(separator: String(localized: ", "))
+        let summary = Array(Set(artifacts.map { $0.kind.rowTag })).sorted().joined(separator: String(localized: ", "))
         return HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             LastScanRowMarker()
                 .frame(width: 24)
             AdaptiveBrandIconImage(
                 source: .projectGroup(group),
-                squareSize: AppStyle.Row.projectGroupIconSize
+                squareSize: AppStyle.Row.listIconFrameSize
             )
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(group.displayName)
+                Text(group.reviewTitle)
                     .font(AppStyle.Typography.rowTitle)
                 Text(summary)
                     .font(AppStyle.Typography.metadata)
@@ -1584,7 +1576,7 @@ struct DevToolsView: View {
         .scanListRow(DevRowKey.project(group.id), in: keyboard)
         .opacity(0.55)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Project \(group.displayName)")
+        .accessibilityLabel("Project \(group.reviewTitle)")
         .accessibilityHint(LastScanRowMarker.help)
     }
 
@@ -1595,17 +1587,6 @@ struct DevToolsView: View {
         if levels.contains(.unknown) { return .unknown }
         if levels.contains(.medium) { return .medium }
         return .safe
-    }
-
-    /// Why the project is held at Check First, said once for all its folders, or
-    /// else the folders it holds.
-    private func projectSummary(groupIndex gi: Int) -> String {
-        let artifacts = sortedVisibleArtifactIndices(forGroup: gi).map { store.projectGroups[gi].artifacts[$0] }
-        if let held = artifacts.first(where: { $0.checkFirstReason != nil && $0.safetyInfo.level == .medium }),
-           let reason = held.checkFirstReason {
-            return reason.summary
-        }
-        return artifacts.map(\.safetyInfo.headline).joined(separator: String(localized: ", "))
     }
 
     /// As wide as the widest level's badge, so sizes line up down the list in any
@@ -1639,6 +1620,13 @@ struct DevToolsView: View {
         }
     }
 
+    private func artifactReviewCaption(_ artifact: ProjectCacheArtifact) -> String {
+        let folder = artifact.path.path.replacingOccurrences(of: artifact.projectRoot.path + "/", with: "", options: .anchored)
+        guard artifact.lastModified > .distantPast else { return folder }
+        let date = artifact.lastModified.formatted(date: .abbreviated, time: .omitted)
+        return String(localized: "\(folder) · Modified \(date)")
+    }
+
     @ViewBuilder
     private func projectArtifactRow(groupIndex gi: Int, artifactIndex ai: Int, groupID: String, artifactID: String) -> some View {
         if store.projectGroups.indices.contains(gi),
@@ -1665,8 +1653,8 @@ struct DevToolsView: View {
                     formattedSize: art.formattedSize,
                     safetyInfo: art.safetyInfo,
                     brandIcon: nil,
-                    detailCaption: nil,
-                    reinstallSafety: nil,
+                    detailCaption: artifactReviewCaption(art),
+                    reinstallSafety: art.reinstallSafety,
                     showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
                     onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
                     onExcludeFromScans: {
@@ -1676,11 +1664,12 @@ struct DevToolsView: View {
                         [ScanRowLocation(url: art.path, sizeBytes: art.sizeBytes)]
                     },
                     isUserOverride: store.userOverridePaths.contains(artifactPath),
-                    showsBulkCheckbox: false,
+                    showsBulkCheckbox: true,
                     isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
                     showsCardChrome: false,
                     showsLeadingIcon: false,
-                    onHighlight: highlightAction(.artifact(group: groupID, artifact: artifactID))
+                    onHighlight: highlightAction(.artifact(group: groupID, artifact: artifactID)),
+                    onSetSafety: { store.setProjectArtifactCategory(groupID: groupID, artifactID: artifactID, level: $0) }
                 )
             }
             .scanListRow(DevRowKey.artifact(group: groupID, artifact: artifactID), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
@@ -1714,13 +1703,7 @@ struct DevToolsView: View {
         tool.lastModified
     }
 
-    private func projectGroupIconAccessibilityLabel(for group: ProjectGroup) -> String {
-        let types = group.inferredTypes.map(\.displayName).joined(separator: String(localized: ", "))
-        if types.isEmpty {
-            return String(localized: "Project")
-        }
-        return String(localized: "Project, \(types)")
-    }
+
 }
 
 /// Beside the Developer Projects heading while the search runs. The count is of

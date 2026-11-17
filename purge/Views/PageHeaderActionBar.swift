@@ -58,6 +58,16 @@ struct PageHeaderActionBar: View {
             .disabled(secondary.isDisabled)
             .help(help(for: secondary, showsTitle: showsTitles))
 
+            if tab == .largeFiles {
+                Button { store.hideSelectedLargeFiles() } label: {
+                    if showsTitles { Label("Hide Selected", systemImage: "eye.slash") }
+                    else { Image(systemName: "eye.slash") }
+                }
+                .buttonStyle(.purge(.secondary))
+                .disabled(largeFileSelection.ids.isEmpty || store.isDeleting)
+                .help("Hide selected files")
+            }
+
             Button(action: primary.action) {
                 MorphingActionLabel(action: primary, showsTitle: showsTitles)
             }
@@ -109,13 +119,13 @@ struct PageHeaderActionBar: View {
     }
 
     /// Scan Everything runs every category scan and turns into Stop while it does.
-    /// Stop leaves the App Caches and Dev Tools step to finish (it takes seconds),
-    /// so once only that step is left the button just shows it is scanning.
+    /// Stop leaves the base App Caches and Dev Tools step to finish, but can cancel
+    /// its optional deeper developer pass from this same header.
     private var overviewScan: PageHeaderAction {
         let queue = store.scanQueue
         // A queued Everything else walk is not a category scan still to come.
-        let isFinishingCacheScan = (queue.active == .cachesAndDevTools && !queue.pending.contains { $0 != .everythingElse })
-            || (!queue.isRunningCategoryScan && store.isScanningAll)
+        let isFinishingCacheScan = !store.isDeepScanning && ((queue.active == .cachesAndDevTools && !queue.pending.contains { $0 != .everythingElse })
+            || (!queue.isRunningCategoryScan && store.isScanningAll))
         let title: String
         let systemImage: String?
         if isFinishingCacheScan {
@@ -150,7 +160,9 @@ struct PageHeaderActionBar: View {
         let phase = store.scanPhase
         let isBusy = isQueued || phase == .scanning || phase == .cancelling
         let title: String
-        if isQueued {
+        if store.isDeepScanning {
+            title = String(localized: "Stop")
+        } else if isQueued {
             title = ScanQueueLabels.queued
         } else {
             switch phase {
@@ -161,11 +173,14 @@ struct PageHeaderActionBar: View {
         }
         return PageHeaderAction(
             title: title,
-            systemImage: isBusy ? nil : "arrow.clockwise",
-            isBusy: isBusy,
-            isDisabled: isBusy
+            systemImage: store.isDeepScanning ? "stop.fill" : (isBusy ? nil : "arrow.clockwise"),
+            isBusy: isBusy && !store.isDeepScanning,
+            isDisabled: isBusy && !store.isDeepScanning,
+            help: tab == .devTools && store.developerCleaningEnabled && store.hasFullDiskAccess
+                ? "Includes a deeper scan of your developer folders" : nil
         ) {
-            store.requestScan(.cachesAndDevTools)
+            if store.isDeepScanning { store.stopDeveloperDeepScan() }
+            else { store.requestScan(.cachesAndDevTools) }
         }
     }
 

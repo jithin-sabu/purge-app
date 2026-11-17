@@ -26,6 +26,7 @@ struct SettingsView: View {
     @State private var scheduledCleanNowMessage: String?
     @State private var showClearHistoryConfirmation = false
     @State private var showExcludedFoldersSheet = false
+    @State private var showDeveloperFoldersSheet = false
     @State private var showAppFoldersSheet = false
     /// Read off the main thread when Settings appears and after each change.
     @State private var appFolders = AppFolderListing()
@@ -84,6 +85,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showExcludedFoldersSheet) {
             excludedFoldersSheet
+        }
+        .sheet(isPresented: $showDeveloperFoldersSheet) {
+            developerFoldersSheet
         }
         .sheet(isPresented: $showAppFoldersSheet) {
             appFoldersSheet
@@ -247,6 +251,28 @@ struct SettingsView: View {
                 settingsSectionDivider
 
                 runScheduledCleanNowRow
+            }
+
+            settingsSectionDivider
+
+            settingsControlRow(
+                title: String(localized: "Developer cleaning"),
+                caption: String(localized: "Include a deeper scan of your developer folders.")
+            ) {
+                Toggle("Developer cleaning", isOn: Binding(
+                    get: { store.developerCleaningEnabled },
+                    set: { store.setDeveloperCleaningEnabled($0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+
+            if store.developerCleaningEnabled {
+                settingsSectionDivider
+                settingsLinkRow(
+                    title: String(localized: "Developer project folders"),
+                    value: "\(store.developerCleaningRoots.count)"
+                ) { showDeveloperFoldersSheet = true }
             }
 
             settingsSectionDivider
@@ -576,6 +602,46 @@ struct SettingsView: View {
                     settingsSectionDivider
 
                     excludedTotalRow(entries: entries, runtimes: runtimes)
+                }
+            }
+        }
+    }
+
+    private var developerFoldersSheet: some View {
+        settingsSheet(
+            title: String(localized: "Developer project folders"),
+            caption: String(localized: "With Full Disk Access, scans search these folders for project artifacts and inspect ~/.cache when present."),
+            onDone: { showDeveloperFoldersSheet = false }
+        ) {
+            Button {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = true
+                panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+                panel.begin { response in
+                    if response == .OK { store.addDeveloperCleaningRoots(panel.urls) }
+                }
+            } label: {
+                Label("Add folder…", systemImage: "folder.badge.plus")
+            }
+            .buttonStyle(.purge(.secondary))
+        } content: {
+            InsetCard {
+                if store.developerCleaningRoots.isEmpty {
+                    Text("No project folders added")
+                        .foregroundStyle(AppColors.textSecondary)
+                        .padding(AppStyle.Spacing.medium)
+                } else {
+                    ForEach(store.developerCleaningRoots, id: \.self) { path in
+                        HStack {
+                            Text(path).textSelection(.enabled)
+                            Spacer()
+                            Button("Remove") { store.removeDeveloperCleaningRoot(path) }
+                                .buttonStyle(.plain)
+                        }
+                        .padding(AppStyle.Spacing.medium)
+                    }
                 }
             }
         }

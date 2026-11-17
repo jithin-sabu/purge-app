@@ -1482,3 +1482,45 @@
 "you stopped the removal" = "вы остановили удаление";
 "·" = "·";
 "…and %lld more sets where every copy is selected." = "…и ещё %lld наборов, где выбраны все копии.";
+
+/* Hidden files and developer deep scan */
+"The selected project is in use or is no longer available to clean." = "Выбранный проект используется или больше недоступен для очистки.";
+"Choose a folder inside your home folder." = "Выберите папку внутри вашей домашней папки.";
+"Deep scan stopped." = "Глубокое сканирование остановлено.";
+"Scanning project folders…" = "Сканирование папок проектов…";
+"Inspecting developer caches…" = "Проверка кэшей разработчика…";
+"Deep scan complete. Review the project results below." = "Глубокое сканирование завершено. Проверьте проекты ниже.";
+"Purge couldn't save hidden files. This change lasts until Purge quits." = "Purge не удалось сохранить список скрытых файлов. Изменение действует до выхода из Purge.";
+"Other cache folders to inspect (%lld)" = "Другие папки кэша для проверки (%lld)";
+"Hidden (%lld)" = "Скрытые (%lld)";
+"Unhide Selected" = "Показать выбранные";
+"Hide Selected" = "Скрыть выбранные";
+"Hide selected files" = "Скрыть выбранные файлы";
+"Developer cleaning" = "Очистка для разработчиков";
+"Developer project folders" = "Папки проектов разработчика";
+"No project folders added" = "Папки проектов не добавлены";
+
+"Select files and choose Hide Selected to keep them here." = "Выберите файлы и нажмите «Скрыть выбранные», чтобы сохранить их здесь.";
+"Include a deeper scan of your developer folders." = "Включить глубокое сканирование папок разработчика.";
+"With Full Disk Access, scans search these folders for project artifacts and inspect ~/.cache when present." = "При полном доступе к диску сканирование ищет файлы сборки проектов в этих папках и проверяет ~/.cache, если она существует.";
+"Includes a deeper scan of your developer folders" = "Включает глубокое сканирование папок разработчика";
+"Folders needing attention (%lld)" = "Папки, требующие внимания (%lld)";
+"Scan from here" = "Сканировать отсюда";
+"This folder couldn't be read. Check its access permissions in Finder." = "Не удалось прочитать папку. Проверьте права доступа в Finder.";
+"This folder wasn't found. Update your developer project folders in Settings." = "Папка не найдена. Обновите папки проектов в настройках.";
+"Reached the scan limit of %lld folder levels. Scan from here to check this branch directly." = "Достигнут предел глубины сканирования: %lld уровней. Начните сканирование отсюда, чтобы проверить эту ветвь напрямую.";
+"More than %lld entries in this folder. Add a smaller subfolder in Settings to scan it directly." = "В папке более %lld элементов. Добавьте меньшую подпапку в настройках для прямого сканирования.";
+"This folder's size couldn't be measured. Check its access permissions in Finder." = "Не удалось измерить размер папки. Проверьте права доступа в Finder.";
+"The cache folder is a symbolic link. Purge doesn't follow it during this scan." = "Папка кэша — символическая ссылка. Purge не переходит по ней при этом сканировании.";
+"Build data modified %@" = "Данные сборки изменены %@";
+"%@ · Modified %@" = "%@ · Изменено %@";
+"Use automatic category" = "Автоматическая категория";
+"Change cleanup category" = "Изменить категорию очистки";
+"Cleanup category" = "Категория очистки";
+"Purge couldn't save this category. This change lasts until Purge quits." = "Purge не удалось сохранить категорию. Изменение действует до выхода из Purge.";
+"See why each folder wasn't fully scanned. You can inspect it in Finder or scan a deep branch directly." = "Узнайте, почему папки просканированы не полностью. Откройте их в Finder или просканируйте глубокую ветвь напрямую.";
+"These folders use disk space, but Purge hasn't identified them as rebuildable caches. Inspect them before deciding what to keep." = "Эти папки занимают место, но Purge не определила их как восстанавливаемые кэши. Проверьте их перед решением, что сохранить.";
+
+"Project details" = "Сведения о проекте";
+
+"Select cleanup item" = "Выбрать для очистки";

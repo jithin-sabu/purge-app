@@ -1523,3 +1523,45 @@
 "MB" = "MB";
 "GB" = "GB";
 "TB" = "TB";
+
+/* Hidden files and developer deep scan */
+"The selected project is in use or is no longer available to clean." = "所选项目正在使用中或已无法清理。";
+"Choose a folder inside your home folder." = "请选择个人文件夹内的文件夹。";
+"Deep scan stopped." = "深度扫描已停止。";
+"Scanning project folders…" = "正在扫描项目文件夹…";
+"Inspecting developer caches…" = "正在检查开发缓存…";
+"Deep scan complete. Review the project results below." = "深度扫描已完成。请检查下方的项目结果。";
+"Purge couldn't save hidden files. This change lasts until Purge quits." = "Purge 无法保存隐藏文件列表。此更改将在 Purge 退出前保持有效。";
+"Other cache folders to inspect (%lld)" = "其他待检查的缓存文件夹（%lld）";
+"Hidden (%lld)" = "已隐藏（%lld）";
+"Unhide Selected" = "取消隐藏所选项";
+"Hide Selected" = "隐藏所选项";
+"Hide selected files" = "隐藏所选文件";
+"Developer cleaning" = "开发者清理";
+"Developer project folders" = "开发项目文件夹";
+"No project folders added" = "尚未添加项目文件夹";
+
+"Select files and choose Hide Selected to keep them here." = "选择文件并点击“隐藏所选项”，即可将它们保留在此处。";
+"Include a deeper scan of your developer folders." = "对开发文件夹进行更深入的扫描。";
+"With Full Disk Access, scans search these folders for project artifacts and inspect ~/.cache when present." = "获得完全磁盘访问权限后，扫描会在这些文件夹中查找项目构建文件，并检查存在的 ~/.cache。";
+"Includes a deeper scan of your developer folders" = "包括对开发文件夹的深入扫描";
+"Folders needing attention (%lld)" = "需要关注的文件夹（%lld）";
+"Scan from here" = "从此处扫描";
+"This folder couldn't be read. Check its access permissions in Finder." = "无法读取此文件夹。请在访达中检查访问权限。";
+"This folder wasn't found. Update your developer project folders in Settings." = "找不到此文件夹。请在设置中更新开发项目文件夹。";
+"Reached the scan limit of %lld folder levels. Scan from here to check this branch directly." = "已达到 %lld 层文件夹的扫描限制。从此处扫描可直接检查此分支。";
+"More than %lld entries in this folder. Add a smaller subfolder in Settings to scan it directly." = "此文件夹中有超过 %lld 个条目。请在设置中添加更小的子文件夹以直接扫描。";
+"This folder's size couldn't be measured. Check its access permissions in Finder." = "无法测量此文件夹的大小。请在访达中检查访问权限。";
+"The cache folder is a symbolic link. Purge doesn't follow it during this scan." = "缓存文件夹是符号链接。Purge 不会在此次扫描中跟随此链接。";
+"Build data modified %@" = "构建数据修改于 %@";
+"%@ · Modified %@" = "%@ · 修改于 %@";
+"Use automatic category" = "使用自动分类";
+"Change cleanup category" = "更改清理分类";
+"Cleanup category" = "清理分类";
+"Purge couldn't save this category. This change lasts until Purge quits." = "Purge 无法保存此分类。此更改在 Purge 退出前保持有效。";
+"See why each folder wasn't fully scanned. You can inspect it in Finder or scan a deep branch directly." = "查看每个文件夹未能完全扫描的原因。可在访达中检查，或直接扫描较深的分支。";
+"These folders use disk space, but Purge hasn't identified them as rebuildable caches. Inspect them before deciding what to keep." = "这些文件夹占用磁盘空间，但 Purge 尚未确认它们是可重建的缓存。决定保留哪些内容之前，请先检查。";
+
+"Project details" = "项目详情";
+
+"Select cleanup item" = "选择清理项目";

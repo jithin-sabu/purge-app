@@ -1188,7 +1188,9 @@ nonisolated final class DevScanner {
         roots: [URL]? = nil,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil,
-        onDirectory: (@Sendable (URL) -> Void)? = nil
+        onDirectory: (@Sendable (URL) -> Void)? = nil,
+        onIssue: (@Sendable (DeveloperScanIssue) -> Void)? = nil,
+        includeRecent: Bool = false
     ) async -> [ProjectGroup] {
         let walkStart = Date()
         let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
@@ -1196,7 +1198,8 @@ nonisolated final class DevScanner {
             home: home,
             access: access,
             maxDepth: maxDepth,
-            onDirectory: onDirectory
+            onDirectory: onDirectory,
+            onIssue: onIssue
         )
         // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
         guard !Task.isCancelled else { return [] }
@@ -1210,7 +1213,7 @@ nonisolated final class DevScanner {
         /// Build artifact list per root (expensive sizing runs concurrently).
         let sizingStart = Date()
         let filter = ProjectListingFilter(
-            staleDays: DevToolsStalenessOption.currentThresholdDays(),
+            staleDays: includeRecent ? DevToolsStalenessOption.showAll.rawValue : DevToolsStalenessOption.currentThresholdDays(),
             now: Date(),
             live: .current()
         )
@@ -1275,7 +1278,8 @@ nonisolated final class DevScanner {
         home: URL,
         access: ScanAccess,
         maxDepth: Int = 4,
-        onDirectory: (@Sendable (URL) -> Void)? = nil
+        onDirectory: (@Sendable (URL) -> Void)? = nil,
+        onIssue: (@Sendable (DeveloperScanIssue) -> Void)? = nil
     ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
         var discoveredRoots: [(URL, [ProjectType])] = []
@@ -1312,16 +1316,32 @@ nonisolated final class DevScanner {
 
         /// Reads one folder: its project markers, and the folders to walk next.
         func read(_ folder: Folder) -> (types: [ProjectType], next: [(URL, String?)]) {
+            guard !ExcludedPathsStore.isExcluded(folder.url) else { return ([], []) }
             // One listing serves the project markers and the walk below (#190).
             let listing = try? fm.contentsOfDirectory(
                 at: folder.url,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey, .nameKey],
                 options: [.skipsPackageDescendants]
             )
+            if listing == nil { onIssue?(.init(path: folder.url.path, reason: .unreadable)) }
             let types = Self.projectTypes(at: folder.url, listing: listing)
-
-            guard folder.depth < folder.maxDepth, let entries = listing else { return (types, []) }
-            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return (types, []) }
+            guard folder.depth < folder.maxDepth else {
+                if onIssue != nil, listing?.contains(where: { entry in
+                    let name = entry.lastPathComponent
+                    guard !name.hasPrefix("."), !shouldSkipDescending(into: name),
+                          let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else { return false }
+                    return values.isDirectory == true && values.isSymbolicLink != true
+                        && !ExcludedPathsStore.isExcluded(entry)
+                }) == true {
+                    onIssue?(.init(path: folder.url.path, reason: .depthLimit(folder.maxDepth)))
+                }
+                return (types, [])
+            }
+            guard let entries = listing else { return (types, []) }
+            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else {
+                onIssue?(.init(path: folder.url.path, reason: .entryLimit(Self.maxDirectoryEntriesBeforeSkip)))
+                return (types, [])
+            }
 
             var next: [(URL, String?)] = []
             for entry in entries {
@@ -1345,6 +1365,7 @@ nonisolated final class DevScanner {
                 // `isDirectory` is false for it.
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
+                guard !ExcludedPathsStore.isExcluded(entry) else { continue }
 
                 next.append((entry, entryRealPath))
             }
@@ -1359,12 +1380,13 @@ nonisolated final class DevScanner {
             // root that is a link into a protected folder is never opened.
             let realRoot: String?
             if access == .limited {
-                guard let resolved = ProtectedLocations.readablePath(of: root, home: home) else { continue }
+                guard let resolved = ProtectedLocations.readablePath(of: root, home: home) else { onIssue?(.init(path: root.path, reason: .unreadable)); continue }
                 realRoot = resolved
             } else {
                 realRoot = nil
             }
-            guard fm.fileExists(atPath: root.path) else { continue }
+            guard !ExcludedPathsStore.isExcluded(root) else { continue }
+            guard fm.fileExists(atPath: root.path) else { onIssue?(.init(path: root.path, reason: .missing)); continue }
             // When the root is the home directory itself, limit to depth 1
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
@@ -1644,7 +1666,8 @@ nonisolated final class DevScanner {
                 displayName: rootURL.lastPathComponent,
                 rootPath: rootURL,
                 inferredTypes: types,
-                artifacts: sized
+                artifacts: sized,
+                repositoryRoot: GitRepositoryFinder.enclosingRepository(for: rootURL)
             ),
             rows.count
         )

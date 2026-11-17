@@ -83,9 +83,13 @@ Five groups in one view:
 - **Xcode Components**: Xcode's optional Metal Toolchain (about 900 MB), removed with `xcodebuild -deleteComponent` when a full Xcode lists it as installed
 - **Developer projects**: `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
 
+Project cards show the owning repository, artifact type and build-data modification date. A single folder is selectable in the main card; projects with several folders expand for individual selection. The info button shows full paths, safety explanations and rebuild guidance. Each artifact's safety badge lets you choose **Safe to Clean**, **Check First**, or its automatic category. Additional deep-scan results always require manual confirmation, even when you mark them Safe to Clean.
+
 Simulators, runtimes and Xcode components are always Check First. They are deleted permanently, not moved to the Trash, and their section headers say so.
 
 In **Settings → Cleaning**, choose **Projects count as stale after** (1 month to 2 years, or Show all) to control which projects appear. Age is measured from the last time anything in the project changed, including git activity, not from the date on `node_modules` or `target`. A project in use right now, with a terminal or dev server running inside it or a git command in progress, never appears.
+
+Enable **Developer cleaning** in the same settings section and add project folders. With Full Disk Access, the normal **Scan** in Dev Tools and **Scan Everything** include a deeper pass through those folders and inspect `~/.cache`. Recent projects appear for manual review. Scheduled cleaning and Clean Safe Items never remove the additional deep-scan results; unrecognized cache folders show sizes and Finder actions for investigation only. **Folders needing attention** explains permission and scan-limit issues, with **Scan from here** for branches beyond the depth limit.
 
 Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Claude Code) appear under **Orphaned Git Worktrees** only once their repository no longer lists them. A worktree Git still uses never appears however old it is, and neither does one a terminal or agent is working inside.
 
@@ -101,6 +105,7 @@ Find space-hogging personal files without digging through folders:
 - Category chips for videos, audio, images, PDFs, archives, documents, AI models, virtual machines, and other files
 - **Duplicates**: a byte-for-byte scan finds identical copies, groups them together, and shows how much you'd reclaim by keeping one. A **Duplicates** chip gathers them in one place. **Delete extra copies** clears a whole tab of duplicates in one go. It suggests a copy to keep per set and marks the rest for Trash, and you can move the keeper to a different copy before anything is deleted. Nothing is removed until you review and confirm
 - Sort by size, date, or name; select files and review before deleting
+- **Hide Selected** keeps files out of the Large Files list and its delete and Remove Download actions. Expand **Hidden** below the results to unhide them later. Hiding follows the file's path and applies only to Large Files; use **Exclude from scans** for protection across Purge
 - **Quick Look** preview and **Show in Finder** from each row
 - Deletions move files to **Trash**, so nothing is permanently erased
 - **Keep Only in iCloud** frees the space an iCloud file takes on this Mac and keeps the file in iCloud, the same as Finder's Remove Download. The **iCloud** chip lists the synced files that also use space here, with how much you'd free, and the action sits there and in each synced file's right-click menu. The file stays in its folder in Finder with a cloud mark, and opening it downloads it again. Purge offers it only for files fully uploaded to iCloud, with no sync conflict, not set to Keep Downloaded, not hard-linked and unchanged for five minutes. It checks all of that again just before it acts on each file, and skips any file that is open in an app. Files in iCloud Drive's own folder are never offered for the Trash, since trashing them removes them from your other devices. It is never part of Clean Safe Items or a scheduled clean

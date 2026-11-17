@@ -29,6 +29,17 @@ enum UserOverridesStore {
         store.read { $0[canonicalKey(forPath: path)] }
     }
 
+    @discardableResult
+    nonisolated static func write(path: URL, level: SafetyLevel, originalLevel: SafetyLevel) -> Bool {
+        guard level == .safe || level == .medium else { return false }
+        let key = canonicalKey(forPath: path)
+        return store.update { entries in
+            entries[key] = UserOverrideEntry(overrideTag: level.rawValue, overrideDate: Date(),
+                originalTag: entries[key]?.originalTag ?? originalLevel.rawValue)
+            return true
+        }
+    }
+
     /// Returns false when the change could not be saved.
     @discardableResult
     nonisolated static func remove(path: URL) -> Bool {

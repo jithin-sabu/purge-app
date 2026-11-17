@@ -1523,3 +1523,45 @@
 "macOS's asset service stopped before it answered" = "macOS'in varlık servisi yanıt vermeden durdu";
 "macOS's asset service couldn't be reached" = "macOS'in varlık servisine ulaşılamadı";
 "macOS's asset service sent an answer Purge couldn't read" = "macOS'in varlık servisi, Purge'ün okuyamadığı bir yanıt gönderdi";
+
+/* Hidden files and developer deep scan */
+"The selected project is in use or is no longer available to clean." = "Seçilen proje kullanılıyor veya artık temizlenemiyor.";
+"Choose a folder inside your home folder." = "Ana klasörünüzün içindeki bir klasörü seçin.";
+"Deep scan stopped." = "Derin tarama durduruldu.";
+"Scanning project folders…" = "Proje klasörleri taranıyor…";
+"Inspecting developer caches…" = "Geliştirici önbellekleri inceleniyor…";
+"Deep scan complete. Review the project results below." = "Derin tarama tamamlandı. Aşağıdaki proje sonuçlarını inceleyin.";
+"Purge couldn't save hidden files. This change lasts until Purge quits." = "Purge gizli dosyaları kaydedemedi. Bu değişiklik Purge kapanana kadar geçerli.";
+"Other cache folders to inspect (%lld)" = "İncelenecek diğer önbellek klasörleri (%lld)";
+"Hidden (%lld)" = "Gizli (%lld)";
+"Unhide Selected" = "Seçilenleri Göster";
+"Hide Selected" = "Seçilenleri Gizle";
+"Hide selected files" = "Seçili dosyaları gizle";
+"Developer cleaning" = "Geliştirici temizliği";
+"Developer project folders" = "Geliştirici proje klasörleri";
+"No project folders added" = "Proje klasörü eklenmedi";
+
+"Select files and choose Hide Selected to keep them here." = "Dosyaları seçip Seçilenleri Gizle ile burada tutun.";
+"Include a deeper scan of your developer folders." = "Geliştirici klasörlerinizi daha derin tarayın.";
+"With Full Disk Access, scans search these folders for project artifacts and inspect ~/.cache when present." = "Tam Disk Erişimi ile taramalar bu klasörlerde proje çıktılarını arar ve varsa ~/.cache klasörünü inceler.";
+"Includes a deeper scan of your developer folders" = "Geliştirici klasörlerinin derin taramasını içerir";
+"Folders needing attention (%lld)" = "İlgilenilmesi gereken klasörler (%lld)";
+"Scan from here" = "Buradan tara";
+"This folder couldn't be read. Check its access permissions in Finder." = "Bu klasör okunamadı. Finder’da erişim izinlerini kontrol edin.";
+"This folder wasn't found. Update your developer project folders in Settings." = "Bu klasör bulunamadı. Ayarlar’da geliştirici proje klasörlerini güncelleyin.";
+"Reached the scan limit of %lld folder levels. Scan from here to check this branch directly." = "%lld klasör düzeyi tarama sınırına ulaşıldı. Bu dalı doğrudan kontrol etmek için buradan tarayın.";
+"More than %lld entries in this folder. Add a smaller subfolder in Settings to scan it directly." = "Bu klasörde %lld adetten fazla öğe var. Doğrudan taramak için Ayarlar’da daha küçük bir alt klasör ekleyin.";
+"This folder's size couldn't be measured. Check its access permissions in Finder." = "Bu klasörün boyutu ölçülemedi. Finder’da erişim izinlerini kontrol edin.";
+"The cache folder is a symbolic link. Purge doesn't follow it during this scan." = "Önbellek klasörü bir sembolik bağlantı. Purge bu taramada bağlantıyı izlemez.";
+"Build data modified %@" = "Derleme verileri %@ tarihinde değiştirildi";
+"%@ · Modified %@" = "%@ · Değiştirilme: %@";
+"Use automatic category" = "Otomatik kategoriyi kullan";
+"Change cleanup category" = "Temizlik kategorisini değiştir";
+"Cleanup category" = "Temizlik kategorisi";
+"Purge couldn't save this category. This change lasts until Purge quits." = "Purge bu kategoriyi kaydedemedi. Değişiklik Purge kapanana kadar geçerli.";
+"See why each folder wasn't fully scanned. You can inspect it in Finder or scan a deep branch directly." = "Her klasörün neden tam taranamadığını görün. Finder’da inceleyebilir veya derin bir dalı doğrudan tarayabilirsiniz.";
+"These folders use disk space, but Purge hasn't identified them as rebuildable caches. Inspect them before deciding what to keep." = "Bu klasörler disk alanı kullanıyor ancak Purge bunları yeniden oluşturulabilir önbellek olarak tanımlamadı. Neyi tutacağınıza karar vermeden önce inceleyin.";
+
+"Project details" = "Proje ayrıntıları";
+
+"Select cleanup item" = "Temizlenecek öğeyi seç";

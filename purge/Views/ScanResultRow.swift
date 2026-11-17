@@ -57,6 +57,7 @@ struct ScanResultRow: View {
     /// Makes this row the keyboard's current row (#96). Runs on every tap of the
     /// row, before any toggle, so rows that don't toggle still take the highlight.
     var onHighlight: (() -> Void)?
+    var onSetSafety: ((SafetyLevel) -> Void)? = nil
 
     @State private var isContextMenuActive = false
 
@@ -112,7 +113,8 @@ struct ScanResultRow: View {
         showsLeadingIcon: Bool = true,
         usesCompactExplanation: Bool = false,
         isFromLastScan: Bool = false,
-        onHighlight: (() -> Void)? = nil
+        onHighlight: (() -> Void)? = nil,
+        onSetSafety: ((SafetyLevel) -> Void)? = nil
     ) {
         self.isSelected = isSelected
         self.onToggle = onToggle
@@ -135,6 +137,7 @@ struct ScanResultRow: View {
         self.usesCompactExplanation = usesCompactExplanation
         self.isFromLastScan = isFromLastScan
         self.onHighlight = onHighlight
+        self.onSetSafety = onSetSafety
     }
 
     @ViewBuilder
@@ -300,7 +303,23 @@ struct ScanResultRow: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
 
-                AppBadge(level: safetyInfo.level)
+                if let onSetSafety {
+                    Menu {
+                        Button("Safe to Clean") { onSetSafety(.safe) }
+                        Button("Check First") { onSetSafety(.medium) }
+                        if let onResetToAutomatic {
+                            Divider()
+                            Button("Use automatic category", action: onResetToAutomatic)
+                        }
+                    } label: { AppBadge(level: safetyInfo.level) }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Change cleanup category")
+                    .accessibilityLabel(Text("Cleanup category"))
+                    .accessibilityValue(safetyInfo.level.displayName)
+                } else {
+                    AppBadge(level: safetyInfo.level)
+                }
             }
         }
     }

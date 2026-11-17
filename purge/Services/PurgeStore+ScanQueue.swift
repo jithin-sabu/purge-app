@@ -116,12 +116,16 @@ extension PurgeStore {
     }
 
     /// Stop drops everything still waiting and stops the running step. A running App
-    /// Caches and Dev Tools step is left to finish: it takes seconds, and the menu bar
-    /// and sidebar both track that scan to its end.
+    /// Caches and Dev Tools base step is left to finish; its optional deeper developer
+    /// pass can be stopped. The parent retains the queue until its work unwinds.
     func stopScans() {
         scanQueue.clearPending()
         scanQueueForcedSteps.removeAll()
-        guard let active = scanQueue.active, active != .cachesAndDevTools else { return }
+        guard let active = scanQueue.active else { return }
+        if active == .cachesAndDevTools {
+            if isDeepScanning { stopDeveloperDeepScan() }
+            return
+        }
         scanQueueStepTask?.cancel()
         scanQueueStepTask = nil
         scanQueueTask?.cancel()
