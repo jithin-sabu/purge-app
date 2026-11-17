@@ -77,6 +77,24 @@ struct ProjectAddedFolderTests {
         }
     }
 
+    @Test("On an added drive, a project inside a Library folder is refused, while Unity's own Library passes")
+    func libraryOnADrive() throws {
+        let drive = try Drive()
+        defer { drive.remove() }
+        try drive.write("Library/Tools/app/package.json")
+        try drive.write("Library/Tools/app/node_modules/pkg/index.js")
+        try drive.write("Games/Racer/ProjectSettings/ProjectVersion.txt")
+        try drive.write("Games/Racer/Library/ArtifactDB")
+        let added = [drive.root.standardizedFileURL.path]
+
+        #expect(!DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(
+            drive.url("Library/Tools/app/node_modules"), home: otherHome, addedRoots: added
+        ))
+        #expect(DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(
+            drive.url("Games/Racer/Library"), home: otherHome, addedRoots: added
+        ))
+    }
+
     @Test("The git lookup for a project on a drive climbs to the added folder")
     func gitLookupStopsAtAddedFolder() throws {
         let drive = try Drive()
@@ -114,6 +132,30 @@ struct ProjectAddedFolderTests {
         let listed = try #require(artifacts)
         #expect(!listed.isEmpty)
         #expect(listed.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason == .addedFolder })
+    }
+
+    @Test("A project reached through a link into an added folder is Check First too")
+    func linkedProjectIsCheckFirst() throws {
+        let fixture = try ActivityFixture(
+            files: ["real/package.json", "real/package-lock.json", "real/src/app.js", "real/node_modules/pkg/index.js"]
+        )
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: Date(timeIntervalSinceNow: -3 * 365 * 86_400))
+        let link = fixture.url("linked")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: fixture.url("real"))
+        // Show all: the new link reads as recent work, which would hide the project.
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.showAll.rawValue,
+            now: Date(),
+            live: .none
+        )
+        let added = fixture.url("real").resolvingSymlinksInPath().standardizedFileURL.path
+
+        let artifacts = ScanFolders.$snapshotOverride.withValue(.init(walked: [added], saved: [added])) {
+            DevScanner.sizeProjectGroup(rootURL: link, types: [.node], access: .full, filter: filter).0?.artifacts
+        }
+        let listed = try #require(artifacts)
+        #expect(listed.allSatisfy { $0.checkFirstReason == .addedFolder })
     }
 }
 

@@ -1629,10 +1629,13 @@ nonisolated final class DevScanner {
             checkFirstReason = nil
         }
         // A project in a folder the user added is the user's to pick, folder by
-        // folder, whatever its activity says (#318).
-        let reason = ScanFolders.snapshotRoot(holding: rootURL.standardizedFileURL.path) == nil
-            ? checkFirstReason
-            : .addedFolder
+        // folder, whatever its activity says (#318). By where it really is too:
+        // a home folder linked onto an added drive spells it under home.
+        let spelled = rootURL.standardizedFileURL.path
+        let real = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let inAddedFolder = ScanFolders.snapshotRoot(holding: spelled) != nil
+            || ScanFolders.snapshotRoot(holding: real) != nil
+        let reason = inAddedFolder ? .addedFolder : checkFirstReason
 
         let artifactPaths = rows.map(\.path)
         let sizesByPath = FolderSizing.directorySizes(at: artifactPaths, split: .spread)

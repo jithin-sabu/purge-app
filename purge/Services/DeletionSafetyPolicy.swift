@@ -1478,6 +1478,13 @@ enum DeletionSafetyPolicy {
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
             guard PathContainment.isSameOrInside(root.path, base) else { continue }
+            // On a drive the user added, never a project inside a `Library`
+            // folder, which on a drive is most often a copied home or system
+            // folder. Unity's own `Library` is the artifact, below the root.
+            if base != home {
+                let between = root.path.dropFirst(base.count).split(separator: "/")
+                if between.contains(where: { $0.caseInsensitiveCompare("Library") == .orderedSame }) { continue }
+            }
             guard rule.matchesRoot(root) else { continue }
             // Checked here rather than only in the scanner so that no caller can route
             // around it: a `.terraform` folder holding state is never deletable.
