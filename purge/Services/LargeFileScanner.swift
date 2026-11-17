@@ -256,6 +256,18 @@ nonisolated final class LargeFileScanner {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
+            // A root that is shaped like an Ollama store, or sits inside one,
+            // holds nothing but blobs and manifests. The delete gate refuses
+            // anything under a store-shaped folder at any height, so the root
+            // is asked the same, by its spelling and where it really is. See
+            // the check on each folder below.
+            let realFolder = folder.resolvingSymlinksInPath()
+            if [root, realFolder].contains(where: {
+                AIModelScanPolicy.isOllamaStore($0) || AIModelScanPolicy.isInsideOllamaStore($0)
+            }) {
+                if !bundlesOnly { summary.checkedRoots.append(root) }
+                continue
+            }
             // Below an added folder the walk stays on the folder's own disk, or
             // another one attached to this Mac: a network share or macFUSE
             // mount inside it is never read (#318 review).
@@ -333,6 +345,11 @@ nonisolated final class LargeFileScanner {
                     if isVirtualMachine
                         || (!bundlesOnly && LargeFileScanPolicy.isSafariDownloadBundle(fileURL, home: home)) {
                         if isUserExcluded(fileURL) { return ([], false) }
+                        // A store shaped like Ollama's is never a row, whatever
+                        // it is named, such as `models.pvm`. Asked only of the
+                        // folders that would be rows, so the walk lists no
+                        // other folder twice.
+                        if AIModelScanPolicy.isOllamaStore(fileURL) { return ([], false) }
                         // A VM that may be running is left off the list; the
                         // delete check refuses it again in case it starts later.
                         if isVirtualMachine,
@@ -465,6 +482,16 @@ nonisolated final class LargeFileScanner {
                     }
                     // As `FileManager` lists with `.skipsHiddenFiles`.
                     let children = DirectoryListing.entries(of: folderURL.path) ?? []
+                    // A folder shaped like an Ollama store is skipped like the
+                    // known model stores, even where Purge doesn't know it is
+                    // Ollama's: listed one by one, each blob would be a row
+                    // that breaks models when trashed. Read from the names
+                    // just listed, so it costs no call.
+                    if AIModelScanPolicy.isOllamaStore(
+                        folderNames: children.lazy.filter { !$0.isRegularFile }.map(\.name)
+                    ) {
+                        return []
+                    }
                     var steps: [TreeStep<[Finding], WalkFolder>] = []
                     for child in children where !child.isHidden {
                         // A file under the size floor that is not a cloud

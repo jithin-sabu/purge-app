@@ -128,6 +128,59 @@ nonisolated enum AIModelScanPolicy {
         return home.appendingPathComponent(".ollama/models", isDirectory: true).standardizedFileURL
     }
 
+    /// The two folders every Ollama store holds: `blobs` for the weights, named
+    /// by digest, and `manifests` for the models that use them. Ollama files a
+    /// model pulled from another registry under `manifests/<host>` (`hf.co`),
+    /// so the folder for its own registry is not required.
+    nonisolated static let ollamaStoreFolders: Set<String> = ["blobs", "manifests"]
+
+    /// Whether a folder is shaped like an Ollama store, read from the names of
+    /// its entries that are not regular files: folders, and links, so a store
+    /// with a linked `manifests` is still a store. Names are compared without
+    /// case, as APFS compares them by default. Large Files skips such a folder
+    /// even when Purge doesn't know it is Ollama's, such as `OLLAMA_MODELS` set
+    /// only in a shell profile while Purge started from the Dock. Trashing one
+    /// blob from it breaks every model that uses the blob, and Ollama goes on
+    /// listing them.
+    nonisolated static func isOllamaStore(folderNames: some Sequence<String>) -> Bool {
+        ollamaStoreFolders.isSubset(of: Set(folderNames.lazy.map { $0.lowercased() }))
+    }
+
+    /// Whether a folder on disk is shaped like an Ollama store, read the way
+    /// the Large Files walk reads it, so the walk and the delete gate always
+    /// agree. False for a folder that can't be listed.
+    nonisolated static func isOllamaStore(_ folder: URL) -> Bool {
+        guard let entries = DirectoryListing.entries(of: folder.path) else { return false }
+        return isOllamaStore(folderNames: entries.lazy.filter { !$0.isRegularFile }.map(\.name))
+    }
+
+    /// Whether any folder above `url` is shaped like an Ollama store. Large
+    /// Files' delete gate asks this, so a blob never goes alone, even from a
+    /// row saved before the walk knew the shape. The walk asks it of each
+    /// root, so a root inside a store lists nothing the gate would refuse.
+    ///
+    /// A folder above that can't be listed counts as a store: it may be one,
+    /// such as a store whose read permission was taken away after the scan. A
+    /// link counts as neither, because the listing doesn't follow it; the gate
+    /// also asks this of the real path, which passes through where it leads.
+    nonisolated static func isInsideOllamaStore(_ url: URL) -> Bool {
+        var folder = url.standardizedFileURL.deletingLastPathComponent()
+        while folder.path != "/", !folder.path.isEmpty {
+            if let entries = DirectoryListing.entries(of: folder.path) {
+                if isOllamaStore(folderNames: entries.lazy.filter { !$0.isRegularFile }.map(\.name)) { return true }
+            } else if !isLink(folder) {
+                return true
+            }
+            folder = folder.deletingLastPathComponent()
+        }
+        return false
+    }
+
+    private nonisolated static func isLink(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK
+    }
+
     /// Current LM Studio location first, then the pre-0.3 cache location. Both
     /// are checked because an upgrade leaves the old directory behind.
     nonisolated static func lmStudioRoots(home: URL) -> [URL] {
