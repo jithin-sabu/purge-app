@@ -5227,6 +5227,9 @@ final class PurgeStore: ObservableObject {
         let toolPaths = devTools.map(\.standardizedPaths)
         for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses, keptTogether: toolPaths) {
             let std = candidate.path.standardizedFileURL
+            // Asked again after the awaits above: a folder added in Settings
+            // meanwhile is never part of the clean (#318 review).
+            guard !ScanFolders.isInsideSavedFolder(std.path) else { continue }
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title
             pathToExpectedSizeBytes[std.path] = candidate.sizeBytes

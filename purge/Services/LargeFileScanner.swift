@@ -230,7 +230,14 @@ nonisolated final class LargeFileScanner {
             let root = walk.root
             let bundlesOnly = walk.bundlesOnly
             if Task.isCancelled { break }
-            guard exists[index] else { continue }
+            guard exists[index] else {
+                // An added folder whose drive went between the list being read
+                // and the walk (#318 review) is named, not read as empty.
+                if walk.skipsOffLimits {
+                    summary.unreadableRoots.append(.init(path: root, reason: "", isDisconnected: true))
+                }
+                continue
+            }
             // Folders the user excluded are never entered, not just hidden from the
             // results, so an excluded archive also stops costing scan time (#46).
             // Asked first, so an excluded root is never named as unread or as
@@ -243,10 +250,16 @@ nonisolated final class LargeFileScanner {
                 }
                 continue
             }
+            // An added folder that is itself a model store is AI Models' rows.
+            if modelStoreRoots.contains(folder.resolvingSymlinksInPath().path) { continue }
             if isCovered(index) {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
+            // Below an added folder the walk stays on the folder's own disk, or
+            // another one attached to this Mac: a network share or macFUSE
+            // mount inside it is never read (#318 review).
+            let rootDevice = walk.skipsOffLimits ? Self.device(of: folder) : nil
             // How the enumerator spells the root, taken from its first child rather
             // than from `root`: it can differ (`/private/var` for `/var`), and
             // matching is on the path below this prefix. See `ScanExclusions`.
@@ -344,6 +357,10 @@ nonisolated final class LargeFileScanner {
                         return ([], false)
                     }
                     if walk.skipsOffLimits, ScanFolders.isOffLimits(fileURL) {
+                        return ([], false)
+                    }
+                    if let rootDevice, Self.device(of: fileURL) != rootDevice,
+                       !LargeFileScanPolicy.isOnLocalDisk(fileURL) {
                         return ([], false)
                     }
                     // The walk never goes into a package.
@@ -554,6 +571,12 @@ nonisolated final class LargeFileScanner {
 
     /// Why a root that is a link was left out, with where it leads, so the
     /// summary doesn't read as a folder macOS refused to open.
+    /// The device a folder is on, by `lstat`, or nil when it can't be read.
+    private static func device(of url: URL) -> dev_t? {
+        var info = stat()
+        return lstat(url.path, &info) == 0 ? info.st_dev : nil
+    }
+
     /// Why an added folder was not walked: its drive is out, or it no longer
     /// passes the rules for added folders (#318).
     /// Empty for one whose drive is unplugged: the card words that case itself.

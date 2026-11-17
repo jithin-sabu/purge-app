@@ -219,13 +219,14 @@ nonisolated enum AIModelScanPolicy {
     ) -> [URL] {
         let scanRoots = LargeFileScanPolicy.scanRoots(home: home)
         let added = addedRoots ?? ScanFolders.roots(home: home)
-        let spelled = (scanRoots + added).map { $0.standardizedFileURL.path + "/" }
+        let spelled = (scanRoots + added).map { $0.standardizedFileURL.path }
         let walked = (scanRoots.compactMap { LargeFileScanPolicy.walkedFolder(for: $0, home: home) } + added)
-            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path + "/" }
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+        // The store itself counts too: an added folder can be the store (#318 review).
         return allRoots(home: home, environment: environment).filter { root in
-            if spelled.contains(where: { root.path.hasPrefix($0) }) { return true }
+            if spelled.contains(where: { PathContainment.isSameOrInside(root.path, $0) }) { return true }
             let real = root.resolvingSymlinksInPath().standardizedFileURL.path
-            return walked.contains { real.hasPrefix($0) }
+            return walked.contains { PathContainment.isSameOrInside(real, $0) }
         }
     }
 

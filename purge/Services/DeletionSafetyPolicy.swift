@@ -511,6 +511,7 @@ enum DeletionSafetyPolicy {
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
+        let generation = offeredForCleanupGeneration
         offeredForCleanupLock.unlock()
         if let cached { return cached }
 
@@ -525,7 +526,11 @@ enum DeletionSafetyPolicy {
         if offeredForCleanupCache.count >= offeredForCleanupCacheLimit {
             offeredForCleanupCache.removeAll(keepingCapacity: true)
         }
-        offeredForCleanupCache[key] = verdict
+        // A verdict reached before the cache was cleared read the old list of
+        // added folders (#318), so it is returned but not kept.
+        if generation == offeredForCleanupGeneration {
+            offeredForCleanupCache[key] = verdict
+        }
         offeredForCleanupLock.unlock()
         return verdict
     }
@@ -553,6 +558,8 @@ enum DeletionSafetyPolicy {
     }
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
+    /// Moves on with each clear, so a verdict that started before it is not kept.
+    private nonisolated(unsafe) static var offeredForCleanupGeneration = 0
     private nonisolated static let offeredForCleanupLock = NSLock()
     nonisolated static let offeredForCleanupCacheLimit = 20_000
 
@@ -561,6 +568,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func clearOfferedForCleanupCache() {
         offeredForCleanupLock.lock()
         offeredForCleanupCache.removeAll(keepingCapacity: true)
+        offeredForCleanupGeneration &+= 1
         offeredForCleanupLock.unlock()
     }
 

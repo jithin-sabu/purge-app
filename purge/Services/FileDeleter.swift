@@ -698,7 +698,10 @@ nonisolated final class FileDeleter: Sendable {
         // its folder, so the pairs are read once, before anything moves (#225).
         // The gates read Ollama's store from launchd too, read again here (#318).
         LaunchdEnvironment.refresh()
-        let commandLineToolPaths = CommandLineToolScanPolicy.eligiblePaths(home: home)
+        // Taken once, so every check in the batch reads the same store, even if
+        // a scan reads launchd again meanwhile (#318 review).
+        let modelEnvironment = AIModelScanPolicy.modelEnvironment
+        let commandLineToolPaths = CommandLineToolScanPolicy.eligiblePaths(home: home, environment: modelEnvironment)
         // The folders the user added for Large Files (#318), read once from
         // disk for the batch, so a folder removed in Settings is refused.
         let addedScanRoots = ScanFolders.roots(home: home)
@@ -714,9 +717,9 @@ nonisolated final class FileDeleter: Sendable {
             // fourth is a command-line tool's folder, shims and job plists.
             let isAIModel = aiModelPaths.contains(standardizedPath)
             let isEligible = isAIModel
-                ? AIModelScanPolicy.isEligibleForDeletion(url, home: home)
+                ? AIModelScanPolicy.isEligibleForDeletion(url, home: home, environment: modelEnvironment)
                 : LargeFileScanPolicy.isEligibleForDeletion(url, home: home, addedRoots: addedScanRoots)
-                    || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
+                    || AIModelScanPolicy.isEligibleForDeletion(url, home: home, environment: modelEnvironment)
                     || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
                     || commandLineToolPaths.contains(standardizedPath)
             // Stamped here, from the flags this call was given, so a retry asks the

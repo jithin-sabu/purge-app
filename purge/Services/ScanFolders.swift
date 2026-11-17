@@ -47,10 +47,11 @@ nonisolated enum ScanFolders {
     static func entries(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         volumes: URL = AppFolders.volumes,
-        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) }
+        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
+        including: (String) -> Bool = { _ in true }
     ) -> [Entry] {
         var others = fixedRoots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
-        return pickedFolders().map { folder in
+        return pickedFolders().filter { including($0.path) }.map { folder in
             let url = URL(fileURLWithPath: folder.path, isDirectory: true)
             let refusal = refusal(forPicked: url, home: home, otherRoots: others, volumes: volumes, isLocalDisk: isLocalDisk)
             if refusal == nil { others.append(url) }
@@ -193,13 +194,25 @@ nonisolated enum ScanFolders {
 
     /// Reads the list from disk and keeps the folders' paths. Off the main
     /// thread: it asks each folder's disk about its file system.
+    ///
+    /// `insideHomeOnly` is for a scan without Full Disk Access: folders
+    /// outside the home folder are left out by their saved path, before
+    /// anything on their drive is read, so macOS never asks about a removable
+    /// volume (#318 review). The saved list comes from the paths alone.
     @discardableResult
-    static func refreshSnapshot(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
-        let all = entries(home: home)
+    static func refreshSnapshot(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        insideHomeOnly: Bool = false
+    ) -> [URL] {
+        let homePath = home.standardizedFileURL.path
+        let saved = pickedFolders().map(\.path)
+        let all = entries(home: home, including: { path in
+            !insideHomeOnly || PathContainment.isInside(path, homePath)
+        })
         let roots = all.filter(\.isAvailable).map(\.url)
         let next = Snapshot(
             walked: roots.map { $0.standardizedFileURL.path },
-            saved: all.map(\.path)
+            saved: saved
         )
         let changed = snapshotStore.withLock { stored -> Bool in
             defer { stored = next }

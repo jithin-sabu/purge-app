@@ -1235,13 +1235,11 @@ nonisolated final class DevScanner {
     /// prompt, which a limited scan never does. Decided on the path alone, so
     /// nothing on the drive is read first.
     nonisolated static func addedSearchRoots(home: URL, access: ScanAccess) -> [URL] {
-        let added = ScanFolders.refreshSnapshot(home: home)
         switch access {
         case .full:
-            return added
+            return ScanFolders.refreshSnapshot(home: home)
         case .limited:
-            let homePath = home.standardizedFileURL.path
-            return added.filter { PathContainment.isInside($0.standardizedFileURL.path, homePath) }
+            return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: true)
         }
     }
 

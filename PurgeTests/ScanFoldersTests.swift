@@ -392,4 +392,51 @@ struct ScanFoldersTests {
             #expect(ScanFolders.isInsideSavedFolder("/Volumes/Archive/blog/node_modules", home: home))
         }
     }
+
+    @Test("An added folder that is itself an Ollama store stays out of Large Files")
+    func addedFolderThatIsAModelStore() {
+        let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        let store = URL(fileURLWithPath: "/Volumes/T7/Models", isDirectory: true)
+        let inside = AIModelScanPolicy.rootsInsideLargeFileScan(
+            home: home, environment: ["OLLAMA_MODELS": store.path], addedRoots: [store]
+        )
+        #expect(inside.map(\.path).contains(store.path))
+    }
+
+    @Test("An added folder that goes away before the walk reaches it is named as not connected")
+    func driveGoneBeforeTheWalk() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let gone = fixture.url("Volumes/T7")
+        let stream = LargeFileScanner().scanEvents(
+            minBytes: 1024, staleDays: 0, roots: [], virtualMachineRoots: [], iCloudDriveRoots: [],
+            addedFolders: [ScanFolders.Entry(path: gone.standardizedFileURL.path, refusal: nil)],
+            installedApps: [], isAppRunning: { _ in false }, home: fixture.home,
+            exclusions: ScanExclusions(keys: []), isExcluded: { _ in false }
+        )
+        var summary: LargeFileScanSummary?
+        for await event in stream {
+            if case .finished(let finished) = event { summary = finished }
+        }
+        let root = try #require(summary?.unreadableRoots.first)
+        #expect(root.isDisconnected)
+        #expect(root.path.standardizedFileURL.path == gone.standardizedFileURL.path)
+    }
+
+    @Test("A limited scan judges only the added folders inside home")
+    func limitedScanReadsOnlyHomeFolders() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let work = try fixture.folder("home/Work")
+        let drive = try fixture.folder("Volumes/T7")
+        try withTemporaryHandoffRoot {
+            AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(ScanFolders.add(work, home: fixture.home).refusal == nil)
+                #expect(ScanFolders.add(drive, home: fixture.home).refusal == nil)
+                let homePath = fixture.home.standardizedFileURL.path
+                let judged = ScanFolders.entries(home: fixture.home, including: { PathContainment.isInside($0, homePath) })
+                #expect(judged.map(\.path) == [work.standardizedFileURL.path])
+            }
+        }
+    }
 }
