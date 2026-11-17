@@ -1322,8 +1322,11 @@ nonisolated final class DevScanner {
         // Below an added folder, a network share or macFUSE mount is never
         // listed: only local disks count there. Taken from the mount table,
         // so no share is asked anything.
-        let foreignMounts = addedRoots.isEmpty ? [] : (nonLocalMounts ?? AppFolders.nonLocalMountPaths())
-            .flatMap { [$0, "/private" + $0] }
+        // Skipped below every root, not only added ones: a move to the Trash on
+        // a share is a delete. A linked root is never listed at all (listing a
+        // link fails with "Not a directory"), so a folder's path here is where
+        // it really is.
+        let foreignMounts = Set((nonLocalMounts ?? AppFolders.nonLocalMountPaths()).flatMap { [$0, "/private" + $0] })
 
         /// One folder the walk enters. `realPath` is the folder with its root's
         /// symlinks resolved, in a limited scan only; nil with full access, where
@@ -1382,10 +1385,7 @@ nonisolated final class DevScanner {
                 // with them prefetched stats nothing through a link. That is also
                 // why a linked folder was never walked, with or without access:
                 // `isDirectory` is false for it.
-                if !foreignMounts.isEmpty, foreignMounts.contains(entry.path),
-                   addedRoots.contains(where: { PathContainment.isInside(entry.path, $0) }) {
-                    continue
-                }
+                if foreignMounts.contains(entry.path) { continue }
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 

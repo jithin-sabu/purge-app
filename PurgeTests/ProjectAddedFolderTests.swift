@@ -208,6 +208,28 @@ extension ProjectAddedFolderTests {
     }
 }
 
+extension ProjectAddedFolderTests {
+    @Test("A linked project root is never listed, so nothing on a drive is reached through it")
+    func linkedRootIsNotListed() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-linked-root-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let fm = FileManager.default
+        for file in ["Drive/Code/site/package.json", "Drive/Code/site/node_modules/pkg/index.js"] {
+            let url = base.appendingPathComponent(file)
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: url)
+        }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        try fm.createDirectory(at: home, withIntermediateDirectories: true)
+        let projects = home.appendingPathComponent("Projects")
+        try fm.createSymbolicLink(at: projects, withDestinationURL: base.appendingPathComponent("Drive/Code"))
+
+        let found = DevScanner.findProjectRoots(in: [projects], home: home, access: .full, maxDepth: 6).roots
+        #expect(found.isEmpty)
+    }
+}
+
 @MainActor
 @Suite("Clean Safe Items never takes anything from an added folder (#318)")
 struct AddedFolderSafeCleanTests {

@@ -103,14 +103,20 @@ nonisolated enum ScanFolders {
         volumes: URL = AppFolders.volumes,
         isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) }
     ) -> AppFolders.Refusal? {
-        AppFolders.refusal(
+        if let refusal = AppFolders.refusal(
             forPicked: folder,
             home: home,
             otherRoots: otherRoots,
             volumes: volumes,
             isLocalDisk: isLocalDisk,
             allowsWholeDrive: true
-        )
+        ) {
+            return refusal
+        }
+        // The folder itself by the rule the walks apply below it, so a drive
+        // top holding a copied home folder is refused too (#318 review).
+        if AppFolders.isSyncedByAnotherService(folder) { return .syncs }
+        return isOffLimits(folder) ? .holdsWholeDisk : nil
     }
 
     /// Adds `folder` unless `refusal(forPicked:)` refuses it. Returns the

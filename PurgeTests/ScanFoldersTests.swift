@@ -605,4 +605,24 @@ struct ScanFoldersTests {
             data, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true }, addedRoots: [drive]
         ))
     }
+
+    @Test("The added folder itself is judged: a copied home folder at a drive's top is refused, and a sync marker it gains closes the gate")
+    func theAddedFolderItself() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/Old/Library")
+        try fixture.folder("Volumes/Old/Documents")
+        #expect(fixture.refusal("Volumes/Old") == .holdsWholeDisk)
+
+        let drive = try fixture.folder("Volumes/T7")
+        let film = try fixture.write("Volumes/T7/film.mov")
+        func passes() -> Bool {
+            LargeFileScanPolicy.isEligibleForDeletion(
+                film, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true }, addedRoots: [drive]
+            )
+        }
+        #expect(passes())
+        try fixture.write("Volumes/T7/.dropbox", bytes: 1)
+        #expect(!passes())
+    }
 }

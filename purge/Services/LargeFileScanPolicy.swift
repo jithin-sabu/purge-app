@@ -334,6 +334,9 @@ enum LargeFileScanPolicy {
             // and the check above matches only `/Library/` (#318 review).
             let below = realPath.dropFirst(rootPath.count).split(separator: "/")
             if below.contains(where: { $0.caseInsensitiveCompare("Library") == .orderedSame }) { return false }
+            // The added folder itself, read again: it may have gained a sync
+            // service's marker since the batch read the list (#318 review).
+            if ScanFolders.isOffLimits(URL(fileURLWithPath: rootPath, isDirectory: true)) { return false }
             // A bundle is judged itself too: it may hold a copied Mac by now.
             if isDir.boolValue, ScanFolders.isOffLimits(real) { return false }
             return !ScanFolders.crossesOffLimits(from: rootPath, to: real.deletingLastPathComponent())
