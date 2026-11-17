@@ -140,13 +140,27 @@ nonisolated enum AIModelScanPolicy {
     /// Files' delete gate asks this, so a blob never goes alone, even from a
     /// row saved before the walk knew the shape. The walk asks it of each
     /// root, so a root inside a store lists nothing the gate would refuse.
+    ///
+    /// A folder above that can't be listed counts as a store: it may be one,
+    /// such as a store whose read permission was taken away after the scan. A
+    /// link counts as neither, because the listing doesn't follow it; the gate
+    /// also asks this of the real path, which passes through where it leads.
     nonisolated static func isInsideOllamaStore(_ url: URL) -> Bool {
         var folder = url.standardizedFileURL.deletingLastPathComponent()
         while folder.path != "/", !folder.path.isEmpty {
-            if isOllamaStore(folder) { return true }
+            if let entries = DirectoryListing.entries(of: folder.path) {
+                if isOllamaStore(folderNames: entries.lazy.filter { !$0.isRegularFile }.map(\.name)) { return true }
+            } else if !isLink(folder) {
+                return true
+            }
             folder = folder.deletingLastPathComponent()
         }
         return false
+    }
+
+    private nonisolated static func isLink(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK
     }
 
     /// Current LM Studio location first, then the pre-0.3 cache location. Both

@@ -165,6 +165,21 @@ struct OllamaStoreShapeTests {
         #expect(await scannedPaths(home, roots: ["Documents"]) == [real(file)])
     }
 
+    /// A store named like a VM bundle is still a store. It is not listed as a
+    /// virtual machine, and the gate refuses the folder itself.
+    @Test
+    func aStoreNamedLikeAVirtualMachineIsNotARow() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.ollamaStore("Documents/models.pvm")
+        let store = home.url.appendingPathComponent("Documents/models.pvm", isDirectory: true)
+
+        #expect(await scannedPaths(home, roots: ["Documents"]).isEmpty)
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(
+            store, home: home.url, isAppRunning: { _ in false }
+        ))
+    }
+
     // MARK: - The gates
 
     /// The Large Files gate refuses a blob and a manifest of the store, so a
@@ -204,6 +219,22 @@ struct OllamaStoreShapeTests {
         #expect(!LargeFileScanPolicy.isEligibleForDeletion(
             link.appendingPathComponent("sha256-aaa"), home: home.url
         ))
+    }
+
+    /// A folder above the file that can't be listed may be a store, such as
+    /// one whose read permission was taken away after the scan, so the gate
+    /// refuses a file under it.
+    @Test
+    func largeFilesGateRefusesUnderAFolderItCannotList() throws {
+        let home = try Home()
+        defer { home.remove() }
+        let blob = try home.ollamaStore("Documents/models")
+        let store = home.url.appendingPathComponent("Documents/models", isDirectory: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o111], ofItemAtPath: store.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: store.path) }
+
+        #expect(FileManager.default.fileExists(atPath: blob.path))
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(blob, home: home.url))
     }
 
     /// AI Models lists only the store it knows, so the unknown one has no

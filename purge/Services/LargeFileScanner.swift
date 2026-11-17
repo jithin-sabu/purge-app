@@ -290,6 +290,11 @@ nonisolated final class LargeFileScanner {
                     if isVirtualMachine
                         || (!bundlesOnly && LargeFileScanPolicy.isSafariDownloadBundle(fileURL, home: home)) {
                         if isUserExcluded(fileURL) { return ([], false) }
+                        // A store shaped like Ollama's is never a row, whatever
+                        // it is named, such as `models.pvm`. Asked only of the
+                        // folders that would be rows, so the walk lists no
+                        // other folder twice.
+                        if AIModelScanPolicy.isOllamaStore(fileURL) { return ([], false) }
                         // A VM that may be running is left off the list; the
                         // delete check refuses it again in case it starts later.
                         if isVirtualMachine,

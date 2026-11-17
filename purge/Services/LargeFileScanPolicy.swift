@@ -286,6 +286,10 @@ enum LargeFileScanPolicy {
         // row, whether or not Purge knows the store is Ollama's. A blob
         // trashed alone breaks every model that uses it.
         if AIModelScanPolicy.isInsideOllamaStore(std) || AIModelScanPolicy.isInsideOllamaStore(real) { return false }
+        // Nor is the store itself, whatever it is named (`models.pvm`).
+        if isDir.boolValue, AIModelScanPolicy.isOllamaStore(std) || AIModelScanPolicy.isOllamaStore(real) {
+            return false
+        }
 
         func walkedPath(_ root: URL) -> String? {
             walkedFolder(for: root, home: home, volumes: volumes, isLocalDisk: isLocalDisk).map {
