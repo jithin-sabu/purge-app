@@ -1237,7 +1237,7 @@ nonisolated final class DevScanner {
     nonisolated static func addedSearchRoots(home: URL, access: ScanAccess) -> [URL] {
         switch access {
         case .full:
-            return ScanFolders.refreshSnapshot(home: home)
+            return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: false)
         case .limited:
             return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: true)
         }

@@ -394,14 +394,17 @@ nonisolated enum AIModelScanPolicy {
         // Ollama: a manifest, or a blob the manifest names. Both are plain
         // files the scanner picked out of the store, and nothing else under
         // the root is: `OLLAMA_MODELS` can name a folder that holds more.
+        // Anything else under the root is asked the other stores' rules, since
+        // the root can be a folder that holds them, such as `~/.cache`.
         let ollama = ollamaRoot(home: home, environment: environment)
-        if isInside(ollama) {
-            guard !isDirectory.boolValue else { return false }
+        if isInside(ollama), !isDirectory.boolValue {
             let manifests = ollama.appendingPathComponent("manifests", isDirectory: true).path
             let blobs = ollama.appendingPathComponent("blobs", isDirectory: true).path
             if PathContainment.isInside(path, manifests) { return true }
-            return standardized.deletingLastPathComponent().path == blobs
-                && standardized.lastPathComponent.hasPrefix("sha256-")
+            if standardized.deletingLastPathComponent().path == blobs,
+               standardized.lastPathComponent.hasPrefix("sha256-") {
+                return true
+            }
         }
 
         // The Hub: one `models--<org>--<name>` folder straight under the root.

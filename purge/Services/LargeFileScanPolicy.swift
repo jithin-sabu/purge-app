@@ -321,6 +321,8 @@ enum LargeFileScanPolicy {
             }
             guard let holding, isLocalDisk(real) else { return false }
             let rootPath = holding.resolvingSymlinksInPath().standardizedFileURL.path
+            // A bundle is judged itself too: it may hold a copied Mac by now.
+            if isDir.boolValue, ScanFolders.isOffLimits(real) { return false }
             return !ScanFolders.crossesOffLimits(from: rootPath, to: real.deletingLastPathComponent())
         }
 

@@ -144,18 +144,30 @@ nonisolated enum AppFolders {
     /// drive: `Backups.backupdb` on HFS+, `backup_manifest.plist` on APFS.
     static let driveMarkers = ["System", "Users", "Backups.backupdb", "backup_manifest.plist"]
 
-    /// An APFS Time Machine drive also names its backups `<date>.backup`,
-    /// and the one being made `.inprogress`. Read from the drive's top only.
+    /// An APFS Time Machine drive also names each backup folder by its date,
+    /// `2026-11-01-120000.backup`, and the one being made `.inprogress`. Read
+    /// from the drive's top only. A file such as `notes.backup` is not one.
     static func isTimeMachineDrive(_ volume: URL) -> Bool {
-        if FileManager.default.fileExists(atPath: volume.appendingPathComponent("backup_manifest.plist").path) {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: volume.appendingPathComponent("backup_manifest.plist").path) {
             return true
         }
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: volume.path)) ?? []
-        return names.contains { isTimeMachineBackupName($0) }
+        let names = (try? fm.contentsOfDirectory(atPath: volume.path)) ?? []
+        return names.contains { name in
+            guard isTimeMachineBackupName(name) else { return false }
+            var isDirectory: ObjCBool = false
+            return fm.fileExists(atPath: volume.appendingPathComponent(name).path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
     }
 
-    static func isTimeMachineBackupName(_ name: String) -> Bool {
-        name.hasSuffix(".backup") || name.hasSuffix(".inprogress") || name.hasSuffix(".previous")
+    /// A Time Machine backup folder's name: a date and time, then `.backup`,
+    /// `.inprogress` or `.previous`.
+    static func isTimeMachineBackupName(_ name: some StringProtocol) -> Bool {
+        String(name).range(
+            of: #"^\d{4}-\d{2}-\d{2}-\d{6}\.(backup|inprogress|previous)$"#,
+            options: .regularExpression
+        ) != nil
     }
 
     /// Files a sync service other than iCloud Drive keeps at the top of the
@@ -271,6 +283,8 @@ nonisolated enum AppFolders {
             let markers = isDriveTop ? driveMarkers : pickedMarkers
             if holdsWholeDisk(folder, markers: markers) { return .holdsWholeDisk }
             if isDriveTop, isTimeMachineDrive(folder) { return .holdsWholeDisk }
+            // Inside a Time Machine backup folder copied anywhere on the drive.
+            if isTimeMachineBackupName(name) { return .holdsWholeDisk }
             if isSyncedByAnotherService(folder) { return .syncs }
         }
         if (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true { return .syncs }

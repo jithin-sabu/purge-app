@@ -96,4 +96,23 @@ struct LaunchdEnvironmentTests {
         #expect(passes("blobs/sha256-abc"))
         #expect(passes("manifests/registry.ollama.ai/library/m/latest"))
     }
+
+    @Test("Under a broad Ollama root, another store's model still reaches its own gate")
+    func otherStoresUnderTheOllamaRoot() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purge-ollama-overlap-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let whisper = home.appendingPathComponent(".cache/whisper", isDirectory: true)
+        try fm.createDirectory(at: whisper, withIntermediateDirectories: true)
+        let model = whisper.appendingPathComponent("base.pt")
+        try Data(repeating: 1, count: 4096).write(to: model)
+        let notes = home.appendingPathComponent(".cache/notes.txt")
+        try Data("x".utf8).write(to: notes)
+
+        let environment = ["OLLAMA_MODELS": home.appendingPathComponent(".cache").path]
+        #expect(AIModelScanPolicy.isEligibleForDeletion(model, home: home, environment: environment)
+            == AIModelScanPolicy.isEligibleForDeletion(model, home: home, environment: [:]))
+        #expect(AIModelScanPolicy.isEligibleForDeletion(model, home: home, environment: [:]))
+        #expect(!AIModelScanPolicy.isEligibleForDeletion(notes, home: home, environment: environment))
+    }
 }

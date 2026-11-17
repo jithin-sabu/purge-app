@@ -320,6 +320,11 @@ nonisolated final class LargeFileScanner {
                        !LargeFileScanPolicy.isOnLocalDisk(fileURL) {
                         return ([], false)
                     }
+                    // A copy of a Mac, a home folder or a backup, or a synced
+                    // folder, is skipped before anything else, a bundle included.
+                    if walk.skipsOffLimits, ScanFolders.isOffLimits(fileURL) {
+                        return ([], false)
+                    }
                     // A VM or a Safari download bundle is one item. Never walk
                     // into it, whether or not macOS calls it a package: without
                     // the VM app installed it is a plain folder, and a disk file
@@ -360,9 +365,6 @@ nonisolated final class LargeFileScanner {
                         return ([], false)
                     }
                     if modelStoreRoots.contains(fileURL.standardizedFileURL.path) {
-                        return ([], false)
-                    }
-                    if walk.skipsOffLimits, ScanFolders.isOffLimits(fileURL) {
                         return ([], false)
                     }
                     // The walk never goes into a package.

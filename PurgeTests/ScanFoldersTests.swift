@@ -542,4 +542,45 @@ struct ScanFoldersTests {
         }
         #expect(trash.trashedPaths == [film.standardizedFileURL.path])
     }
+
+    @Test("A file named like a backup doesn't make a drive Time Machine, and a dated backup folder anywhere is refused")
+    func timeMachineNamesNeedTheDatedFolder() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write("Volumes/T7/notes.backup", bytes: 1)
+        try fixture.folder("Volumes/T7/Applications")
+        try fixture.folder("Volumes/T7/Archive/2026-11-01-120000.backup/Data")
+
+        #expect(fixture.refusal("Volumes/T7") == nil)
+        #expect(AppFolders.driveRoots(volumes: fixture.volumes, isLocalDisk: { _ in true }).count == 1)
+        #expect(fixture.refusal("Volumes/T7/Archive/2026-11-01-120000.backup/Data") == .holdsWholeDisk)
+        #expect(!AppFolders.isTimeMachineBackupName("notes.backup"))
+        #expect(AppFolders.isTimeMachineBackupName("2026-11-01-120000.backup"))
+    }
+
+    @Test("A VM bundle that holds a copied Mac is neither listed nor taken by the gate")
+    func vmBundleHoldingACopiedMac() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let copy = try fixture.folder("Volumes/T7/Copy.utm")
+        try fixture.folder("Volumes/T7/Copy.utm/System")
+        try fixture.write("Volumes/T7/Copy.utm/Users/bob/disk.img")
+
+        let stream = LargeFileScanner().scanEvents(
+            minBytes: 1024, staleDays: 0, roots: [], virtualMachineRoots: [], iCloudDriveRoots: [],
+            addedFolders: [ScanFolders.Entry(path: drive.standardizedFileURL.path, refusal: nil)],
+            installedApps: [], isAppRunning: { _ in false }, home: fixture.home,
+            exclusions: ScanExclusions(keys: []), isExcluded: { _ in false }
+        )
+        var paths: [String] = []
+        for await event in stream {
+            if case .file(let file) = event { paths.append(file.id) }
+        }
+        #expect(!paths.contains { $0.contains("Copy.utm") })
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(
+            copy, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true },
+            isAppRunning: { _ in false }, addedRoots: [drive]
+        ))
+    }
 }

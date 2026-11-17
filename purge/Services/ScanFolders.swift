@@ -214,21 +214,27 @@ nonisolated enum ScanFolders {
     /// outside the home folder are left out by their saved path, before
     /// anything on their drive is read, so macOS never asks about a removable
     /// volume (#318 review). The saved list comes from the paths alone.
+    ///
+    /// Left out, `insideHomeOnly` follows Full Disk Access as it is now, so a
+    /// refresh outside a scan, such as before a clean or when a drive comes or
+    /// goes, never reads a drive without it either.
     @discardableResult
     static func refreshSnapshot(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        insideHomeOnly: Bool = false
+        insideHomeOnly: Bool? = nil
     ) -> [URL] {
+        let insideHomeOnly = insideHomeOnly ?? (ScanAccess.current() == .limited)
         let homePath = home.standardizedFileURL.path
-        let saved = pickedFolders().map(\.path)
         let all = entries(home: home, including: { path in
             !insideHomeOnly || PathContainment.isInside(path, homePath)
         }, insideHomeOnly: insideHomeOnly)
         let roots = all.filter(\.isAvailable).map(\.url)
-        let next = Snapshot(
-            walked: roots.map { $0.standardizedFileURL.path },
-            saved: saved
-        )
+        let walked = roots.map { $0.standardizedFileURL.path }
+        // Read after the walk, and never short of it, so a folder added while
+        // the drives were read is in `saved` whenever it is in `walked`.
+        var saved = pickedFolders().map(\.path)
+        for path in walked where !saved.contains(path) { saved.append(path) }
+        let next = Snapshot(walked: walked, saved: saved)
         let changed = snapshotStore.withLock { stored -> Bool in
             defer { stored = next }
             return stored != next
