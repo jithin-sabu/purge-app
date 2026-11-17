@@ -16,6 +16,8 @@ extension PurgeStore {
         Task { [weak self] in
             let roots = await Task.detached(priority: .utility) { AppFolders.roots() }.value
             self?.lastAppFolderRoots = roots.map(\.path)
+            let scanRoots = await Task.detached(priority: .utility) { ScanFolders.refreshSnapshot() }.value
+            self?.lastScanFolderRoots = scanRoots.map(\.path)
         }
     }
 
@@ -28,9 +30,18 @@ extension PurgeStore {
             let roots = await Task.detached(priority: .utility) { AppFolders.roots() }.value
             guard let self else { return }
             let paths = roots.map(\.path)
-            guard paths != lastAppFolderRoots else { return }
-            lastAppFolderRoots = paths
-            rescanAppsForNewFolders()
+            if paths != lastAppFolderRoots {
+                lastAppFolderRoots = paths
+                rescanAppsForNewFolders()
+            }
+            // The same for the folders Large Files and Dev Projects walk (#318):
+            // a drive holding one came or went.
+            let scanRoots = await Task.detached(priority: .utility) { ScanFolders.refreshSnapshot() }.value
+            let scanPaths = scanRoots.map(\.path)
+            if scanPaths != lastScanFolderRoots {
+                lastScanFolderRoots = scanPaths
+                rescanForScanFolders()
+            }
         }
     }
 
@@ -75,5 +86,27 @@ extension PurgeStore {
     private func rescanAppsForNewFolders() {
         guard hasCompletedInstalledAppsScan || isScanningInstalledApps else { return }
         requestScan(.apps)
+    }
+
+    /// Called after Settings adds or removes a folder Large Files and Dev
+    /// Projects walk (#318).
+    func scanFoldersChanged() {
+        Task { [weak self] in
+            let roots = await Task.detached(priority: .utility) { ScanFolders.refreshSnapshot() }.value
+            guard let self else { return }
+            lastScanFolderRoots = roots.map(\.path)
+            rescanForScanFolders()
+        }
+    }
+
+    /// Only the tabs that were read before, as for the app list. Dev Projects
+    /// is part of the App Caches and Dev Tools step.
+    private func rescanForScanFolders() {
+        if hasSessionResults(for: .largeFiles) || isScanningLargeFiles || scanQueue.active == .largeFiles {
+            requestScan(.largeFiles)
+        }
+        if hasSessionResults(for: .cachesAndDevTools) || scanQueue.active == .cachesAndDevTools {
+            requestScan(.cachesAndDevTools)
+        }
     }
 }

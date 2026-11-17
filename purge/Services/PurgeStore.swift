@@ -355,6 +355,8 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var hasCompletedInstalledAppsScan = false
     /// The app folders the app list was last read with (#99).
     var lastAppFolderRoots: [String] = []
+    /// The added folders Large Files and Dev Projects walked last (#318).
+    var lastScanFolderRoots: [String] = []
     /// What the header needs to say where the listed apps come from (#99):
     /// the folders read now, the ones the user added, and drive names. Read
     /// off the main thread with each app scan, so no render asks the disk.
