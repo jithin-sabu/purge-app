@@ -191,7 +191,8 @@ nonisolated enum AppFolders {
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         otherRoots: [URL],
         volumes: URL = AppFolders.volumes,
-        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) }
+        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
+        allowsWholeDrive: Bool = false
     ) -> Refusal? {
         let url = folder.standardizedFileURL
         let path = url.path
@@ -203,8 +204,12 @@ nonisolated enum AppFolders {
         let onDrive = isInside(path, volumesPath)
         if path == homePath || isInside(homePath, path) { return .tooBroad }
         guard inHome || onDrive else { return .outsideHomeAndDrives }
-        if onDrive, url.deletingLastPathComponent().path == volumesPath { return .tooBroad }
-        if (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true { return .tooBroad }
+        // A whole drive is refused for apps. The folders Large Files and Dev
+        // Projects walk may be one (#318); the marker check below still refuses
+        // a copy of a Mac or a Time Machine drive.
+        let isDriveTop = onDrive && url.deletingLastPathComponent().path == volumesPath
+        if isDriveTop, !allowsWholeDrive { return .tooBroad }
+        if !isDriveTop, (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true { return .tooBroad }
 
         let base = inHome ? homePath : volumesPath
         let below = path.dropFirst(base.count + 1).split(separator: "/")
@@ -245,9 +250,10 @@ nonisolated enum AppFolders {
         return nil
     }
 
-    /// The folders the user added, whether or not they are there now.
-    static func pickedFolders() -> [PickedFolder] {
-        guard let data = try? Data(contentsOf: pickedFoldersFile) else { return [] }
+    /// The folders the user added, whether or not they are there now. `file`
+    /// is the uninstaller's list unless another list is named (#318).
+    static func pickedFolders(in file: URL = pickedFoldersFile) -> [PickedFolder] {
+        guard let data = try? Data(contentsOf: file) else { return [] }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode([PickedFolder].self, from: data)) ?? []
@@ -285,16 +291,17 @@ nonisolated enum AppFolders {
         RemovedAppHandoff.root.appendingPathComponent("app-folders.json", isDirectory: false)
     }
 
-    private static func save(_ folders: [PickedFolder]) -> Bool {
+    /// Writes a list of picked folders. Returns false when it could not.
+    static func save(_ folders: [PickedFolder], to file: URL = pickedFoldersFile) -> Bool {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
             try FileManager.default.createDirectory(
-                at: pickedFoldersFile.deletingLastPathComponent(),
+                at: file.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try encoder.encode(folders).write(to: pickedFoldersFile, options: [.atomic])
+            try encoder.encode(folders).write(to: file, options: [.atomic])
             return true
         } catch {
             return false
