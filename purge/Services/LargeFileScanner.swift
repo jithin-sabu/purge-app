@@ -150,7 +150,11 @@ nonisolated final class LargeFileScanner {
         // An added folder that can't be walked now is named, never read as
         // empty: its files are still there when the drive is (#318).
         for entry in unwalkedAddedFolders {
-            summary.unreadableRoots.append(.init(path: entry.url, reason: unwalkedAddedFolderReason(entry)))
+            summary.unreadableRoots.append(.init(
+                path: entry.url,
+                reason: unwalkedAddedFolderReason(entry),
+                isDisconnected: entry.isDisconnected
+            ))
         }
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
@@ -543,10 +547,9 @@ nonisolated final class LargeFileScanner {
     /// summary doesn't read as a folder macOS refused to open.
     /// Why an added folder was not walked: its drive is out, or it no longer
     /// passes the rules for added folders (#318).
+    /// Empty for one whose drive is unplugged: the card words that case itself.
     private static func unwalkedAddedFolderReason(_ entry: ScanFolders.Entry) -> String {
-        guard let refusal = entry.refusal, !entry.isDisconnected else {
-            return String(localized: "It isn\u{2019}t connected. Connect its drive and scan again.")
-        }
+        guard let refusal = entry.refusal, !entry.isDisconnected else { return "" }
         return ScanFolderAdding.message(for: refusal)
     }
 

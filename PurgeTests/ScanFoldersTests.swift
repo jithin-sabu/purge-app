@@ -283,6 +283,8 @@ struct ScanFoldersTests {
         #expect(paths.contains(file.standardizedFileURL.path))
         let unread = try #require(summary).unreadableRoots
         #expect(unread.map(\.path.path) == [gone.standardizedFileURL.path])
-        #expect(!(unread.first?.reason.isEmpty ?? true))
+        let root = try #require(unread.first)
+        #expect(root.isDisconnected)
+        #expect(LargeFileScanSummaryCard.unreadableText(root) == "Media isn\u{2019}t connected. Connect its drive and scan again.")
     }
 }

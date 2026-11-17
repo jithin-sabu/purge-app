@@ -1526,7 +1526,6 @@
 
 /* Extra folders for Large Files and Developer Projects (#318) */
 "In a folder you added, so Purge won't clean it without asking." = "位于你添加的文件夹中，因此 Purge 不会未经询问就清理它。";
-"It isn’t connected. Connect its drive and scan again." = "它未连接。请连接所在的磁盘后重新扫描。";
 "Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "选择一个文件夹或磁盘。“大文件”和“开发项目”也会在其中查找。";
 "That folder can’t be found. If it’s on a drive, connect the drive." = "找不到该文件夹。如果它在某个磁盘上，请连接该磁盘。";
 "Choose a folder or a drive, not your home folder." = "请选择一个文件夹或磁盘，而不是你的个人文件夹。";
@@ -1543,4 +1542,5 @@
 "Stop looking in %@." = "不再在 %@ 中查找。";
 "Not scanned" = "未扫描";
 "None added" = "未添加";
+"%@ isn’t connected. Connect its drive and scan again." = "%@ 未连接。请连接所在的磁盘后重新扫描。";
 "%lld added" = "已添加 %lld 个";

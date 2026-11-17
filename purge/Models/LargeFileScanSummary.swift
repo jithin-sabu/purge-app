@@ -113,6 +113,9 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
         let path: URL
         /// What macOS said, as a sentence, or empty when it gave no error.
         let reason: String
+        /// A folder the user added whose drive is unplugged (#318). Named as
+        /// not connected rather than as a folder that couldn't be read.
+        var isDisconnected = false
 
         var id: String { path.path }
         var name: String { LargeFileScanSummary.rootName(path) }

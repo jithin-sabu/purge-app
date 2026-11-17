@@ -1526,7 +1526,6 @@
 
 /* Extra folders for Large Files and Developer Projects (#318) */
 "In a folder you added, so Purge won't clean it without asking." = "Eklediğiniz bir klasörde olduğu için Purge sormadan temizlemez.";
-"It isn’t connected. Connect its drive and scan again." = "Bağlı değil. Sürücüsünü bağlayıp yeniden tarayın.";
 "Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "Bir klasör ya da sürücü seçin. Büyük Dosyalar ve Geliştirici Projeleri onun içine de bakar.";
 "That folder can’t be found. If it’s on a drive, connect the drive." = "Bu klasör bulunamıyor. Bir sürücüdeyse sürücüyü bağlayın.";
 "Choose a folder or a drive, not your home folder." = "Ana klasörünüzü değil, bir klasör ya da sürücü seçin.";
@@ -1543,4 +1542,5 @@
 "Stop looking in %@." = "%@ içine bakmayı durdur.";
 "Not scanned" = "Taranmıyor";
 "None added" = "Eklenmedi";
+"%@ isn’t connected. Connect its drive and scan again." = "%@ bağlı değil. Sürücüsünü bağlayıp yeniden tarayın.";
 "%lld added" = "%lld eklendi";

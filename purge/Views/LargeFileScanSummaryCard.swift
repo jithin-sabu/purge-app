@@ -103,7 +103,12 @@ struct LargeFileScanSummaryCard: View {
     // MARK: Data
 
     /// "Documents couldn't be read. You don't have permission to access the folder."
+    /// "T7 isn't connected. Connect its drive and scan again." for an added
+    /// folder whose drive is unplugged (#318).
     static func unreadableText(_ root: LargeFileScanSummary.UnreadableRoot) -> String {
+        if root.isDisconnected {
+            return String(localized: "\(root.name) isn\u{2019}t connected. Connect its drive and scan again.")
+        }
         let lead = String(localized: "\(root.name) couldn't be read.")
         let reason = root.reason.trimmingCharacters(in: .whitespacesAndNewlines)
         return reason.isEmpty ? lead : "\(lead) \(reason)"

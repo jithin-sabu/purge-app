@@ -1485,7 +1485,6 @@
 
 /* Extra folders for Large Files and Developer Projects (#318) */
 "In a folder you added, so Purge won't clean it without asking." = "Находится в добавленной вами папке, поэтому Purge не очистит её без вашего подтверждения.";
-"It isn’t connected. Connect its drive and scan again." = "Она не подключена. Подключите её диск и выполните сканирование снова.";
 "Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "Выберите папку или диск. «Большие файлы» и «Проекты разработчика» будут искать и в нём.";
 "That folder can’t be found. If it’s on a drive, connect the drive." = "Папка не найдена. Если она на диске, подключите диск.";
 "Choose a folder or a drive, not your home folder." = "Выберите папку или диск, а не домашнюю папку.";
@@ -1502,4 +1501,5 @@
 "Stop looking in %@." = "Больше не искать в %@.";
 "Not scanned" = "Не сканируется";
 "None added" = "Не добавлено";
+"%@ isn’t connected. Connect its drive and scan again." = "Папка «%@» не подключена. Подключите её диск и выполните сканирование снова.";
 "%lld added" = "Добавлено: %lld";
