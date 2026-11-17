@@ -1526,7 +1526,6 @@
 
 /* Extra folders for Large Files and Developer Projects (#318) */
 "In a folder you added, so Purge won't clean it without asking." = "位于你添加的文件夹中，因此 Purge 不会未经询问就清理它。";
-"Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "选择一个文件夹或磁盘。“大文件”和“开发项目”也会在其中查找。";
 "That folder can’t be found. If it’s on a drive, connect the drive." = "找不到该文件夹。如果它在某个磁盘上，请连接该磁盘。";
 "Choose a folder or a drive, not your home folder." = "请选择一个文件夹或磁盘，而不是你的个人文件夹。";
 "Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge 不会扫描“资源库”、隐藏文件夹，或应用和包的内部。";
@@ -1535,12 +1534,13 @@
 "That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "该文件夹与 iCloud 云盘同步，因此把其中的文件移到废纸篓也会将其从你的其他设备中移除。";
 "Purge already scans that folder." = "Purge 已经在扫描该文件夹。";
 "That folder holds one Purge already scans." = "该文件夹中包含 Purge 已在扫描的文件夹。";
-"Where Purge looks for files and projects" = "Purge 在哪里查找文件和项目";
-"Your home folders, plus folders and drives you add." = "你的个人文件夹，以及你添加的文件夹和磁盘。";
-"Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives." = "“大文件”和“开发项目”会在你的个人文件夹以及你在此添加的文件夹中查找，这些文件夹需位于连接到这台 Mac 的磁盘上。在这些文件夹中找到的内容绝不会包含在“清理安全项目”或定时清理中。没有完全磁盘访问权限时，“开发项目”会跳过其他磁盘上的文件夹。";
-"No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too." = "尚未添加文件夹。添加一个文件夹或整个磁盘，让“大文件”和“开发项目”也在其中查找。";
 "Stop looking in %@." = "不再在 %@ 中查找。";
 "Not scanned" = "未扫描";
 "None added" = "未添加";
 "%@ isn’t connected. Connect its drive and scan again." = "%@ 未连接。请连接所在的磁盘后重新扫描。";
 "%lld added" = "已添加 %lld 个";
+"Other folders to scan" = "要扫描的其他文件夹";
+"Home folders are always scanned. Add a drive or folder." = "个人文件夹始终会被扫描。可添加磁盘或文件夹。";
+"Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge 已经会扫描你的个人文件夹。添加外置磁盘或其他文件夹，它也会一并被扫描。";
+"No folders added." = "尚未添加文件夹。";
+"Choose a drive or folder to scan too." = "选择一个也要扫描的磁盘或文件夹。";

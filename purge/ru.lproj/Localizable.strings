@@ -1485,7 +1485,6 @@
 
 /* Extra folders for Large Files and Developer Projects (#318) */
 "In a folder you added, so Purge won't clean it without asking." = "Находится в добавленной вами папке, поэтому Purge не очистит её без вашего подтверждения.";
-"Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "Выберите папку или диск. «Большие файлы» и «Проекты разработчика» будут искать и в нём.";
 "That folder can’t be found. If it’s on a drive, connect the drive." = "Папка не найдена. Если она на диске, подключите диск.";
 "Choose a folder or a drive, not your home folder." = "Выберите папку или диск, а не домашнюю папку.";
 "Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge не сканирует «Библиотеку», скрытые папки и содержимое приложений и пакетов.";
@@ -1494,12 +1493,13 @@
 "That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "Эта папка синхронизируется с iCloud Drive, поэтому перемещение файла из неё в Корзину удалит его и с других ваших устройств.";
 "Purge already scans that folder." = "Purge уже сканирует эту папку.";
 "That folder holds one Purge already scans." = "Эта папка содержит папку, которую Purge уже сканирует.";
-"Where Purge looks for files and projects" = "Где Purge ищет файлы и проекты";
-"Your home folders, plus folders and drives you add." = "Ваши домашние папки, а также добавленные вами папки и диски.";
-"Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives." = "«Большие файлы» и «Проекты разработчика» ищут в ваших домашних папках и в папках, добавленных здесь, на дисках, подключённых к этому Mac. Найденное там никогда не входит в «Очистить безопасное» и в очистку по расписанию. Без полного доступа к диску «Проекты разработчика» пропускают папки на других дисках.";
-"No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too." = "Папки не добавлены. Добавьте папку или целый диск, чтобы «Большие файлы» и «Проекты разработчика» искали и там.";
 "Stop looking in %@." = "Больше не искать в %@.";
 "Not scanned" = "Не сканируется";
 "None added" = "Не добавлено";
 "%@ isn’t connected. Connect its drive and scan again." = "Папка «%@» не подключена. Подключите её диск и выполните сканирование снова.";
 "%lld added" = "Добавлено: %lld";
+"Other folders to scan" = "Другие папки для сканирования";
+"Home folders are always scanned. Add a drive or folder." = "Домашние папки сканируются всегда. Добавьте диск или папку.";
+"Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge уже сканирует ваши домашние папки. Добавьте внешний диск или другую папку, чтобы сканировать и её.";
+"No folders added." = "Папки не добавлены.";
+"Choose a drive or folder to scan too." = "Выберите диск или папку, которые тоже нужно сканировать.";

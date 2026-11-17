@@ -14,7 +14,7 @@ enum ScanFolderAdding {
         panel.canCreateDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
         panel.prompt = String(localized: "Add")
-        panel.message = String(localized: "Choose a folder or a drive. Large Files and Developer Projects will look inside it too.")
+        panel.message = String(localized: "Choose a drive or folder to scan too.")
         panel.begin { response in
             guard response == .OK, let folder = panel.url else { return }
             add(folder)

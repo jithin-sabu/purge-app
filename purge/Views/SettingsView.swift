@@ -282,8 +282,8 @@ struct SettingsView: View {
 
             // Named for what it answers, like the uninstaller's row (#318).
             settingsLinkRow(
-                title: String(localized: "Where Purge looks for files and projects"),
-                caption: String(localized: "Your home folders, plus folders and drives you add."),
+                title: String(localized: "Other folders to scan"),
+                caption: String(localized: "Home folders are always scanned. Add a drive or folder."),
                 value: scanFoldersSummary
             ) {
                 showScanFoldersSheet = true
@@ -654,8 +654,8 @@ struct SettingsView: View {
     /// The sheet for `entries`. A render of it in the test host passes its own.
     func scanFoldersSheet(entries: [ScanFolders.Entry]) -> some View {
         settingsSheet(
-            title: String(localized: "Where Purge looks for files and projects"),
-            caption: String(localized: "Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives."),
+            title: String(localized: "Other folders to scan"),
+            caption: String(localized: "Purge already scans your home folders. Add an external drive or another folder to scan it too."),
             onDone: { showScanFoldersSheet = false }
         ) {
             Button(action: chooseScanFolder) {
@@ -665,7 +665,7 @@ struct SettingsView: View {
         } content: {
             InsetCard {
                 if entries.isEmpty {
-                    Text("No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too.")
+                    Text("No folders added.")
                         .font(scheduleStatusSecondaryFont)
                         .foregroundStyle(AppColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

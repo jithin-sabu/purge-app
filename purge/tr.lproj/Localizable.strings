@@ -1526,7 +1526,6 @@
 
 /* Extra folders for Large Files and Developer Projects (#318) */
 "In a folder you added, so Purge won't clean it without asking." = "Eklediğiniz bir klasörde olduğu için Purge sormadan temizlemez.";
-"Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "Bir klasör ya da sürücü seçin. Büyük Dosyalar ve Geliştirici Projeleri onun içine de bakar.";
 "That folder can’t be found. If it’s on a drive, connect the drive." = "Bu klasör bulunamıyor. Bir sürücüdeyse sürücüyü bağlayın.";
 "Choose a folder or a drive, not your home folder." = "Ana klasörünüzü değil, bir klasör ya da sürücü seçin.";
 "Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge; Kitaplık klasörünü, gizli klasörleri ya da uygulama ve paketlerin içini taramaz.";
@@ -1535,12 +1534,13 @@
 "That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "Bu klasör iCloud Drive ile eşzamanlanıyor; içinden bir dosyayı Çöp Sepeti'ne taşımak onu diğer aygıtlarınızdan da kaldırır.";
 "Purge already scans that folder." = "Purge bu klasörü zaten tarıyor.";
 "That folder holds one Purge already scans." = "Bu klasör, Purge'ün zaten taradığı bir klasörü içeriyor.";
-"Where Purge looks for files and projects" = "Purge dosyaları ve projeleri nerede arar";
-"Your home folders, plus folders and drives you add." = "Ana klasörleriniz ve eklediğiniz klasörler ile sürücüler.";
-"Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives." = "Büyük Dosyalar ve Geliştirici Projeleri, ana klasörlerinize ve burada eklediğiniz, bu Mac'e bağlı sürücülerdeki klasörlere bakar. Orada bulunanlar asla Güvenli Öğeleri Temizle'ye ya da zamanlanmış temizliklere dahil edilmez. Tam Disk Erişimi olmadan Geliştirici Projeleri diğer sürücülerdeki klasörleri atlar.";
-"No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too." = "Eklenmiş klasör yok. Büyük Dosyalar ve Geliştirici Projeleri'nin de bakması için bir klasör ya da tüm bir sürücü ekleyin.";
 "Stop looking in %@." = "%@ içine bakmayı durdur.";
 "Not scanned" = "Taranmıyor";
 "None added" = "Eklenmedi";
 "%@ isn’t connected. Connect its drive and scan again." = "%@ bağlı değil. Sürücüsünü bağlayıp yeniden tarayın.";
 "%lld added" = "%lld eklendi";
+"Other folders to scan" = "Taranacak diğer klasörler";
+"Home folders are always scanned. Add a drive or folder." = "Ana klasörler her zaman taranır. Bir sürücü ya da klasör ekleyin.";
+"Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge ana klasörlerinizi zaten tarar. Onu da taramak için harici bir sürücü ya da başka bir klasör ekleyin.";
+"No folders added." = "Eklenmiş klasör yok.";
+"Choose a drive or folder to scan too." = "Taranacak bir sürücü ya da klasör seçin.";
