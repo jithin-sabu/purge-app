@@ -507,4 +507,39 @@ struct ScanFoldersTests {
             }
         }
     }
+
+    @Test("A drive-top link, such as the startup disk under /Volumes, stays refused when whole drives are allowed")
+    func driveTopLinkIsRefused() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Disk/System")
+        try fixture.folder("Disk/Users")
+        try FileManager.default.createSymbolicLink(at: fixture.url("Volumes/Startup"), withDestinationURL: fixture.url("Disk"))
+
+        #expect(fixture.refusal("Volumes/Startup") == .throughLink)
+    }
+
+    @Test("The real delete path takes a file under an added folder, and refuses it once the folder is removed")
+    func fileDeleterFollowsTheSavedList() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let film = try fixture.write("Volumes/T7/Media/film.mov")
+        let trash = FakeTrash()
+        let deleter = FileDeleter(home: fixture.home, trash: trash.trash)
+
+        try await withTemporaryHandoffRoot {
+            try await AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(ScanFolders.add(drive, home: fixture.home).refusal == nil)
+                let first = try await deleter.deleteUserSelectedFiles(at: [film])
+                #expect(first.deletedItems.map(\.path) == [film.path])
+
+                #expect(ScanFolders.remove(path: drive.standardizedFileURL.path))
+                let second = try await deleter.deleteUserSelectedFiles(at: [film])
+                #expect(second.deletedItems.isEmpty)
+                #expect(second.skippedItems.map(\.path) == [film.path])
+            }
+        }
+        #expect(trash.trashedPaths == [film.standardizedFileURL.path])
+    }
 }
