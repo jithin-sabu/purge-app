@@ -7,7 +7,7 @@ import Testing
 /// throwaway home and a stand-in for `/Volumes` in the temporary folder, never
 /// the user's own folders or drives, and every saved list goes to a temporary
 /// handoff folder.
-@Suite("Folders the user adds for Large Files and Developer Projects (#318)")
+@Suite("Folders the user adds for Large Files and Developer Projects (#318)", .serialized)
 struct ScanFoldersTests {
     // MARK: - Fixtures
 
@@ -626,16 +626,29 @@ struct ScanFoldersTests {
         #expect(!passes())
     }
 
-    @Test("A refresh that started earlier never replaces one that started later")
-    func olderRefreshNeverWins() {
-        let tag = "/Volumes/purge-test-\(UUID().uuidString)"
-        let older = ScanFolders.beginRefresh()
-        let newer = ScanFolders.beginRefresh()
-        // Other suites may refresh meanwhile, with later numbers still, so only
-        // the refusal of the older one is certain here.
-        ScanFolders.publish(.init(walked: [tag], saved: [tag, tag + "-new"]), generation: newer)
-        #expect(!ScanFolders.publish(.init(walked: [tag], saved: [tag]), generation: older))
-        // Leave the shared snapshot as the test host has it: empty.
-        ScanFolders.publish(.init(walked: [], saved: []), generation: ScanFolders.beginRefresh())
+    @Test("A refresh that read the list before a folder was added never hides it from Clean Safe Items")
+    func staleRefreshKeepsTheSavedList() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let home = fixture.home.standardizedFileURL.path
+        try withTemporaryHandoffRoot {
+            AppFolders.$volumes.withValue(fixture.volumes) {
+                // A starts first and B second; B reads the list before the add.
+                let refreshA = ScanFolders.beginRefresh()
+                let refreshB = ScanFolders.beginRefresh()
+                #expect(ScanFolders.add(drive, home: fixture.home).refusal == nil)
+                // A publishes the new list, then B its old one, with the higher number.
+                ScanFolders.publish(walked: [drive.standardizedFileURL.path], generation: refreshA)
+                ScanFolders.publish(walked: [], generation: refreshB)
+                #expect(ScanFolders.isInsideSavedFolder(drive.appendingPathComponent("Code/app/node_modules").path, home: home))
+                // An older refresh never replaces a newer one's walked list.
+                #expect(!ScanFolders.publish(walked: ["/stale"], generation: refreshA))
+
+                #expect(ScanFolders.remove(path: drive.standardizedFileURL.path))
+                #expect(!ScanFolders.isInsideSavedFolder(drive.appendingPathComponent("Code/app/node_modules").path, home: home))
+                ScanFolders.publish(walked: [], generation: ScanFolders.beginRefresh())
+            }
+        }
     }
 }

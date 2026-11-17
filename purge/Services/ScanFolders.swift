@@ -137,7 +137,9 @@ nonisolated enum ScanFolders {
         }
         var folders = pickedFolders()
         folders.append(AppFolders.PickedFolder(path: folder.standardizedFileURL.path, dateAdded: date))
-        return (nil, !AppFolders.save(folders, to: file))
+        guard AppFolders.save(folders, to: file) else { return (nil, true) }
+        setSaved(folders.map(\.path))
+        return (nil, false)
     }
 
     /// Returns false when the list could not be saved.
@@ -146,7 +148,9 @@ nonisolated enum ScanFolders {
         let folders = pickedFolders()
         let kept = folders.filter { $0.path != path }
         guard kept.count != folders.count else { return true }
-        return AppFolders.save(kept, to: file)
+        guard AppFolders.save(kept, to: file) else { return false }
+        setSaved(kept.map(\.path))
+        return true
     }
 
     // MARK: Inside an added folder
@@ -203,14 +207,27 @@ nonisolated enum ScanFolders {
     /// test host until a test binds `snapshotOverride`.
     static var snapshot: [String] {
         if let snapshotOverride { return snapshotOverride.walked }
-        return snapshotStore.withLock { $0.snapshot.walked }
+        return snapshotStore.withLock { $0.walked }
     }
 
-    /// Every saved folder as last read, walked or not, such as one on a drive
-    /// that is unplugged now.
+    /// Every saved folder, walked or not, such as one on a drive that is
+    /// unplugged now. Not taken from a refresh, which can read the list before
+    /// a folder is added and publish after (#318 review): `add` and `remove`,
+    /// the only places the list changes, set it as they save, and the first
+    /// read loads it from the file.
     static var savedSnapshot: [String] {
         if let snapshotOverride { return snapshotOverride.saved }
-        return snapshotStore.withLock { $0.snapshot.saved }
+        if let saved = savedStore.withLock({ $0 }) { return saved }
+        let loaded = pickedFolders().map(\.path)
+        return savedStore.withLock { stored -> [String] in
+            if let stored { return stored }
+            stored = loaded
+            return loaded
+        }
+    }
+
+    private static func setSaved(_ paths: [String]) {
+        savedStore.withLock { $0 = paths }
     }
 
     /// Reads the list from disk and keeps the folders' paths. Off the main
@@ -239,13 +256,7 @@ nonisolated enum ScanFolders {
             !insideHomeOnly || PathContainment.isInside(path, homePath)
         }, insideHomeOnly: insideHomeOnly)
         let roots = all.filter(\.isAvailable).map(\.url)
-        let walked = roots.map { $0.standardizedFileURL.path }
-        // Read after the walk, and never short of it, so a folder added while
-        // the drives were read is in `saved` whenever it is in `walked`.
-        var saved = pickedFolders().map(\.path)
-        for path in walked where !saved.contains(path) { saved.append(path) }
-        let next = Snapshot(walked: walked, saved: saved)
-        publish(next, generation: generation)
+        publish(walked: roots.map { $0.standardizedFileURL.path }, generation: generation)
         return roots
     }
 
@@ -294,13 +305,15 @@ nonisolated enum ScanFolders {
         }
     }
 
-    /// Keeps `next` unless a refresh that started later has published already.
-    /// Returns whether it was kept.
+    /// Keeps the walked folders unless a refresh that started later has
+    /// published already. Returns whether they were kept. A stale list here
+    /// only errs toward refusing: `evaluate` takes nothing from a folder it
+    /// doesn't hold, and Clean Safe Items reads `savedSnapshot` instead.
     @discardableResult
-    static func publish(_ next: Snapshot, generation: Int) -> Bool {
+    static func publish(walked next: [String], generation: Int) -> Bool {
         let outcome = snapshotStore.withLock { state -> (kept: Bool, changed: Bool) in
             guard generation > state.generation else { return (false, false) }
-            let changed = state.snapshot != next
+            let changed = state.walked != next
             state = (next, generation)
             return (true, changed)
         }
@@ -310,7 +323,9 @@ nonisolated enum ScanFolders {
     }
 
     private static let refreshCounter = OSAllocatedUnfairLock<Int>(initialState: 0)
-    private static let snapshotStore = OSAllocatedUnfairLock<(snapshot: Snapshot, generation: Int)>(
-        initialState: (Snapshot(walked: [], saved: []), 0)
+    private static let snapshotStore = OSAllocatedUnfairLock<(walked: [String], generation: Int)>(
+        initialState: ([], 0)
     )
+    /// Nil until first read or set.
+    private static let savedStore = OSAllocatedUnfairLock<[String]?>(initialState: nil)
 }
