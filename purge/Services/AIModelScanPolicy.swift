@@ -98,14 +98,32 @@ nonisolated enum AIModelScanPolicy {
 
     // MARK: - Roots
 
+    /// The environment the store roots are read from: Purge's own, with
+    /// `OLLAMA_MODELS` filled in from launchd when Purge started without it
+    /// (#318). The scanner, this gate and the command-line tool gate all
+    /// default to it, so a model the scan lists is one the gate takes.
+    nonisolated static var modelEnvironment: [String: String] {
+        LaunchdEnvironment.merged(into: ProcessInfo.processInfo.environment)
+    }
+
     /// Ollama honours `OLLAMA_MODELS` for users who move the store to an
     /// external drive, so the default path is a fallback rather than a given.
+    /// Ollama.app reads it from launchd (`launchctl setenv`), which is why
+    /// `modelEnvironment` looks there too.
+    ///
+    /// A value that names `/`, the home folder or a folder above it is
+    /// ignored: no store sits there, and the gate below would open on far
+    /// more than models (#318 review).
     nonisolated static func ollamaRoot(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> URL {
         if let override = environment["OLLAMA_MODELS"], !override.isEmpty {
-            return expanded(override)
+            let root = expanded(override)
+            let homePath = home.standardizedFileURL.path
+            if root.path != "/", !PathContainment.isSameOrInside(homePath, root.path) {
+                return root
+            }
         }
         return home.appendingPathComponent(".ollama/models", isDirectory: true).standardizedFileURL
     }
@@ -177,7 +195,7 @@ nonisolated enum AIModelScanPolicy {
     /// order and so does this.
     nonisolated static func huggingFaceHubRoot(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> URL {
         if let override = environment["HF_HUB_CACHE"], !override.isEmpty {
             return expanded(override)
@@ -191,7 +209,7 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static func roots(
         for store: Store,
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> [URL] {
         func under(_ relative: String) -> URL {
             home.appendingPathComponent(relative, isDirectory: true).standardizedFileURL
@@ -232,7 +250,7 @@ nonisolated enum AIModelScanPolicy {
     /// contents are models and nothing else.
     nonisolated static func allRoots(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> [URL] {
         Store.allCases
             .filter { $0 != .looseWeights }
@@ -244,19 +262,24 @@ nonisolated enum AIModelScanPolicy {
     /// A home folder that is a link is walked where it leads (#273), so a root
     /// counts by its real path too, such as `HF_HUB_CACHE` set to the real path
     /// of a moved Documents folder.
+    ///
+    /// The folders the user added for Large Files (#318) count too, so a model
+    /// store moved to a drive the user added stays one row in AI Models.
     nonisolated static func rootsInsideLargeFileScan(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
+        addedRoots: [URL]? = nil
     ) -> [URL] {
         let scanRoots = LargeFileScanPolicy.scanRoots(home: home)
-        let spelled = scanRoots.map { $0.standardizedFileURL.path + "/" }
-        let walked = scanRoots
-            .compactMap { LargeFileScanPolicy.walkedFolder(for: $0, home: home) }
-            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path + "/" }
+        let added = addedRoots ?? ScanFolders.roots(home: home)
+        let spelled = (scanRoots + added).map { $0.standardizedFileURL.path }
+        let walked = (scanRoots.compactMap { LargeFileScanPolicy.walkedFolder(for: $0, home: home) } + added)
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+        // The store itself counts too: an added folder can be the store (#318 review).
         return allRoots(home: home, environment: environment).filter { root in
-            if spelled.contains(where: { root.path.hasPrefix($0) }) { return true }
+            if spelled.contains(where: { PathContainment.isSameOrInside(root.path, $0) }) { return true }
             let real = root.resolvingSymlinksInPath().standardizedFileURL.path
-            return walked.contains { real.hasPrefix($0) }
+            return walked.contains { PathContainment.isSameOrInside(real, $0) }
         }
     }
 
@@ -405,7 +428,7 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static func isEligibleForDeletion(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         looseWeightSizeFloor: Int64 = looseWeightSizeFloorBytes
     ) -> Bool {
         let standardized = url.standardizedFileURL
@@ -422,9 +445,19 @@ nonisolated enum AIModelScanPolicy {
         func isInside(_ root: URL) -> Bool { PathContainment.isInside(path, root.path) }
 
         // Ollama: a manifest, or a blob the manifest names. Both are plain
-        // files the scanner picked out of the store.
-        if isInside(ollamaRoot(home: home, environment: environment)) {
-            return !isDirectory.boolValue
+        // files the scanner picked out of the store, and nothing else under
+        // the root is: `OLLAMA_MODELS` can name a folder that holds more.
+        // Anything else under the root is asked the other stores' rules, since
+        // the root can be a folder that holds them, such as `~/.cache`.
+        let ollama = ollamaRoot(home: home, environment: environment)
+        if isInside(ollama), !isDirectory.boolValue {
+            let manifests = ollama.appendingPathComponent("manifests", isDirectory: true).path
+            let blobs = ollama.appendingPathComponent("blobs", isDirectory: true).path
+            if PathContainment.isInside(path, manifests) { return true }
+            if standardized.deletingLastPathComponent().path == blobs,
+               standardized.lastPathComponent.hasPrefix("sha256-") {
+                return true
+            }
         }
 
         // The Hub: one `models--<org>--<name>` folder straight under the root.

@@ -241,7 +241,8 @@ enum LargeFileScanPolicy {
     }
 
     /// A file may be deleted only if it is a regular file under one of the scan
-    /// roots and nowhere near Library or system locations.
+    /// roots or a folder the user added, and nowhere near Library or system
+    /// locations.
     ///
     /// Two kinds of folder are allowed, each as the whole item Large Files lists:
     /// a VM bundle (`.pvm`, `.utm`, `.vmwarevm`) that is not in use, under a scan
@@ -259,12 +260,18 @@ enum LargeFileScanPolicy {
     /// (#273), and one reached through a link anywhere else does not, so the
     /// `~/Library` and excluded-folder checks also apply to where it really is.
     /// `volumes` and `isLocalDisk` are for tests, as in `walkedFolder`.
+    ///
+    /// The folders the user added in Settings (#318) count as scan roots too,
+    /// read again from disk unless the caller passes `addedRoots` it just read
+    /// for a batch. A file under one must also sit on a disk attached to this
+    /// Mac, so a share mounted inside the folder is refused.
     nonisolated static func isEligibleForDeletion(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         volumes: URL = URL(fileURLWithPath: "/Volumes", isDirectory: true),
         isLocalDisk: (URL) -> Bool = { LargeFileScanPolicy.isOnLocalDisk($0) },
-        isAppRunning: (String) -> Bool = { DeletionSafetyPolicy.isAppRunning(bundleID: $0) }
+        isAppRunning: (String) -> Bool = { DeletionSafetyPolicy.isAppRunning(bundleID: $0) },
+        addedRoots: [URL]? = nil
     ) -> Bool {
         let fm = FileManager.default
         let std = url.standardizedFileURL
@@ -312,11 +319,35 @@ enum LargeFileScanPolicy {
             return false
         }
 
-        guard isDir.boolValue else { return isUnder(scanRoots(home: home)) }
+        // An added folder is never a link (`ScanFolders` refuses one), so its
+        // path is where it is walked. Nothing the walk skips below it passes:
+        // a copy of a Mac, a home folder or a backup, or another sync
+        // service's folder.
+        func isUnderAddedFolder() -> Bool {
+            let added = addedRoots ?? ScanFolders.roots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
+            let holding = added.first { root in
+                realPath.hasPrefix(root.resolvingSymlinksInPath().standardizedFileURL.path + "/")
+            }
+            guard let holding, isLocalDisk(real) else { return false }
+            let rootPath = holding.resolvingSymlinksInPath().standardizedFileURL.path
+            // `Library` in any case: on a drive `library` is the same folder,
+            // and the check above matches only `/Library/` (#318 review).
+            let below = realPath.dropFirst(rootPath.count).split(separator: "/")
+            if below.contains(where: { $0.caseInsensitiveCompare("Library") == .orderedSame }) { return false }
+            // The added folder itself, read again: it may have gained a sync
+            // service's marker since the batch read the list (#318 review).
+            if ScanFolders.isOffLimits(URL(fileURLWithPath: rootPath, isDirectory: true)) { return false }
+            // A bundle is judged itself too: it may hold a copied Mac by now.
+            if isDir.boolValue, ScanFolders.isOffLimits(real) { return false }
+            return !ScanFolders.crossesOffLimits(from: rootPath, to: real.deletingLastPathComponent())
+        }
+
+        guard isDir.boolValue else { return isUnder(scanRoots(home: home)) || isUnderAddedFolder() }
 
         if isSafariDownloadBundle(std, home: home) { return isUnder([downloadsRoot]) }
         guard VirtualMachineApp(bundleExtension: std.pathExtension) != nil else { return false }
-        guard isUnder(scanRoots(home: home)) || isUnder(virtualMachineRoots(home: home)) else { return false }
+        guard isUnder(scanRoots(home: home)) || isUnder(virtualMachineRoots(home: home)) || isUnderAddedFolder()
+        else { return false }
         return !virtualMachineIsInUse(std, isAppRunning: isAppRunning)
     }
 }

@@ -355,6 +355,8 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var hasCompletedInstalledAppsScan = false
     /// The app folders the app list was last read with (#99).
     var lastAppFolderRoots: [String] = []
+    /// The added folders Large Files and Dev Projects walked last (#318).
+    var lastScanFolderRoots: [String] = []
     /// What the header needs to say where the listed apps come from (#99):
     /// the folders read now, the ones the user added, and drive names. Read
     /// off the main thread with each app scan, so no render asks the disk.
@@ -878,6 +880,12 @@ final class PurgeStore: ObservableObject {
         artifact.safetyInfo.level == .safe
             && artifact.reinstallSafety != .missingLockfile
             && artifact.gitStatus == .clean
+            // A folder in a folder the user added is theirs to pick, even when
+            // overridden to Safe (#318). By path too, as the clean decides, so
+            // the safe totals never count what Clean Safe Items leaves. The
+            // scan's own spelling: standardizing would read the disk per render.
+            && artifact.checkFirstReason != .addedFolder
+            && !ScanFolders.isInsideSavedFolder(artifact.path.path)
     }
 
     /// Opening App Caches or Dev Tools from its Overview row, whose one line is the
@@ -1180,6 +1188,11 @@ final class PurgeStore: ObservableObject {
         return candidates
             .filter { candidate in
                 let path = candidate.path.standardizedFileURL.path
+                // Nothing in a folder the user added for Large Files and Dev
+                // Projects, whatever row it came from and whether or not its
+                // drive is plugged in (#318). Manual and scheduled cleans both
+                // take their list from here.
+                guard !ScanFolders.isInsideSavedFolder(path) else { return false }
                 guard !seenPaths.contains(path) else { return false }
                 seenPaths.insert(path)
                 return true
@@ -5217,6 +5230,9 @@ final class PurgeStore: ObservableObject {
         let toolPaths = devTools.map(\.standardizedPaths)
         for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses, keptTogether: toolPaths) {
             let std = candidate.path.standardizedFileURL
+            // Asked again after the awaits above: a folder added in Settings
+            // meanwhile is never part of the clean (#318 review).
+            guard !ScanFolders.isInsideSavedFolder(std.path) else { continue }
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title
             pathToExpectedSizeBytes[std.path] = candidate.sizeBytes

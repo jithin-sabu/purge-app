@@ -71,7 +71,7 @@ nonisolated struct AppFolderListing: Equatable, Sendable {
         case .holdsWholeDisk:
             String(localized: "That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use.")
         case .syncs:
-            String(localized: "That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too.")
+            String(localized: "That folder syncs with iCloud Drive or another service, so moving an app from it to the Trash would remove it from your other devices too.")
         case .alreadyIncluded:
             String(localized: "Purge already looks in that folder.")
         case .holdsAnotherFolder:

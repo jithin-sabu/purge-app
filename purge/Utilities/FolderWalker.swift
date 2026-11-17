@@ -73,9 +73,14 @@ nonisolated final class FolderWalker: @unchecked Sendable {
     /// time one was read or changed, the way `FolderSizing.walkedSize` sums them
     /// file by file: every file counted, hard links and hidden files too, links
     /// never followed, packages walked into. Clones count as `SharedBlocks`
-    /// says. Nothing for a root that is not a readable folder.
-    func fileTotals(of root: String, isCancelled: () -> Bool = { Task.isCancelled }) -> (bytes: Int64, lastUsed: Date) {
-        let request = Request(rootCount: 1, counting: .regularFiles, staysOnVolume: false, onRootDone: nil)
+    /// says. Nothing for a root that is not a readable folder. `staysOnVolume`
+    /// leaves out a file system mounted inside it.
+    func fileTotals(
+        of root: String,
+        staysOnVolume: Bool = false,
+        isCancelled: () -> Bool = { Task.isCancelled }
+    ) -> (bytes: Int64, lastUsed: Date) {
+        let request = Request(rootCount: 1, counting: .regularFiles, staysOnVolume: staysOnVolume, onRootDone: nil)
         walk([root], request: request, isCancelled: isCancelled)
         guard let totals = request.results().first ?? nil else { return (0, .distantPast) }
         return (totals.bytes, totals.lastUsed)

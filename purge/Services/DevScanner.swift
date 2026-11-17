@@ -1192,7 +1192,7 @@ nonisolated final class DevScanner {
     ) async -> [ProjectGroup] {
         let walkStart = Date()
         let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
-            in: roots ?? Self.projectSearchRoots(home: home),
+            in: roots ?? (Self.projectSearchRoots(home: home) + Self.addedSearchRoots(home: home, access: access)),
             home: home,
             access: access,
             maxDepth: maxDepth,
@@ -1226,6 +1226,21 @@ nonisolated final class DevScanner {
             detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
         )
         return groups
+    }
+
+    /// The folders the user added in Settings (#318), read again from disk, which
+    /// also refreshes the list `DeletionSafetyPolicy.evaluate` reads for this
+    /// scan's rows. Without Full Disk Access only those inside the home folder
+    /// are walked: a folder on another drive raises macOS's removable volume
+    /// prompt, which a limited scan never does. Decided on the path alone, so
+    /// nothing on the drive is read first.
+    nonisolated static func addedSearchRoots(home: URL, access: ScanAccess) -> [URL] {
+        switch access {
+        case .full:
+            return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: false)
+        case .limited:
+            return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: true)
+        }
     }
 
     /// The folders project discovery starts from. Home itself is walked one level
@@ -1270,11 +1285,15 @@ nonisolated final class DevScanner {
     /// Walks `roots` for project markers and returns each project root once,
     /// shallowest first, with how many directories the walk visited.
     /// `onDirectory` is called with each folder as the walk enters it.
+    ///
+    /// `nonLocalMounts` are the mount points the walk never enters below a
+    /// folder the user added (#318); they default to the mount table's.
     nonisolated static func findProjectRoots(
         in roots: [URL],
         home: URL,
         access: ScanAccess,
         maxDepth: Int = 4,
+        nonLocalMounts: Set<String>? = nil,
         onDirectory: (@Sendable (URL) -> Void)? = nil
     ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
@@ -1297,6 +1316,17 @@ nonisolated final class DevScanner {
         }
 
         let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
+        // Read once here: the folders are read on other threads (#318). Both
+        // spellings, since a listing spells `/var/…` as `/private/var/…`.
+        let addedRoots = ScanFolders.snapshot.flatMap { [$0, "/private" + $0] }
+        // Below an added folder, a network share or macFUSE mount is never
+        // listed: only local disks count there. Taken from the mount table,
+        // so no share is asked anything.
+        // Skipped below every root, not only added ones: a move to the Trash on
+        // a share is a delete. A linked root is never listed at all (listing a
+        // link fails with "Not a directory"), so a folder's path here is where
+        // it really is.
+        let foreignMounts = Set((nonLocalMounts ?? AppFolders.nonLocalMountPaths()).flatMap { [$0, "/private" + $0] })
 
         /// One folder the walk enters. `realPath` is the folder with its root's
         /// symlinks resolved, in a limited scan only; nil with full access, where
@@ -1318,6 +1348,14 @@ nonisolated final class DevScanner {
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey, .nameKey],
                 options: [.skipsPackageDescendants]
             )
+            // Below a folder the user added (#318), a copy of a Mac, a home folder
+            // or a backup, or another sync service's folder, is neither a project
+            // nor walked into. Judged from the listing just read.
+            if folder.depth > 0, let listing,
+               addedRoots.contains(where: { PathContainment.isInside(folder.url.path, $0) }),
+               ScanFolders.isOffLimits(name: folder.url.lastPathComponent, childNames: Set(listing.map(\.lastPathComponent))) {
+                return ([], [])
+            }
             let types = Self.projectTypes(at: folder.url, listing: listing)
 
             guard folder.depth < folder.maxDepth, let entries = listing else { return (types, []) }
@@ -1330,6 +1368,10 @@ nonisolated final class DevScanner {
                 if name.hasPrefix(".") { continue }
 
                 if shouldSkipDescending(into: name) { continue }
+                // Never into an app or another bundle: an Electron app carries a
+                // `package.json` and `node_modules` that are part of the app.
+                // `contentsOfDirectory` ignores `.skipsPackageDescendants`.
+                if AppBundleReach.isBundleFolderName(name) { continue }
                 // Decided on the path alone, before anything reads the entry. The
                 // home root walks one level down, which would open Desktop,
                 // Documents and Downloads. `realPath` is the folder's resolved path,
@@ -1343,6 +1385,7 @@ nonisolated final class DevScanner {
                 // with them prefetched stats nothing through a link. That is also
                 // why a linked folder was never walked, with or without access:
                 // `isDirectory` is false for it.
+                if foreignMounts.contains(entry.path) { continue }
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 
@@ -1611,6 +1654,15 @@ nonisolated final class DevScanner {
         case .none:
             checkFirstReason = nil
         }
+        // A project in a folder the user added outside the home folder is the
+        // user's to pick, folder by folder, whatever its activity says (#318).
+        // By where it really is too: a home folder linked onto an added drive
+        // spells it under home. One added inside home keeps the home rules.
+        let spelled = rootURL.standardizedFileURL.path
+        let real = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let inAddedFolder = ScanFolders.addedRootOutsideHome(holding: spelled) != nil
+            || ScanFolders.addedRootOutsideHome(holding: real) != nil
+        let reason = inAddedFolder ? .addedFolder : checkFirstReason
 
         let artifactPaths = rows.map(\.path)
         let sizesByPath = FolderSizing.directorySizes(at: artifactPaths, split: .spread)
@@ -1628,12 +1680,12 @@ nonisolated final class DevScanner {
                     sizeBytes: bytes,
                     lastModified: modified,
                     isSelected: false,
-                    safetyInfo: checkFirstReason == nil
+                    safetyInfo: reason == nil
                         ? row.safetyInfo
                         : row.safetyInfo.heldAtCheckFirst(path: row.path),
                     reinstallSafety: row.reinstallSafety,
                     gitStatus: .unknown,
-                    checkFirstReason: checkFirstReason
+                    checkFirstReason: reason
                 )
             )
         }

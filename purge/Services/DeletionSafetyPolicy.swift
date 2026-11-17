@@ -511,6 +511,7 @@ enum DeletionSafetyPolicy {
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
+        let generation = offeredForCleanupGeneration
         offeredForCleanupLock.unlock()
         if let cached { return cached }
 
@@ -525,7 +526,11 @@ enum DeletionSafetyPolicy {
         if offeredForCleanupCache.count >= offeredForCleanupCacheLimit {
             offeredForCleanupCache.removeAll(keepingCapacity: true)
         }
-        offeredForCleanupCache[key] = verdict
+        // A verdict reached before the cache was cleared read the old list of
+        // added folders (#318), so it is returned but not kept.
+        if generation == offeredForCleanupGeneration {
+            offeredForCleanupCache[key] = verdict
+        }
         offeredForCleanupLock.unlock()
         return verdict
     }
@@ -553,8 +558,19 @@ enum DeletionSafetyPolicy {
     }
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
+    /// Moves on with each clear, so a verdict that started before it is not kept.
+    private nonisolated(unsafe) static var offeredForCleanupGeneration = 0
     private nonisolated static let offeredForCleanupLock = NSLock()
     nonisolated static let offeredForCleanupCacheLimit = 20_000
+
+    /// Drops every cached verdict. Called when the folders the user added for
+    /// Dev Projects change (#318), since `evaluate` reads that list.
+    nonisolated static func clearOfferedForCleanupCache() {
+        offeredForCleanupLock.lock()
+        offeredForCleanupCache.removeAll(keepingCapacity: true)
+        offeredForCleanupGeneration &+= 1
+        offeredForCleanupLock.unlock()
+    }
 
     /// How many verdicts are cached. For tests.
     nonisolated static var offeredForCleanupCacheCount: Int {
@@ -1434,10 +1450,40 @@ enum DeletionSafetyPolicy {
         return evaluate(resolved) == .blockedNeverDelete
     }
 
-    nonisolated static func isWhitelistedProjectArtifactPath(_ url: URL, home: String) -> Bool {
+    /// Whether a folder from just below `base` down to `folder` is a package
+    /// on disk, such as a bundle with an extension no name list knows.
+    private nonisolated static func crossesPackage(from base: String, to folder: URL) -> Bool {
+        var current = base
+        for name in folder.standardizedFileURL.path.dropFirst(base.count + 1).split(separator: "/") {
+            current += "/" + name
+            if (try? URL(fileURLWithPath: current).resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// A project artifact by the catalog's rule, in the home folder or in a folder
+    /// the user added for Dev Projects (#318). An added folder counts only while it
+    /// is in the list read at the last scan or clean (`ScanFolders.snapshot`; tests
+    /// pass `addedRoots`) and only on a disk attached to this Mac. The bare
+    /// folder-name rule in `evaluate` stays home only.
+    nonisolated static func isWhitelistedProjectArtifactPath(
+        _ url: URL,
+        home: String,
+        addedRoots: [String]? = nil
+    ) -> Bool {
         let standardized = url.standardizedFileURL
         let path = standardized.path
-        guard PathContainment.isSameOrInside(path, home) else { return false }
+        let base: String
+        if PathContainment.isSameOrInside(path, home) {
+            base = home
+        } else if let added = (addedRoots ?? ScanFolders.snapshot).first(where: { PathContainment.isInside(path, $0) }),
+                  AppFolders.isOnLocalDisk(standardized) {
+            base = added
+        } else {
+            return false
+        }
 
         guard let candidates = ProjectArtifactCatalog.rulesByFolderName[standardized.lastPathComponent] else {
             return false
@@ -1452,7 +1498,19 @@ enum DeletionSafetyPolicy {
             let depth = rule.folder.split(separator: "/").count
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
-            guard PathContainment.isSameOrInside(root.path, home) else { continue }
+            guard PathContainment.isSameOrInside(root.path, base) else { continue }
+            // In a folder the user added, never a project inside a `Library`
+            // folder, an app or other bundle, a copy of a Mac, a home folder or
+            // a backup, or another sync service's folder (#318 review). Unity's
+            // own `Library` is the artifact, below the root.
+            if base != home {
+                let between = root.path.dropFirst(base.count).split(separator: "/")
+                if between.contains(where: {
+                    $0.caseInsensitiveCompare("Library") == .orderedSame || AppBundleReach.isBundleFolderName($0)
+                }) { continue }
+                if Self.crossesPackage(from: base, to: root) { continue }
+                if ScanFolders.crossesOffLimits(from: base, to: root) { continue }
+            }
             guard rule.matchesRoot(root) else { continue }
             // Checked here rather than only in the scanner so that no caller can route
             // around it: a `.terraform` folder holding state is never deletable.

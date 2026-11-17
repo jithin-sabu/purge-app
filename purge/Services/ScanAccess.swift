@@ -204,6 +204,32 @@ nonisolated enum ProtectedLocations {
         return stopAt(resolvedPath) ? nil : resolvedPath
     }
 
+    /// `path` with every link on the way resolved by `readlink` alone, or nil
+    /// when the chain leaves `root`. No partial path outside `root`, other than
+    /// a folder above it, is ever read, so a link chain that ends on another
+    /// drive stops before the drive is touched (#318 review). `root` is
+    /// compared in both its spellings (`/var` and `/private/var`).
+    static func resolvedStayingInside(
+        _ path: String,
+        root: URL,
+        fileManager: FileManager = .default
+    ) -> String? {
+        // `resolvingSymlinksInPath` spells `/private/var` as `/var`, while
+        // `readlink` walks through `/private`, so both are listed.
+        let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let bare = rootPath.hasPrefix("/private/") ? String(rootPath.dropFirst("/private".count)) : rootPath
+        let spellings = Set([root.standardizedFileURL.path, bare, "/private" + bare])
+        func isAllowed(_ partial: String) -> Bool {
+            spellings.contains { home in
+                PathContainment.isSameOrInside(partial, home) || PathContainment.isSameOrInside(home, partial)
+            }
+        }
+        guard let resolved = resolvingLinks(in: path, fileManager: fileManager, stopAt: { !isAllowed($0) }) else {
+            return nil
+        }
+        return spellings.contains { PathContainment.isSameOrInside(resolved, $0) } ? resolved : nil
+    }
+
     /// `path` split into components, with `.` dropped and `..` kept for
     /// `resolvingLinks` to apply.
     private static func pathComponents(of path: String) -> [String] {

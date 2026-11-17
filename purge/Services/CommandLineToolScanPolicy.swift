@@ -97,7 +97,7 @@ nonisolated enum CommandLineToolScanPolicy {
         home: URL,
         catalog: CommandLineToolCatalog = .shared,
         appCatalog: AppDotFolderCatalog = .shared,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> [CommandLineToolInstall] {
         let homePath = home.standardizedFileURL.path
         let leads = shimLeads(home: home)
@@ -411,9 +411,10 @@ nonisolated enum CommandLineToolScanPolicy {
     static func eligiblePaths(
         home: URL,
         catalog: CommandLineToolCatalog = .shared,
-        appCatalog: AppDotFolderCatalog = .shared
+        appCatalog: AppDotFolderCatalog = .shared,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> Set<String> {
-        Set(pairedInstalls(home: home, catalog: catalog, appCatalog: appCatalog)
+        Set(pairedInstalls(home: home, catalog: catalog, appCatalog: appCatalog, environment: environment)
             .flatMap { $0.removalPaths.map(\.standardizedFileURL.path) })
     }
 

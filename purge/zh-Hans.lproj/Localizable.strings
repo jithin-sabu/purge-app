@@ -1441,7 +1441,7 @@
 "Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、你插入的外接磁盘以及你在设置中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
 "Purge lists apps in Applications, on drives you plug in, and in folders you add. Put %@ in a folder, then add that folder, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。请把 %@ 放进一个文件夹，再添加该文件夹，或自行将它拖到废纸篓。";
 "That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use." = "该文件夹包含或位于一台 Mac 或一个个人主文件夹的副本中。请选择存放你正在使用的应用的文件夹。";
-"That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too." = "该文件夹会与 iCloud 云盘同步，因此把其中的应用移到废纸篓也会将它从你的其他设备上移除。";
+"That folder syncs with iCloud Drive or another service, so moving an app from it to the Trash would remove it from your other devices too." = "该文件夹会与 iCloud 云盘或其他服务同步，因此把其中的应用移到废纸篓也会将它从你的其他设备上移除。";
 "Purge can’t remove that folder" = "Purge 无法移除该文件夹";
 "No app matches “%@”" = "没有与“%@”匹配的应用";
 "If it’s on a drive or in another folder, add that folder and Purge lists it." = "如果它在外接磁盘或其他文件夹中，添加该文件夹后 Purge 就会列出它。";
@@ -1523,3 +1523,24 @@
 "MB" = "MB";
 "GB" = "GB";
 "TB" = "TB";
+
+/* Extra folders for Large Files and Developer Projects (#318) */
+"In a folder you added, so Purge won't clean it without asking." = "位于你添加的文件夹中，因此 Purge 不会未经询问就清理它。";
+"That folder can’t be found. If it’s on a drive, connect the drive." = "找不到该文件夹。如果它在某个磁盘上，请连接该磁盘。";
+"Choose a folder or a drive, not your home folder." = "请选择一个文件夹或磁盘，而不是你的个人文件夹。";
+"Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge 不会扫描“资源库”、隐藏文件夹，或应用和包的内部。";
+"Purge only scans drives attached to this Mac that it can move files on, not network, cloud or read-only drives." = "Purge 只扫描连接到这台 Mac 且可以移动其中文件的磁盘，不扫描网络、云端或只读磁盘。";
+"That folder holds a copy of a Mac, a home folder or a Time Machine backup, or is inside one." = "该文件夹包含 Mac、个人文件夹或时间机器备份的副本，或者位于其中。";
+"That folder syncs with iCloud Drive or another service, so moving a file from it to the Trash would remove it from your other devices too." = "该文件夹与 iCloud 云盘或其他服务同步，因此把其中的文件移到废纸篓也会将其从你的其他设备中移除。";
+"Purge already scans that folder." = "Purge 已经在扫描该文件夹。";
+"That folder holds one Purge already scans." = "该文件夹中包含 Purge 已在扫描的文件夹。";
+"Stop looking in %@." = "不再在 %@ 中查找。";
+"Not scanned" = "未扫描";
+"None added" = "未添加";
+"%@ isn’t connected. Connect its drive and scan again." = "%@ 未连接。请连接所在的磁盘后重新扫描。";
+"%lld added" = "已添加 %lld 个";
+"Other folders to scan" = "要扫描的其他文件夹";
+"Home folders are always scanned. Add a drive or folder." = "个人文件夹始终会被扫描。可添加磁盘或文件夹。";
+"Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge 已经会扫描你的个人文件夹。添加外置磁盘或其他文件夹，它也会一并被扫描。";
+"No folders added." = "尚未添加文件夹。";
+"Choose a drive or folder to scan too." = "选择一个也要扫描的磁盘或文件夹。";

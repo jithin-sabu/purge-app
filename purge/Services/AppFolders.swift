@@ -132,7 +132,8 @@ nonisolated enum AppFolders {
             guard isRealFolder(volume),
                   isLocalDisk(volume),
                   !isReadOnly(volume),
-                  !holdsWholeDisk(volume, markers: driveMarkers)
+                  !holdsWholeDisk(volume, markers: driveMarkers),
+                  !isTimeMachineDrive(volume)
             else { return nil }
             let applications = volume.appendingPathComponent("Applications", isDirectory: true)
             return isRealFolder(applications) ? applications : nil
@@ -140,8 +141,47 @@ nonisolated enum AppFolders {
     }
 
     /// Folders that mark a whole Mac (`System`, `Users`) or a Time Machine
-    /// drive (`Backups.backupdb`).
-    private static let driveMarkers = ["System", "Users", "Backups.backupdb"]
+    /// drive: `Backups.backupdb` on HFS+, `backup_manifest.plist` on APFS.
+    static let driveMarkers = ["System", "Users", "Backups.backupdb", "backup_manifest.plist"]
+
+    /// An APFS Time Machine drive also names each backup folder by its date,
+    /// `2026-11-01-120000.backup`, and the one being made `.inprogress`. Read
+    /// from the drive's top only. A file such as `notes.backup` is not one.
+    static func isTimeMachineDrive(_ volume: URL) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: volume.appendingPathComponent("backup_manifest.plist").path) {
+            return true
+        }
+        let names = (try? fm.contentsOfDirectory(atPath: volume.path)) ?? []
+        return names.contains { name in
+            guard isTimeMachineBackupName(name) else { return false }
+            var isDirectory: ObjCBool = false
+            return fm.fileExists(atPath: volume.appendingPathComponent(name).path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
+    }
+
+    /// A Time Machine backup folder's name: a date and time, then `.backup`,
+    /// `.inprogress` or `.previous`.
+    static func isTimeMachineBackupName(_ name: some StringProtocol) -> Bool {
+        String(name).range(
+            of: #"^\d{4}-\d{2}-\d{2}-\d{6}\.(backup|inprogress|previous)$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    /// Files a sync service other than iCloud Drive keeps at the top of the
+    /// folder it syncs: Dropbox, Syncthing, Resilio Sync, ownCloud, Nextcloud,
+    /// and OneDrive before Files On-Demand. A move to the Trash there is a
+    /// delete on every device, as it is in iCloud Drive (#318 review).
+    static let syncServiceMarkers = [
+        ".dropbox", ".dropbox.cache", ".stfolder", ".sync", ".owncloudsync.log",
+        ".nextcloudsync.log", ".849C9593-D756-4E56-8D6E-42412F2A707B"
+    ]
+
+    static func isSyncedByAnotherService(_ folder: URL) -> Bool {
+        syncServiceMarkers.contains { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
+    }
 
     /// The same, plus `Library`, which marks a copy of a home folder.
     private static let pickedMarkers = driveMarkers + ["Library"]
@@ -170,7 +210,8 @@ nonisolated enum AppFolders {
         /// Holds a copy of a Mac, a home folder, or a Time Machine backup, or is
         /// inside one.
         case holdsWholeDisk
-        /// Synced by iCloud Drive, where a move to the Trash leaves every device.
+        /// Synced by iCloud Drive or another sync service, where a move to the
+        /// Trash leaves every device.
         case syncs
         /// Already one of the folders, or inside one.
         case alreadyIncluded
@@ -191,7 +232,8 @@ nonisolated enum AppFolders {
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         otherRoots: [URL],
         volumes: URL = AppFolders.volumes,
-        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) }
+        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
+        allowsWholeDrive: Bool = false
     ) -> Refusal? {
         let url = folder.standardizedFileURL
         let path = url.path
@@ -203,8 +245,12 @@ nonisolated enum AppFolders {
         let onDrive = isInside(path, volumesPath)
         if path == homePath || isInside(homePath, path) { return .tooBroad }
         guard inHome || onDrive else { return .outsideHomeAndDrives }
-        if onDrive, url.deletingLastPathComponent().path == volumesPath { return .tooBroad }
-        if (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true { return .tooBroad }
+        // A whole drive is refused for apps. The folders Large Files and Dev
+        // Projects walk may be one (#318); the marker check below still refuses
+        // a copy of a Mac or a Time Machine drive.
+        let isDriveTop = onDrive && url.deletingLastPathComponent().path == volumesPath
+        if isDriveTop, !allowsWholeDrive { return .tooBroad }
+        if !isDriveTop, (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true { return .tooBroad }
 
         let base = inHome ? homePath : volumesPath
         let below = path.dropFirst(base.count + 1).split(separator: "/")
@@ -232,8 +278,14 @@ nonisolated enum AppFolders {
         var ancestor = base
         for (index, name) in below.enumerated() {
             ancestor += "/" + name
-            let markers = onDrive && index == 0 ? driveMarkers : pickedMarkers
-            if holdsWholeDisk(URL(fileURLWithPath: ancestor), markers: markers) { return .holdsWholeDisk }
+            let folder = URL(fileURLWithPath: ancestor)
+            let isDriveTop = onDrive && index == 0
+            let markers = isDriveTop ? driveMarkers : pickedMarkers
+            if holdsWholeDisk(folder, markers: markers) { return .holdsWholeDisk }
+            if isDriveTop, isTimeMachineDrive(folder) { return .holdsWholeDisk }
+            // Inside a Time Machine backup folder copied anywhere on the drive.
+            if isTimeMachineBackupName(name) { return .holdsWholeDisk }
+            if isSyncedByAnotherService(folder) { return .syncs }
         }
         if (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true { return .syncs }
 
@@ -245,9 +297,10 @@ nonisolated enum AppFolders {
         return nil
     }
 
-    /// The folders the user added, whether or not they are there now.
-    static func pickedFolders() -> [PickedFolder] {
-        guard let data = try? Data(contentsOf: pickedFoldersFile) else { return [] }
+    /// The folders the user added, whether or not they are there now. `file`
+    /// is the uninstaller's list unless another list is named (#318).
+    static func pickedFolders(in file: URL = pickedFoldersFile) -> [PickedFolder] {
+        guard let data = try? Data(contentsOf: file) else { return [] }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode([PickedFolder].self, from: data)) ?? []
@@ -285,16 +338,17 @@ nonisolated enum AppFolders {
         RemovedAppHandoff.root.appendingPathComponent("app-folders.json", isDirectory: false)
     }
 
-    private static func save(_ folders: [PickedFolder]) -> Bool {
+    /// Writes a list of picked folders. Returns false when it could not.
+    static func save(_ folders: [PickedFolder], to file: URL = pickedFoldersFile) -> Bool {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
             try FileManager.default.createDirectory(
-                at: pickedFoldersFile.deletingLastPathComponent(),
+                at: file.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try encoder.encode(folders).write(to: pickedFoldersFile, options: [.atomic])
+            try encoder.encode(folders).write(to: file, options: [.atomic])
             return true
         } catch {
             return false
@@ -341,6 +395,29 @@ nonisolated enum AppFolders {
         return names
     }
 
+    /// Where every mount that is not a local disk of a file system macOS
+    /// trashes on is mounted: network shares, macFUSE, rclone and the like.
+    /// Read from the mount table with `MNT_NOWAIT`, so a share that stopped
+    /// answering is never asked anything (#318 review).
+    static func nonLocalMountPaths() -> Set<String> {
+        var mounts: UnsafeMutablePointer<statfs>?
+        let count = getmntinfo(&mounts, MNT_NOWAIT)
+        guard count > 0, let mounts else { return [] }
+        var paths = Set<String>()
+        for index in 0..<Int(count) {
+            var info = mounts[index]
+            let type = withUnsafePointer(to: &info.f_fstypename) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) }
+            }
+            let path = withUnsafePointer(to: &info.f_mntonname) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+            }
+            let isLocal = info.f_flags & UInt32(MNT_LOCAL) != 0 && localFileSystems.contains(type)
+            if !isLocal { paths.insert(path) }
+        }
+        return paths
+    }
+
     static func isReadOnly(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? true
     }
@@ -371,7 +448,7 @@ nonisolated enum AppFolders {
             && isDirectory.boolValue
     }
 
-    private static func holdsWholeDisk(_ url: URL, markers: [String]) -> Bool {
+    static func holdsWholeDisk(_ url: URL, markers: [String]) -> Bool {
         markers.contains { FileManager.default.fileExists(atPath: url.appendingPathComponent($0).path) }
     }
 

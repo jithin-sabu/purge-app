@@ -32,6 +32,12 @@ struct SettingsView: View {
     @State private var appFolderMessage: String?
     /// Adding and removing share the alert; each says which one failed.
     @State private var appFolderAlertTitle = AppFolderAdding.refusalTitle
+    @State private var showScanFoldersSheet = false
+    /// The folders Large Files and Developer Projects also walk (#318), read off the
+    /// main thread when Settings appears and after each change.
+    @State private var scanFolders: [ScanFolders.Entry] = []
+    @State private var scanFolderMessage: String?
+    @State private var scanFolderAlertTitle = AppFolderAdding.refusalTitle
     @State private var showCleaningHistorySheet = false
     /// Uninstall… turns red under the pointer.
     @State private var isHoveringUninstall = false
@@ -89,6 +95,10 @@ struct SettingsView: View {
             appFoldersSheet
         }
         .task { await reloadAppFolders() }
+        .sheet(isPresented: $showScanFoldersSheet) {
+            scanFoldersSheet
+        }
+        .task { await reloadScanFolders() }
         .sheet(isPresented: $showCleaningHistorySheet) {
             cleaningHistorySheet
         }
@@ -266,6 +276,17 @@ struct SettingsView: View {
                 value: excludedFoldersSummary
             ) {
                 showExcludedFoldersSheet = true
+            }
+
+            settingsSectionDivider
+
+            // Named for what it answers, like the uninstaller's row (#318).
+            settingsLinkRow(
+                title: String(localized: "Other folders to scan"),
+                caption: String(localized: "Home folders are always scanned. Add a drive or folder."),
+                value: scanFoldersSummary
+            ) {
+                showScanFoldersSheet = true
             }
         }
     }
@@ -624,6 +645,67 @@ struct SettingsView: View {
         .task { await reloadAppFolders() }
     }
 
+    /// The folders Large Files and Developer Projects walk besides the home folders
+    /// (#318).
+    var scanFoldersSheet: some View {
+        scanFoldersSheet(entries: scanFolders)
+    }
+
+    /// The sheet for `entries`. A render of it in the test host passes its own.
+    func scanFoldersSheet(entries: [ScanFolders.Entry]) -> some View {
+        settingsSheet(
+            title: String(localized: "Other folders to scan"),
+            caption: String(localized: "Purge already scans your home folders. Add an external drive or another folder to scan it too."),
+            onDone: { showScanFoldersSheet = false }
+        ) {
+            Button(action: chooseScanFolder) {
+                Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
+            }
+            .buttonStyle(.purge(.secondary))
+        } content: {
+            InsetCard {
+                if entries.isEmpty {
+                    Text("No folders added.")
+                        .font(scheduleStatusSecondaryFont)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(AppStyle.Spacing.medium)
+                } else {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            settingsSectionDivider
+                        }
+                        folderRow(
+                            name: entry.name,
+                            path: entry.path,
+                            status: scanFolderStatus(entry),
+                            isAvailable: entry.isAvailable,
+                            statusHelp: entry.refusal.map { ScanFolderAdding.message(for: $0) },
+                            remove: (
+                                label: String(localized: "Remove \(entry.name)"),
+                                help: String(localized: "Stop looking in \(entry.name)."),
+                                action: { removeScanFolder(entry) }
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        .alert(
+            scanFolderAlertTitle,
+            isPresented: Binding(
+                get: { scanFolderMessage != nil },
+                set: { if !$0 { scanFolderMessage = nil } }
+            )
+        ) {
+            Button("OK") { scanFolderMessage = nil }
+        } message: {
+            Text(scanFolderMessage ?? "")
+        }
+        // A drive may have come or gone since Settings opened.
+        .task { await reloadScanFolders() }
+    }
+
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
     /// of only in a passing notification.
     var cleaningHistorySheet: some View {
@@ -917,14 +999,39 @@ struct SettingsView: View {
     }
 
     private func appFolderRow(_ row: AppFolderListing.Row) -> some View {
+        folderRow(
+            name: row.name,
+            path: row.path,
+            status: appFolderStatus(row),
+            isAvailable: row.isAvailable,
+            remove: row.kind == .added
+                ? (
+                    label: String(localized: "Remove \(row.name)"),
+                    help: String(localized: "Stop listing apps from \(row.name)."),
+                    action: { removeAppFolder(row) }
+                )
+                : nil
+        )
+    }
+
+    /// A folder's name, path and status, with a Remove button for one the
+    /// user added. Shared by the app folders and the scan folders (#318).
+    private func folderRow(
+        name: String,
+        path: String,
+        status: String,
+        isAvailable: Bool,
+        statusHelp: String? = nil,
+        remove: (label: String, help: String, action: () -> Void)?
+    ) -> some View {
         HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
-                Text(row.name)
+                Text(name)
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
-                Text((row.path as NSString).abbreviatingWithTildeInPath)
+                Text((path as NSString).abbreviatingWithTildeInPath)
                     .font(AppStyle.Typography.micro.weight(.regular).monospaced())
                     .foregroundStyle(AppColors.textSecondary)
                     .textSelection(.enabled)
@@ -934,21 +1041,20 @@ struct SettingsView: View {
 
             Spacer(minLength: AppStyle.Spacing.small)
 
-            Text(appFolderStatus(row))
+            Text(status)
                 .font(scheduleStatusSecondaryFont)
-                .foregroundStyle(row.isAvailable ? AppColors.textSecondary : AppColors.statusCheckText)
+                .foregroundStyle(isAvailable ? AppColors.textSecondary : AppColors.statusCheckText)
                 .lineLimit(1)
+                .help(statusHelp ?? "")
 
-            if row.kind == .added {
-                Button {
-                    removeAppFolder(row)
-                } label: {
-                    Label("Remove \(row.name)", systemImage: "xmark")
+            if let remove {
+                Button(action: remove.action) {
+                    Label(remove.label, systemImage: "xmark")
                         .labelStyle(.iconOnly)
                         .imageScale(.small)
                 }
                 .buttonStyle(.purge(.secondary, size: .small, width: .square))
-                .help("Stop listing apps from \(row.name).")
+                .help(remove.help)
             }
         }
         .padding(AppStyle.Spacing.medium)
@@ -993,6 +1099,44 @@ struct SettingsView: View {
             }
             await reloadAppFolders()
             store.appFoldersChanged()
+        }
+    }
+
+    private func scanFolderStatus(_ entry: ScanFolders.Entry) -> String {
+        if entry.isAvailable { return String(localized: "Added") }
+        return entry.isDisconnected ? String(localized: "Not connected") : String(localized: "Not scanned")
+    }
+
+    private var scanFoldersSummary: String {
+        switch scanFolders.count {
+        case 0: String(localized: "None added")
+        default: String(localized: "\(scanFolders.count) added")
+        }
+    }
+
+    private func reloadScanFolders() async {
+        scanFolders = await Task.detached(priority: .userInitiated) { ScanFolders.entries() }.value
+    }
+
+    private func chooseScanFolder() {
+        ScanFolderAdding.chooseFolder { folder in
+            Task {
+                scanFolderAlertTitle = AppFolderAdding.refusalTitle
+                scanFolderMessage = await ScanFolderAdding.add(folder, store: store)
+                await reloadScanFolders()
+            }
+        }
+    }
+
+    private func removeScanFolder(_ entry: ScanFolders.Entry) {
+        Task {
+            let saved = await Task.detached(priority: .userInitiated) { ScanFolders.remove(path: entry.path) }.value
+            if !saved {
+                scanFolderAlertTitle = String(localized: "Purge can\u{2019}t remove that folder")
+                scanFolderMessage = AppFolderAdding.saveFailedMessage
+            }
+            await reloadScanFolders()
+            store.scanFoldersChanged()
         }
     }
 
