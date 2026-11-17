@@ -1,0 +1,288 @@
+import Foundation
+import Testing
+@testable import Purge
+
+/// The folders the user adds for Large Files and Developer Projects to walk
+/// too (#318), and what Large Files does with them. Every fixture is a
+/// throwaway home and a stand-in for `/Volumes` in the temporary folder, never
+/// the user's own folders or drives, and every saved list goes to a temporary
+/// handoff folder.
+@Suite("Folders the user adds for Large Files and Developer Projects (#318)")
+struct ScanFoldersTests {
+    // MARK: - Fixtures
+
+    private struct Fixture {
+        let base: URL
+        var home: URL { base.appendingPathComponent("home", isDirectory: true) }
+        var volumes: URL { base.appendingPathComponent("Volumes", isDirectory: true) }
+
+        init() throws {
+            base = FileManager.default.temporaryDirectory
+                .appendingPathComponent("purge-scan-folders-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: volumes, withIntermediateDirectories: true)
+        }
+
+        @discardableResult
+        func folder(_ relative: String) throws -> URL {
+            let url = base.appendingPathComponent(relative, isDirectory: true)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return url
+        }
+
+        @discardableResult
+        func write(_ relative: String, bytes: Int = 4096) throws -> URL {
+            let file = base.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try Data(repeating: 0x01, count: bytes).write(to: file)
+            return file
+        }
+
+        func url(_ relative: String) -> URL {
+            base.appendingPathComponent(relative, isDirectory: true)
+        }
+
+        func refusal(_ relative: String, otherRoots: [URL] = [], isLocalDisk: Bool = true) -> AppFolders.Refusal? {
+            ScanFolders.refusal(
+                forPicked: url(relative), home: home, otherRoots: otherRoots,
+                volumes: volumes, isLocalDisk: { _ in isLocalDisk }
+            )
+        }
+
+        func remove() { try? FileManager.default.removeItem(at: base) }
+    }
+
+    // MARK: - What may be added
+
+    @Test("A whole drive may be added, though the uninstaller's list still refuses one")
+    func wholeDriveIsAllowed() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/T7/Media")
+
+        #expect(fixture.refusal("Volumes/T7") == nil)
+        #expect(AppFolders.refusal(
+            forPicked: fixture.url("Volumes/T7"), home: fixture.home, otherRoots: [],
+            volumes: fixture.volumes, isLocalDisk: { _ in true }
+        ) == .tooBroad)
+    }
+
+    @Test(
+        "A drive that holds a Mac or a Time Machine backup is refused, and so is a folder in it",
+        arguments: ["System", "Users", "Backups.backupdb"]
+    )
+    func driveWithAWholeDiskIsRefused(marker: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/Old/\(marker)")
+        try fixture.folder("Volumes/Old/Stuff")
+
+        #expect(fixture.refusal("Volumes/Old") == .holdsWholeDisk)
+        #expect(fixture.refusal("Volumes/Old/Stuff") == .holdsWholeDisk)
+    }
+
+    @Test("A network share, cloud drive or macFUSE mount is refused")
+    func notLocalIsRefused() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/Share/Projects")
+
+        #expect(fixture.refusal("Volumes/Share/Projects", isLocalDisk: false) == .notOnWritableLocalDisk)
+        #expect(fixture.refusal("Volumes/Share", isLocalDisk: false) == .notOnWritableLocalDisk)
+    }
+
+    @Test("Links, Library, hidden folders, bundles and the home folder are refused")
+    func narrowRules() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/T7/Real")
+        try fixture.folder("Volumes/T7/Library/Caches")
+        try fixture.folder("Volumes/T7/.hidden")
+        try fixture.folder("Volumes/T7/Tool.app/Contents")
+        try FileManager.default.createSymbolicLink(
+            at: fixture.url("Volumes/T7/Linked"), withDestinationURL: fixture.url("Volumes/T7/Real")
+        )
+
+        #expect(fixture.refusal("Volumes/T7/Linked") == .throughLink)
+        #expect(fixture.refusal("Volumes/T7/Library/Caches") == .insideLibraryOrBundle)
+        #expect(fixture.refusal("Volumes/T7/.hidden") == .insideLibraryOrBundle)
+        #expect(fixture.refusal("Volumes/T7/Tool.app") == .insideLibraryOrBundle)
+        #expect(fixture.refusal("home") == .tooBroad)
+        #expect(fixture.refusal("Volumes/T7/Missing") == .notAFolder)
+    }
+
+    @Test("A folder Large Files already walks, or one inside it, adds nothing")
+    func insideALargeFilesRootIsRefused() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let big = try fixture.folder("home/Documents/Big")
+        let work = try fixture.folder("home/Work")
+
+        try withTemporaryHandoffRoot {
+            AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(ScanFolders.add(big, home: fixture.home).refusal == .alreadyIncluded)
+                #expect(ScanFolders.add(fixture.url("home/Documents"), home: fixture.home).refusal == .alreadyIncluded)
+                // A home folder Large Files doesn't walk may be added.
+                #expect(ScanFolders.add(work, home: fixture.home).refusal == nil)
+            }
+        }
+    }
+
+    // MARK: - The saved list
+
+    @Test("Added folders are saved, listed and removed, apart from the uninstaller's list")
+    func roundTrip() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let inside = try fixture.folder("Volumes/T7/Media")
+
+        try withTemporaryHandoffRoot {
+            AppFolders.$volumes.withValue(fixture.volumes) {
+                let added = ScanFolders.add(drive, home: fixture.home)
+                #expect(added.refusal == nil)
+                #expect(!added.saveFailed)
+                #expect(ScanFolders.pickedFolders().map(\.path) == [drive.standardizedFileURL.path])
+                #expect(ScanFolders.roots(home: fixture.home).map(\.path) == [drive.standardizedFileURL.path])
+                #expect(AppFolders.pickedFolders().isEmpty)
+
+                // A folder on a drive already on the list adds nothing.
+                #expect(ScanFolders.add(inside, home: fixture.home).refusal == .alreadyIncluded)
+                #expect(ScanFolders.pickedFolders().count == 1)
+
+                #expect(ScanFolders.remove(path: drive.standardizedFileURL.path))
+                #expect(ScanFolders.pickedFolders().isEmpty)
+                #expect(ScanFolders.roots(home: fixture.home).isEmpty)
+            }
+        }
+    }
+
+    @Test("A folder on an unplugged drive stays saved, reads Not connected, and is not walked")
+    func unpluggedDrive() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let media = try fixture.folder("Volumes/T7/Media")
+
+        try withTemporaryHandoffRoot {
+            try AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(ScanFolders.add(media, home: fixture.home).refusal == nil)
+                try FileManager.default.removeItem(at: fixture.url("Volumes/T7"))
+
+                let entries = ScanFolders.entries(home: fixture.home)
+                #expect(entries.count == 1)
+                #expect(entries.first?.isDisconnected == true)
+                #expect(entries.first?.isAvailable == false)
+                #expect(ScanFolders.roots(home: fixture.home).isEmpty)
+                #expect(ScanFolders.pickedFolders().count == 1)
+            }
+        }
+    }
+
+    @Test("Clean Safe Items' check matches a saved folder by its spelling, connected or not")
+    func savedFolderCheck() {
+        let snapshot = ScanFolders.Snapshot(walked: [], saved: ["/Volumes/T7/Code"])
+        ScanFolders.$snapshotOverride.withValue(snapshot) {
+            #expect(ScanFolders.isInsideSavedFolder("/Volumes/T7/Code/app/node_modules"))
+            #expect(ScanFolders.isInsideSavedFolder("/Volumes/T7/Code"))
+            #expect(!ScanFolders.isInsideSavedFolder("/Volumes/T7/Code2/app/node_modules"))
+            #expect(!ScanFolders.isInsideSavedFolder("/Users/someone/Code/app/node_modules"))
+        }
+    }
+
+    // MARK: - Large Files
+
+    @Test("The Large Files gate takes a file under an added folder, and only while it is added")
+    func largeFilesGate() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7/Media")
+        let file = try fixture.write("Volumes/T7/Media/film.mov")
+        let outside = try fixture.write("Volumes/T7/Other/film.mov")
+        // One level down: a Library right in the picked folder would make it
+        // look like a copy of a home folder, which the list refuses.
+        let inLibrary = try fixture.write("Volumes/T7/Media/Old/Library/film.mov")
+        func passes(_ url: URL, roots: [URL]? = nil, isLocalDisk: Bool = true) -> Bool {
+            LargeFileScanPolicy.isEligibleForDeletion(
+                url, home: fixture.home, volumes: fixture.volumes,
+                isLocalDisk: { _ in isLocalDisk }, addedRoots: roots
+            )
+        }
+
+        #expect(passes(file, roots: [drive]))
+        #expect(!passes(file, roots: []))
+        #expect(!passes(outside, roots: [drive]))
+        #expect(!passes(inLibrary, roots: [drive]))
+        // A share mounted inside the folder reads as not local.
+        #expect(!passes(file, roots: [drive], isLocalDisk: false))
+
+        // Read from the saved list when the caller passes none.
+        try withTemporaryHandoffRoot {
+            AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(!passes(file))
+                #expect(ScanFolders.add(drive, home: fixture.home, volumes: fixture.volumes).refusal == nil)
+                #expect(passes(file))
+                #expect(ScanFolders.remove(path: drive.standardizedFileURL.path))
+                #expect(!passes(file))
+            }
+        }
+    }
+
+    @Test("A VM bundle on an added drive is one item the gate takes while it is not in use")
+    func virtualMachineOnADrive() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let vm = try fixture.folder("Volumes/T7/VMs/Linux.utm")
+        try fixture.write("Volumes/T7/VMs/Linux.utm/Data/disk.img")
+
+        #expect(LargeFileScanPolicy.isEligibleForDeletion(
+            vm, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true },
+            isAppRunning: { _ in false }, addedRoots: [drive]
+        ))
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(
+            vm.appendingPathComponent("Data/disk.img"), home: fixture.home, volumes: fixture.volumes,
+            isLocalDisk: { _ in true }, isAppRunning: { _ in false }, addedRoots: [drive]
+        ))
+    }
+
+    @Test("The scan walks an added folder and names one that isn't connected")
+    func scanWalksAddedFolders() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let file = try fixture.write("Volumes/T7/Media/film.mov")
+        let gone = fixture.url("Volumes/Old/Media")
+
+        let stream = LargeFileScanner().scanEvents(
+            minBytes: 1024,
+            staleDays: 0,
+            roots: [],
+            virtualMachineRoots: [],
+            iCloudDriveRoots: [],
+            addedFolders: [
+                ScanFolders.Entry(path: drive.standardizedFileURL.path, refusal: nil),
+                ScanFolders.Entry(path: gone.standardizedFileURL.path, refusal: .notAFolder)
+            ],
+            installedApps: [],
+            isAppRunning: { _ in false },
+            home: fixture.home,
+            exclusions: ScanExclusions(keys: []),
+            isExcluded: { _ in false }
+        )
+        var paths: [String] = []
+        var summary: LargeFileScanSummary?
+        for await event in stream {
+            switch event {
+            case .file(let found): paths.append(found.id)
+            case .finished(let finished): summary = finished
+            }
+        }
+
+        #expect(paths.contains(file.standardizedFileURL.path))
+        let unread = try #require(summary).unreadableRoots
+        #expect(unread.map(\.path.path) == [gone.standardizedFileURL.path])
+        #expect(!(unread.first?.reason.isEmpty ?? true))
+    }
+}
