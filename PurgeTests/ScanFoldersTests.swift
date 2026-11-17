@@ -625,4 +625,17 @@ struct ScanFoldersTests {
         try fixture.write("Volumes/T7/.dropbox", bytes: 1)
         #expect(!passes())
     }
+
+    @Test("A refresh that started earlier never replaces one that started later")
+    func olderRefreshNeverWins() {
+        let tag = "/Volumes/purge-test-\(UUID().uuidString)"
+        let older = ScanFolders.beginRefresh()
+        let newer = ScanFolders.beginRefresh()
+        // Other suites may refresh meanwhile, with later numbers still, so only
+        // the refusal of the older one is certain here.
+        ScanFolders.publish(.init(walked: [tag], saved: [tag, tag + "-new"]), generation: newer)
+        #expect(!ScanFolders.publish(.init(walked: [tag], saved: [tag]), generation: older))
+        // Leave the shared snapshot as the test host has it: empty.
+        ScanFolders.publish(.init(walked: [], saved: []), generation: ScanFolders.beginRefresh())
+    }
 }

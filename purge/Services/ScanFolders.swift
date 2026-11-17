@@ -203,14 +203,14 @@ nonisolated enum ScanFolders {
     /// test host until a test binds `snapshotOverride`.
     static var snapshot: [String] {
         if let snapshotOverride { return snapshotOverride.walked }
-        return snapshotStore.withLock { $0.walked }
+        return snapshotStore.withLock { $0.snapshot.walked }
     }
 
     /// Every saved folder as last read, walked or not, such as one on a drive
     /// that is unplugged now.
     static var savedSnapshot: [String] {
         if let snapshotOverride { return snapshotOverride.saved }
-        return snapshotStore.withLock { $0.saved }
+        return snapshotStore.withLock { $0.snapshot.saved }
     }
 
     /// Reads the list from disk and keeps the folders' paths. Off the main
@@ -229,6 +229,10 @@ nonisolated enum ScanFolders {
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         insideHomeOnly: Bool? = nil
     ) -> [URL] {
+        // Numbered before anything is read, so a refresh that started later,
+        // and so read a newer list, is never replaced by an older one that
+        // finishes after it (#318 review).
+        let generation = beginRefresh()
         let insideHomeOnly = insideHomeOnly ?? (ScanAccess.current() == .limited)
         let homePath = home.standardizedFileURL.path
         let all = entries(home: home, including: { path in
@@ -241,12 +245,7 @@ nonisolated enum ScanFolders {
         var saved = pickedFolders().map(\.path)
         for path in walked where !saved.contains(path) { saved.append(path) }
         let next = Snapshot(walked: walked, saved: saved)
-        let changed = snapshotStore.withLock { stored -> Bool in
-            defer { stored = next }
-            return stored != next
-        }
-        // `isOfferedForCleanup` keeps `evaluate`'s answers, which read this list.
-        if changed { DeletionSafetyPolicy.clearOfferedForCleanupCache() }
+        publish(next, generation: generation)
         return roots
     }
 
@@ -287,5 +286,31 @@ nonisolated enum ScanFolders {
     /// Tests bind this instead of saving a list.
     @TaskLocal static var snapshotOverride: Snapshot?
 
-    private static let snapshotStore = OSAllocatedUnfairLock<Snapshot>(initialState: Snapshot(walked: [], saved: []))
+    /// Takes the next refresh number.
+    static func beginRefresh() -> Int {
+        refreshCounter.withLock { count -> Int in
+            count += 1
+            return count
+        }
+    }
+
+    /// Keeps `next` unless a refresh that started later has published already.
+    /// Returns whether it was kept.
+    @discardableResult
+    static func publish(_ next: Snapshot, generation: Int) -> Bool {
+        let outcome = snapshotStore.withLock { state -> (kept: Bool, changed: Bool) in
+            guard generation > state.generation else { return (false, false) }
+            let changed = state.snapshot != next
+            state = (next, generation)
+            return (true, changed)
+        }
+        // `isOfferedForCleanup` keeps `evaluate`'s answers, which read this list.
+        if outcome.changed { DeletionSafetyPolicy.clearOfferedForCleanupCache() }
+        return outcome.kept
+    }
+
+    private static let refreshCounter = OSAllocatedUnfairLock<Int>(initialState: 0)
+    private static let snapshotStore = OSAllocatedUnfairLock<(snapshot: Snapshot, generation: Int)>(
+        initialState: (Snapshot(walked: [], saved: []), 0)
+    )
 }
