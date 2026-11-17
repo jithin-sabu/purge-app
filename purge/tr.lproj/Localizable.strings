@@ -1523,3 +1523,24 @@
 "macOS's asset service stopped before it answered" = "macOS'in varlık servisi yanıt vermeden durdu";
 "macOS's asset service couldn't be reached" = "macOS'in varlık servisine ulaşılamadı";
 "macOS's asset service sent an answer Purge couldn't read" = "macOS'in varlık servisi, Purge'ün okuyamadığı bir yanıt gönderdi";
+
+/* Extra folders for Large Files and Developer Projects (#318) */
+"In a folder you added, so Purge won't clean it without asking." = "Eklediğiniz bir klasörde olduğu için Purge sormadan temizlemez.";
+"It isn’t connected. Connect its drive and scan again." = "Bağlı değil. Sürücüsünü bağlayıp yeniden tarayın.";
+"Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "Bir klasör ya da sürücü seçin. Büyük Dosyalar ve Geliştirici Projeleri onun içine de bakar.";
+"That folder can’t be found. If it’s on a drive, connect the drive." = "Bu klasör bulunamıyor. Bir sürücüdeyse sürücüyü bağlayın.";
+"Choose a folder or a drive, not your home folder." = "Ana klasörünüzü değil, bir klasör ya da sürücü seçin.";
+"Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge; Kitaplık klasörünü, gizli klasörleri ya da uygulama ve paketlerin içini taramaz.";
+"Purge only scans drives attached to this Mac that it can move files on, not network, cloud or read-only drives." = "Purge yalnızca bu Mac'e bağlı ve dosya taşıyabildiği sürücüleri tarar; ağ, bulut ya da salt okunur sürücüleri taramaz.";
+"That folder holds a copy of a Mac, a home folder or a Time Machine backup, or is inside one." = "Bu klasör bir Mac'in, ana klasörün ya da Time Machine yedeğinin kopyasını içeriyor veya bunlardan birinin içinde.";
+"That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "Bu klasör iCloud Drive ile eşzamanlanıyor; içinden bir dosyayı Çöp Sepeti'ne taşımak onu diğer aygıtlarınızdan da kaldırır.";
+"Purge already scans that folder." = "Purge bu klasörü zaten tarıyor.";
+"That folder holds one Purge already scans." = "Bu klasör, Purge'ün zaten taradığı bir klasörü içeriyor.";
+"Where Purge looks for files and projects" = "Purge dosyaları ve projeleri nerede arar";
+"Your home folders, plus folders and drives you add." = "Ana klasörleriniz ve eklediğiniz klasörler ile sürücüler.";
+"Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives." = "Büyük Dosyalar ve Geliştirici Projeleri, ana klasörlerinize ve burada eklediğiniz, bu Mac'e bağlı sürücülerdeki klasörlere bakar. Orada bulunanlar asla Güvenli Öğeleri Temizle'ye ya da zamanlanmış temizliklere dahil edilmez. Tam Disk Erişimi olmadan Geliştirici Projeleri diğer sürücülerdeki klasörleri atlar.";
+"No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too." = "Eklenmiş klasör yok. Büyük Dosyalar ve Geliştirici Projeleri'nin de bakması için bir klasör ya da tüm bir sürücü ekleyin.";
+"Stop looking in %@." = "%@ içine bakmayı durdur.";
+"Not scanned" = "Taranmıyor";
+"None added" = "Eklenmedi";
+"%lld added" = "%lld eklendi";

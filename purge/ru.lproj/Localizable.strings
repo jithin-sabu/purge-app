@@ -1482,3 +1482,24 @@
 "you stopped the removal" = "вы остановили удаление";
 "·" = "·";
 "…and %lld more sets where every copy is selected." = "…и ещё %lld наборов, где выбраны все копии.";
+
+/* Extra folders for Large Files and Developer Projects (#318) */
+"In a folder you added, so Purge won't clean it without asking." = "Находится в добавленной вами папке, поэтому Purge не очистит её без вашего подтверждения.";
+"It isn’t connected. Connect its drive and scan again." = "Она не подключена. Подключите её диск и выполните сканирование снова.";
+"Choose a folder or a drive. Large Files and Developer Projects will look inside it too." = "Выберите папку или диск. «Большие файлы» и «Проекты разработчика» будут искать и в нём.";
+"That folder can’t be found. If it’s on a drive, connect the drive." = "Папка не найдена. Если она на диске, подключите диск.";
+"Choose a folder or a drive, not your home folder." = "Выберите папку или диск, а не домашнюю папку.";
+"Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge не сканирует «Библиотеку», скрытые папки и содержимое приложений и пакетов.";
+"Purge only scans drives attached to this Mac that it can move files on, not network, cloud or read-only drives." = "Purge сканирует только диски, подключённые к этому Mac, на которых может перемещать файлы, а не сетевые, облачные или доступные только для чтения.";
+"That folder holds a copy of a Mac, a home folder or a Time Machine backup, or is inside one." = "Эта папка содержит копию Mac, домашней папки или резервную копию Time Machine либо находится внутри неё.";
+"That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "Эта папка синхронизируется с iCloud Drive, поэтому перемещение файла из неё в Корзину удалит его и с других ваших устройств.";
+"Purge already scans that folder." = "Purge уже сканирует эту папку.";
+"That folder holds one Purge already scans." = "Эта папка содержит папку, которую Purge уже сканирует.";
+"Where Purge looks for files and projects" = "Где Purge ищет файлы и проекты";
+"Your home folders, plus folders and drives you add." = "Ваши домашние папки, а также добавленные вами папки и диски.";
+"Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives." = "«Большие файлы» и «Проекты разработчика» ищут в ваших домашних папках и в папках, добавленных здесь, на дисках, подключённых к этому Mac. Найденное там никогда не входит в «Очистить безопасное» и в очистку по расписанию. Без полного доступа к диску «Проекты разработчика» пропускают папки на других дисках.";
+"No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too." = "Папки не добавлены. Добавьте папку или целый диск, чтобы «Большие файлы» и «Проекты разработчика» искали и там.";
+"Stop looking in %@." = "Больше не искать в %@.";
+"Not scanned" = "Не сканируется";
+"None added" = "Не добавлено";
+"%lld added" = "Добавлено: %lld";

@@ -33,7 +33,7 @@ struct SettingsView: View {
     /// Adding and removing share the alert; each says which one failed.
     @State private var appFolderAlertTitle = AppFolderAdding.refusalTitle
     @State private var showScanFoldersSheet = false
-    /// The folders Large Files and Dev Projects also walk (#318), read off the
+    /// The folders Large Files and Developer Projects also walk (#318), read off the
     /// main thread when Settings appears and after each change.
     @State private var scanFolders: [ScanFolders.Entry] = []
     @State private var scanFolderMessage: String?
@@ -645,7 +645,7 @@ struct SettingsView: View {
         .task { await reloadAppFolders() }
     }
 
-    /// The folders Large Files and Dev Projects walk besides the home folders
+    /// The folders Large Files and Developer Projects walk besides the home folders
     /// (#318).
     var scanFoldersSheet: some View {
         scanFoldersSheet(entries: scanFolders)
@@ -655,7 +655,7 @@ struct SettingsView: View {
     func scanFoldersSheet(entries: [ScanFolders.Entry]) -> some View {
         settingsSheet(
             title: String(localized: "Where Purge looks for files and projects"),
-            caption: String(localized: "Large Files and Dev Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Dev Projects skips folders on other drives."),
+            caption: String(localized: "Large Files and Developer Projects look in your home folders and in the folders you add here, on drives attached to this Mac. What they find there is never part of Clean Safe Items or scheduled cleans. Without Full Disk Access, Developer Projects skips folders on other drives."),
             onDone: { showScanFoldersSheet = false }
         ) {
             Button(action: chooseScanFolder) {
@@ -665,7 +665,7 @@ struct SettingsView: View {
         } content: {
             InsetCard {
                 if entries.isEmpty {
-                    Text("No folders added. Add a folder or a whole drive for Large Files and Dev Projects to look in too.")
+                    Text("No folders added. Add a folder or a whole drive for Large Files and Developer Projects to look in too.")
                         .font(scheduleStatusSecondaryFont)
                         .foregroundStyle(AppColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
