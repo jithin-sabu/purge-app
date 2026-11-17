@@ -108,6 +108,52 @@ struct OllamaStoreShapeTests {
         #expect(await scannedPaths(home, roots: ["Models"]).isEmpty)
     }
 
+    /// APFS compares names without case, so `Blobs` beside `Manifests` is the
+    /// same shape. The walk skips it and the gate refuses it alike, so no row
+    /// is listed that could only come back "skipped for safety".
+    @Test
+    func aStoreInOtherCapitalsIsSkippedAndRefused() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let blob = try home.file("Documents/models/Blobs/sha256-aaa")
+        try home.file("Documents/models/Manifests/registry.ollama.ai/library/gemma3/latest")
+
+        #expect(await scannedPaths(home, roots: ["Documents"]).isEmpty)
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(blob, home: home.url))
+    }
+
+    /// A root inside a store, such as its `blobs` folder picked as a folder to
+    /// scan, lists none of the blobs.
+    @Test
+    func aRootInsideAStoreListsNothing() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.ollamaStore("Models")
+
+        #expect(await scannedPaths(home, roots: ["Models/blobs"]).isEmpty)
+    }
+
+    /// A root linked onto a drive whose top is a store, as when
+    /// `OLLAMA_MODELS` is the drive itself and `~/Movies` lives there too. The
+    /// gate refuses everything under a store at any height, so the walk lists
+    /// nothing there, and no row is offered that can't be cleaned.
+    @Test
+    func aRootLinkedUnderAStoreListsNothing() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.ollamaStore("Drive")
+        try home.file("Drive/Movies/film.mov")
+        try FileManager.default.createSymbolicLink(
+            at: home.url.appendingPathComponent("Movies"),
+            withDestinationURL: home.url.appendingPathComponent("Drive/Movies", isDirectory: true)
+        )
+
+        #expect(await scannedPaths(home, roots: ["Movies"]).isEmpty)
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(
+            home.url.appendingPathComponent("Movies/film.mov"), home: home.url
+        ))
+    }
+
     /// The shape needs both folders. A `blobs` folder on its own is the
     /// user's, and its files are listed as before.
     @Test

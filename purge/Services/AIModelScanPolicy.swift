@@ -117,29 +117,29 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static let ollamaStoreFolders: Set<String> = ["blobs", "manifests"]
 
     /// Whether a folder is shaped like an Ollama store, read from the names of
-    /// its entries that are folders or links. Large Files skips such a folder
+    /// its entries that are not regular files: folders, and links, so a store
+    /// with a linked `manifests` is still a store. Names are compared without
+    /// case, as APFS compares them by default. Large Files skips such a folder
     /// even when Purge doesn't know it is Ollama's, such as `OLLAMA_MODELS` set
     /// only in a shell profile while Purge started from the Dock. Trashing one
     /// blob from it breaks every model that uses the blob, and Ollama goes on
     /// listing them.
     nonisolated static func isOllamaStore(folderNames: some Sequence<String>) -> Bool {
-        ollamaStoreFolders.isSubset(of: Set(folderNames))
+        ollamaStoreFolders.isSubset(of: Set(folderNames.lazy.map { $0.lowercased() }))
     }
 
-    /// Whether a folder on disk is shaped like an Ollama store. Links are
-    /// followed: this only ever keeps files out of Large Files, so reading more
-    /// folders as stores is the safe side.
+    /// Whether a folder on disk is shaped like an Ollama store, read the way
+    /// the Large Files walk reads it, so the walk and the delete gate always
+    /// agree. False for a folder that can't be listed.
     nonisolated static func isOllamaStore(_ folder: URL) -> Bool {
-        ollamaStoreFolders.allSatisfy { name in
-            var isDirectory: ObjCBool = false
-            let path = folder.appendingPathComponent(name, isDirectory: true).path
-            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
-        }
+        guard let entries = DirectoryListing.entries(of: folder.path) else { return false }
+        return isOllamaStore(folderNames: entries.lazy.filter { !$0.isRegularFile }.map(\.name))
     }
 
     /// Whether any folder above `url` is shaped like an Ollama store. Large
     /// Files' delete gate asks this, so a blob never goes alone, even from a
-    /// row saved before the walk knew the shape.
+    /// row saved before the walk knew the shape. The walk asks it of each
+    /// root, so a root inside a store lists nothing the gate would refuse.
     nonisolated static func isInsideOllamaStore(_ url: URL) -> Bool {
         var folder = url.standardizedFileURL.deletingLastPathComponent()
         while folder.path != "/", !folder.path.isEmpty {

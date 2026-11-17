@@ -216,9 +216,15 @@ nonisolated final class LargeFileScanner {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
-            // A root that is itself shaped like an Ollama store holds nothing
-            // but blobs and manifests. See the check on each folder below.
-            if AIModelScanPolicy.isOllamaStore(folder) {
+            // A root that is shaped like an Ollama store, or sits inside one,
+            // holds nothing but blobs and manifests. The delete gate refuses
+            // anything under a store-shaped folder at any height, so the root
+            // is asked the same, by its spelling and where it really is. See
+            // the check on each folder below.
+            let realFolder = folder.resolvingSymlinksInPath()
+            if [root, realFolder].contains(where: {
+                AIModelScanPolicy.isOllamaStore($0) || AIModelScanPolicy.isInsideOllamaStore($0)
+            }) {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }

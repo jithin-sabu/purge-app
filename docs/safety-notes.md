@@ -11,6 +11,49 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-17: Large Files offered single Ollama blobs from a store Purge didn't know
+
+**Found internally** while testing [#318](https://github.com/jithin-sabu/purge-app/issues/318) ([#395](https://github.com/jithin-sabu/purge-app/issues/395)), no report. **Fixed:** [#396](https://github.com/jithin-sabu/purge-app/pull/396), not shipped yet. **Affected:** every release up to v1.16.2.
+
+### What happened
+
+An Ollama store keeps each model's weights as blobs named by digest
+(`blobs/sha256-…`), and lists the models in `manifests`. Purge reads
+`OLLAMA_MODELS` to find the store, and Large Files skips the store when it sits
+in a folder Large Files walks. When Purge can't see the variable, such as one
+set only in a shell profile while Purge started from the Dock, it doesn't know
+the store's path. A store in `~/Documents` or another walked folder was then
+walked like any folder, and each blob over the size floor was a row of its own
+with a `sha256-…` name.
+
+Trashing one blob breaks every model that uses it, and Ollama goes on listing
+those models.
+
+### Who was affected
+
+Nobody reported a loss. It took a store in a walked folder at a path Purge
+couldn't see, and a click on a row named only by a hash. The blob went to the
+Trash and could be put back.
+
+### What changed
+
+The Large Files walk knows a store by its shape, a folder holding both `blobs`
+and `manifests`, compared without case, and skips it
+(`AIModelScanPolicy.isOllamaStore`). It also skips a root that is a store or
+sits inside one. The Large Files delete gate refuses anything under a folder
+with that shape, by the path given and by its real path
+(`AIModelScanPolicy.isInsideOllamaStore`), so a row saved before the fix can't
+trash a blob either. AI Models doesn't list these stores, because `FileDeleter`
+also asks the AI model gate about plain Large Files rows.
+
+### What would have caught it earlier
+
+A walk test with a store at a path Purge doesn't know, not only at the paths
+it reads from the environment.
+[`PurgeTests/OllamaStoreShapeTests.swift`](../PurgeTests/OllamaStoreShapeTests.swift)
+now walks such a store, a mixed-case one and a root inside one, expects no
+blob rows, and expects `FileDeleter` to skip a blob for safety.
+
 ## 2026-11-12: Retry could move a scripts folder that had gained files
 
 **Found internally** in a deletion-safety review before 1.15.0 ([#362](https://github.com/jithin-sabu/purge-app/issues/362)), no report. **Fixed:** [#363](https://github.com/jithin-sabu/purge-app/pull/363), shipped in v1.16.0 (2026-11-16). **Affected:** v1.15.0.
