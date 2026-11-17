@@ -48,9 +48,10 @@ nonisolated enum ScanFolders {
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         volumes: URL = AppFolders.volumes,
         isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
-        including: (String) -> Bool = { _ in true }
+        including: (String) -> Bool = { _ in true },
+        insideHomeOnly: Bool = false
     ) -> [Entry] {
-        var others = fixedRoots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
+        var others = fixedRoots(home: home, volumes: volumes, isLocalDisk: isLocalDisk, insideHomeOnly: insideHomeOnly)
         return pickedFolders().filter { including($0.path) }.map { folder in
             let url = URL(fileURLWithPath: folder.path, isDirectory: true)
             let refusal = refusal(forPicked: url, home: home, otherRoots: others, volumes: volumes, isLocalDisk: isLocalDisk)
@@ -71,13 +72,24 @@ nonisolated enum ScanFolders {
     /// Large Files' six home folders, each where it is walked (a moved folder
     /// is walked where its link leads, #273). Adding one of them, or a folder
     /// inside one, adds nothing.
+    ///
+    /// `insideHomeOnly` is for a scan without Full Disk Access: a folder whose
+    /// link leads out of the home folder is left out by `readlink` alone, so
+    /// nothing on another drive is read (#318 review).
     static func fixedRoots(
         home: URL,
         volumes: URL = AppFolders.volumes,
-        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) }
+        isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
+        insideHomeOnly: Bool = false
     ) -> [URL] {
-        LargeFileScanPolicy.scanRoots(home: home).compactMap {
-            LargeFileScanPolicy.walkedFolder(for: $0, home: home, volumes: volumes, isLocalDisk: isLocalDisk)
+        let homePath = home.standardizedFileURL.path
+        return LargeFileScanPolicy.scanRoots(home: home).compactMap { root in
+            if insideHomeOnly, let target = try? FileManager.default.destinationOfSymbolicLink(atPath: root.path) {
+                let resolved = URL(fileURLWithPath: target, relativeTo: root.deletingLastPathComponent())
+                    .standardizedFileURL.path
+                guard PathContainment.isInside(resolved, homePath) else { return nil }
+            }
+            return LargeFileScanPolicy.walkedFolder(for: root, home: home, volumes: volumes, isLocalDisk: isLocalDisk)
         }
     }
 
@@ -208,7 +220,7 @@ nonisolated enum ScanFolders {
         let saved = pickedFolders().map(\.path)
         let all = entries(home: home, including: { path in
             !insideHomeOnly || PathContainment.isInside(path, homePath)
-        })
+        }, insideHomeOnly: insideHomeOnly)
         let roots = all.filter(\.isAvailable).map(\.url)
         let next = Snapshot(
             walked: roots.map { $0.standardizedFileURL.path },

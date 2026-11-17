@@ -269,12 +269,15 @@ nonisolated enum FolderSizing {
     nonisolated static func walkedSize(
         at url: URL,
         skipsPackages: Bool,
+        staysOnVolume: Bool = false,
         isCancelled: () -> Bool = { Task.isCancelled }
     ) -> (bytes: Int64, lastUsed: Date) {
         // The same sums read in parallel with `getattrlistbulk`. Measuring a
         // Photos library this way took 0.45 s file by file.
         guard skipsPackages else {
-            return FolderWalker.shared.fileTotals(of: url.standardizedFileURL.path, isCancelled: isCancelled)
+            return FolderWalker.shared.fileTotals(
+                of: url.standardizedFileURL.path, staysOnVolume: staysOnVolume, isCancelled: isCancelled
+            )
         }
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey,

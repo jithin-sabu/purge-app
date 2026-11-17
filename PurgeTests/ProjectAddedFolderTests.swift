@@ -250,4 +250,15 @@ struct AddedFolderSafeCleanTests {
             #expect(store.manualSafeCleanupCandidates().count == 1)
         }
     }
+
+    @Test("The safe totals leave out what Clean Safe Items leaves out")
+    func safeTotalsMatchTheClean() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = store(with: artifact(under: drive, reason: nil), scans)
+        ScanFolders.$snapshotOverride.withValue(.init(walked: [], saved: [drive.path])) {
+            #expect(store.safeCleanupSummary.projectArtifactBytes == 0)
+            #expect(store.manualSafeCleanupCandidates().isEmpty)
+        }
+    }
 }

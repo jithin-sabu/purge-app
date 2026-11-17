@@ -314,6 +314,12 @@ nonisolated final class LargeFileScanner {
             /// for an entry whose values could not be read.
             func examine(_ fileURL: URL, values: Seen?, isCancelled: () -> Bool) -> (findings: [Finding], descends: Bool) {
                 if values?.isDirectory == true {
+                    // Below an added folder, a network share or macFUSE mount is
+                    // never read, not even to size a bundle that is one (#318).
+                    if let rootDevice, Self.device(of: fileURL) != rootDevice,
+                       !LargeFileScanPolicy.isOnLocalDisk(fileURL) {
+                        return ([], false)
+                    }
                     // A VM or a Safari download bundle is one item. Never walk
                     // into it, whether or not macOS calls it a package: without
                     // the VM app installed it is a plain folder, and a disk file
@@ -328,7 +334,7 @@ nonisolated final class LargeFileScanner {
                            LargeFileScanPolicy.virtualMachineIsInUse(fileURL, isAppRunning: isAppRunning) {
                             return ([], false)
                         }
-                        let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, isCancelled: isCancelled)
+                        let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, staysOnVolume: walk.skipsOffLimits, isCancelled: isCancelled)
                         guard let file = listed(
                             fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
                             minBytes: minBytes, staleDays: staleDays, now: now,
@@ -346,7 +352,7 @@ nonisolated final class LargeFileScanner {
                         // The exclusion check comes before the walk: a library
                         // the user excluded must not cost the scan its size.
                         guard !isExcluded(fileURL) else { return ([], false) }
-                        let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, isCancelled: isCancelled)
+                        let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, staysOnVolume: walk.skipsOffLimits, isCancelled: isCancelled)
                         guard measured.bytes >= minBytes else { return ([], false) }
                         return ([.skippedLibrary(.init(path: fileURL.standardizedFileURL, bytes: measured.bytes))], false)
                     }
@@ -357,10 +363,6 @@ nonisolated final class LargeFileScanner {
                         return ([], false)
                     }
                     if walk.skipsOffLimits, ScanFolders.isOffLimits(fileURL) {
-                        return ([], false)
-                    }
-                    if let rootDevice, Self.device(of: fileURL) != rootDevice,
-                       !LargeFileScanPolicy.isOnLocalDisk(fileURL) {
                         return ([], false)
                     }
                     // The walk never goes into a package.

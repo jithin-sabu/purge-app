@@ -439,4 +439,22 @@ struct ScanFoldersTests {
             }
         }
     }
+
+    @Test("A limited scan never follows a home folder's link out of home")
+    func limitedScanDoesNotFollowLinksOut() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/T7/Documents")
+        try FileManager.default.createSymbolicLink(
+            at: fixture.home.appendingPathComponent("Documents"),
+            withDestinationURL: fixture.url("Volumes/T7/Documents")
+        )
+        func roots(insideHomeOnly: Bool) -> [String] {
+            ScanFolders.fixedRoots(
+                home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true }, insideHomeOnly: insideHomeOnly
+            ).map(\.path)
+        }
+        #expect(roots(insideHomeOnly: false).contains { $0.hasSuffix("/Volumes/T7/Documents") })
+        #expect(!roots(insideHomeOnly: true).contains { $0.hasSuffix("/Volumes/T7/Documents") })
+    }
 }

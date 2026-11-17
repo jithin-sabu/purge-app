@@ -881,8 +881,11 @@ final class PurgeStore: ObservableObject {
             && artifact.reinstallSafety != .missingLockfile
             && artifact.gitStatus == .clean
             // A folder in a folder the user added is theirs to pick, even when
-            // overridden to Safe (#318).
+            // overridden to Safe (#318). By path too, as the clean decides, so
+            // the safe totals never count what Clean Safe Items leaves. The
+            // scan's own spelling: standardizing would read the disk per render.
             && artifact.checkFirstReason != .addedFolder
+            && !ScanFolders.isInsideSavedFolder(artifact.path.path)
     }
 
     /// Opening App Caches or Dev Tools from its Overview row, whose one line is the
