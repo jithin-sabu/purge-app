@@ -53,6 +53,12 @@ nonisolated enum ScanFolders {
     ) -> [Entry] {
         var others = fixedRoots(home: home, volumes: volumes, isLocalDisk: isLocalDisk, insideHomeOnly: insideHomeOnly)
         return pickedFolders().filter { including($0.path) }.map { folder in
+            // A saved folder in home that became a link out of it is refused by
+            // `readlink` alone, before anything could read where it leads (#318
+            // review): `refusal` asks `fileExists` first.
+            if insideHomeOnly, ProtectedLocations.resolvedStayingInside(folder.path, root: home) == nil {
+                return Entry(path: folder.path, refusal: .throughLink)
+            }
             let url = URL(fileURLWithPath: folder.path, isDirectory: true)
             let refusal = refusal(forPicked: url, home: home, otherRoots: others, volumes: volumes, isLocalDisk: isLocalDisk)
             if refusal == nil { others.append(url) }

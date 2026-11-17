@@ -480,4 +480,31 @@ struct ScanFoldersTests {
         #expect(!roots.contains { $0.hasSuffix("/Volumes/T7/Documents") })
         #expect(roots.contains { $0.hasSuffix("/home/Real/Movies") })
     }
+
+    @Test("In a limited scan, a saved home folder that became a link out of home is refused without reading the drive")
+    func limitedScanRefusesSavedFolderLinkedOut() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let work = try fixture.folder("home/Work")
+        try fixture.folder("Volumes/T7/Code")
+        try withTemporaryHandoffRoot {
+            try AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(ScanFolders.add(work, home: fixture.home).refusal == nil)
+                try FileManager.default.removeItem(at: work)
+                try FileManager.default.createSymbolicLink(at: work, withDestinationURL: fixture.url("Volumes/T7/Code"))
+                let homePath = fixture.home.standardizedFileURL.path
+                // `isLocalDisk` is asked only once `refusal` reaches the disk
+                // checks; for this folder it must never be asked at all.
+                var askedAbout: [String] = []
+                let entries = ScanFolders.entries(
+                    home: fixture.home,
+                    isLocalDisk: { url in askedAbout.append(url.path); return true },
+                    including: { PathContainment.isInside($0, homePath) },
+                    insideHomeOnly: true
+                )
+                #expect(entries.map(\.refusal) == [.throughLink])
+                #expect(!askedAbout.contains { $0.contains("/Volumes/T7") })
+            }
+        }
+    }
 }
