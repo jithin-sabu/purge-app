@@ -50,7 +50,7 @@ enum ScanFolderAdding {
         case .holdsWholeDisk:
             String(localized: "That folder holds a copy of a Mac, a home folder or a Time Machine backup, or is inside one.")
         case .syncs:
-            String(localized: "That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too.")
+            String(localized: "That folder syncs with iCloud Drive or another service, so moving a file from it to the Trash would remove it from your other devices too.")
         case .alreadyIncluded:
             String(localized: "Purge already scans that folder.")
         case .holdsAnotherFolder:

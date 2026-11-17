@@ -112,8 +112,8 @@ struct ProjectAddedFolderTests {
         }
     }
 
-    @Test("A project in an added folder is listed as Check First with its own reason")
-    func projectIsCheckFirst() throws {
+    @Test("A project in a folder added inside home keeps the home rules")
+    func homeAddedFolderKeepsHomeRules() throws {
         let fixture = try ActivityFixture(
             files: ["package.json", "package-lock.json", "src/app.js", "node_modules/pkg/index.js"]
         )
@@ -131,31 +131,54 @@ struct ProjectAddedFolderTests {
         }
         let listed = try #require(artifacts)
         #expect(!listed.isEmpty)
-        #expect(listed.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason == .addedFolder })
+        #expect(listed.allSatisfy { $0.safetyInfo.level == .safe && $0.checkFirstReason == nil })
     }
 
-    @Test("A project reached through a link into an added folder is Check First too")
-    func linkedProjectIsCheckFirst() throws {
-        let fixture = try ActivityFixture(
-            files: ["real/package.json", "real/package-lock.json", "real/src/app.js", "real/node_modules/pkg/index.js"]
-        )
-        defer { fixture.cleanUp() }
-        try fixture.ageEverything(to: Date(timeIntervalSinceNow: -3 * 365 * 86_400))
-        let link = fixture.url("linked")
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: fixture.url("real"))
-        // Show all: the new link reads as recent work, which would hide the project.
-        let filter = DevScanner.ProjectListingFilter(
-            staleDays: DevToolsStalenessOption.showAll.rawValue,
-            now: Date(),
-            live: .none
-        )
-        let added = fixture.url("real").resolvingSymlinksInPath().standardizedFileURL.path
+    @Test("On an added folder, a project inside an app bundle is refused and never walked into")
+    func appBundleOnADrive() throws {
+        let drive = try Drive()
+        defer { drive.remove() }
+        try drive.write("Applications/Code.app/Contents/Resources/app/package.json")
+        try drive.write("Applications/Code.app/Contents/Resources/app/node_modules/pkg/index.js")
+        let added = [drive.root.standardizedFileURL.path]
 
-        let artifacts = ScanFolders.$snapshotOverride.withValue(.init(walked: [added], saved: [added])) {
-            DevScanner.sizeProjectGroup(rootURL: link, types: [.node], access: .full, filter: filter).0?.artifacts
+        #expect(!DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(
+            drive.url("Applications/Code.app/Contents/Resources/app/node_modules"), home: otherHome, addedRoots: added
+        ))
+        let found = DevScanner.findProjectRoots(
+            in: [drive.root], home: URL(fileURLWithPath: otherHome), access: .full, maxDepth: 6
+        ).roots.map(\.0.path)
+        #expect(!found.contains { $0.contains("Code.app") })
+    }
+
+    @Test("On an added drive, a project in a copied Mac, home folder or synced folder is refused and not found")
+    func copiesOnADrive() throws {
+        let drive = try Drive()
+        defer { drive.remove() }
+        try drive.write("OldMac/System/.keep")
+        try drive.write("OldMac/Users/bob/site/package.json")
+        try drive.write("OldMac/Users/bob/site/node_modules/pkg/index.js")
+        try drive.write("Dropbox/.dropbox")
+        try drive.write("Dropbox/app/package.json")
+        try drive.write("Dropbox/app/node_modules/pkg/index.js")
+        try drive.write("Code/app/package.json")
+        try drive.write("Code/app/node_modules/pkg/index.js")
+        let added = [drive.root.standardizedFileURL.path]
+
+        for blocked in ["OldMac/Users/bob/site/node_modules", "Dropbox/app/node_modules"] {
+            #expect(!DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(drive.url(blocked), home: otherHome, addedRoots: added))
         }
-        let listed = try #require(artifacts)
-        #expect(listed.allSatisfy { $0.checkFirstReason == .addedFolder })
+        #expect(DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(drive.url("Code/app/node_modules"), home: otherHome, addedRoots: added))
+
+        let snapshot = ScanFolders.Snapshot(walked: added, saved: added)
+        let found = ScanFolders.$snapshotOverride.withValue(snapshot) {
+            DevScanner.findProjectRoots(
+                in: [drive.root], home: URL(fileURLWithPath: otherHome), access: .full, maxDepth: 6
+            ).roots.map { $0.0.lastPathComponent }
+        }
+        #expect(found.contains("app"))
+        #expect(!found.contains("site"))
+        #expect(found.filter { $0 == "app" }.count == 1)
     }
 }
 
@@ -214,6 +237,17 @@ struct AddedFolderSafeCleanTests {
         #expect(store.manualSafeCleanupCandidates().count == 1)
         ScanFolders.$snapshotOverride.withValue(.init(walked: [], saved: [drive.path])) {
             #expect(store.manualSafeCleanupCandidates().isEmpty)
+        }
+    }
+
+    @Test("A folder added inside home doesn't keep its projects out")
+    func homeSavedFolderDoesNotFilter() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("purge-test-\(UUID().uuidString)/Code", isDirectory: true)
+        let store = store(with: artifact(under: home, reason: nil), scans)
+        ScanFolders.$snapshotOverride.withValue(.init(walked: [home.path], saved: [home.path])) {
+            #expect(store.manualSafeCleanupCandidates().count == 1)
         }
     }
 }

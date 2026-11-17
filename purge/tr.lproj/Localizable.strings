@@ -1425,7 +1425,7 @@
 "Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge'ün Uygulama Kaldırıcısı uygulamaları Uygulamalar'da, taktığınız sürücülerde ve Ayarlar'da eklediğiniz klasörlerde listeler; Apple'ın yerleşik uygulamalarını asla listelemez. %@ uygulamasının nereye yüklendiğini kontrol edin ve tekrar deneyin.";
 "Purge lists apps in Applications, on drives you plug in, and in folders you add. Put %@ in a folder, then add that folder, or drag it to the Trash yourself." = "Purge uygulamaları Uygulamalar'da, taktığınız sürücülerde ve eklediğiniz klasörlerde listeler. %@ uygulamasını bir klasöre koyun, sonra o klasörü ekleyin veya kendiniz Çöp Sepeti'ne sürükleyin.";
 "That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use." = "Bu klasör bir Mac'in veya bir ana klasörün kopyasını barındırıyor ya da birinin içinde. Kullandığınız uygulamaların bulunduğu bir klasör seçin.";
-"That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too." = "Bu klasör iCloud Drive ile eşitleniyor, bu yüzden içinden bir uygulamayı Çöp Sepeti'ne taşımak onu diğer aygıtlarınızdan da kaldırır.";
+"That folder syncs with iCloud Drive or another service, so moving an app from it to the Trash would remove it from your other devices too." = "Bu klasör iCloud Drive ya da başka bir hizmetle eşitleniyor, bu yüzden içinden bir uygulamayı Çöp Sepeti'ne taşımak onu diğer aygıtlarınızdan da kaldırır.";
 "Purge can’t remove that folder" = "Purge bu klasörü kaldıramıyor";
 "No app matches “%@”" = "“%@” ile eşleşen uygulama yok";
 "If it’s on a drive or in another folder, add that folder and Purge lists it." = "Bir sürücüde veya başka bir klasördeyse o klasörü ekleyin, Purge onu listeler.";
@@ -1531,7 +1531,7 @@
 "Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge; Kitaplık klasörünü, gizli klasörleri ya da uygulama ve paketlerin içini taramaz.";
 "Purge only scans drives attached to this Mac that it can move files on, not network, cloud or read-only drives." = "Purge yalnızca bu Mac'e bağlı ve dosya taşıyabildiği sürücüleri tarar; ağ, bulut ya da salt okunur sürücüleri taramaz.";
 "That folder holds a copy of a Mac, a home folder or a Time Machine backup, or is inside one." = "Bu klasör bir Mac'in, ana klasörün ya da Time Machine yedeğinin kopyasını içeriyor veya bunlardan birinin içinde.";
-"That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "Bu klasör iCloud Drive ile eşzamanlanıyor; içinden bir dosyayı Çöp Sepeti'ne taşımak onu diğer aygıtlarınızdan da kaldırır.";
+"That folder syncs with iCloud Drive or another service, so moving a file from it to the Trash would remove it from your other devices too." = "Bu klasör iCloud Drive ya da başka bir hizmetle eşzamanlanıyor; içinden bir dosyayı Çöp Sepeti'ne taşımak onu diğer aygıtlarınızdan da kaldırır.";
 "Purge already scans that folder." = "Purge bu klasörü zaten tarıyor.";
 "That folder holds one Purge already scans." = "Bu klasör, Purge'ün zaten taradığı bir klasörü içeriyor.";
 "Stop looking in %@." = "%@ içine bakmayı durdur.";

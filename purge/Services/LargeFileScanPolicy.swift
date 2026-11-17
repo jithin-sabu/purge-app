@@ -311,13 +311,17 @@ enum LargeFileScanPolicy {
         }
 
         // An added folder is never a link (`ScanFolders` refuses one), so its
-        // path is where it is walked.
+        // path is where it is walked. Nothing the walk skips below it passes:
+        // a copy of a Mac, a home folder or a backup, or another sync
+        // service's folder.
         func isUnderAddedFolder() -> Bool {
             let added = addedRoots ?? ScanFolders.roots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
-            let inside = added.contains { root in
+            let holding = added.first { root in
                 realPath.hasPrefix(root.resolvingSymlinksInPath().standardizedFileURL.path + "/")
             }
-            return inside && isLocalDisk(real)
+            guard let holding, isLocalDisk(real) else { return false }
+            let rootPath = holding.resolvingSymlinksInPath().standardizedFileURL.path
+            return !ScanFolders.crossesOffLimits(from: rootPath, to: real.deletingLastPathComponent())
         }
 
         guard isDir.boolValue else { return isUnder(scanRoots(home: home)) || isUnderAddedFolder() }

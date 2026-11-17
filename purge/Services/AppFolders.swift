@@ -132,7 +132,8 @@ nonisolated enum AppFolders {
             guard isRealFolder(volume),
                   isLocalDisk(volume),
                   !isReadOnly(volume),
-                  !holdsWholeDisk(volume, markers: driveMarkers)
+                  !holdsWholeDisk(volume, markers: driveMarkers),
+                  !isTimeMachineDrive(volume)
             else { return nil }
             let applications = volume.appendingPathComponent("Applications", isDirectory: true)
             return isRealFolder(applications) ? applications : nil
@@ -140,8 +141,35 @@ nonisolated enum AppFolders {
     }
 
     /// Folders that mark a whole Mac (`System`, `Users`) or a Time Machine
-    /// drive (`Backups.backupdb`).
-    private static let driveMarkers = ["System", "Users", "Backups.backupdb"]
+    /// drive: `Backups.backupdb` on HFS+, `backup_manifest.plist` on APFS.
+    static let driveMarkers = ["System", "Users", "Backups.backupdb", "backup_manifest.plist"]
+
+    /// An APFS Time Machine drive also names its backups `<date>.backup`,
+    /// and the one being made `.inprogress`. Read from the drive's top only.
+    static func isTimeMachineDrive(_ volume: URL) -> Bool {
+        if FileManager.default.fileExists(atPath: volume.appendingPathComponent("backup_manifest.plist").path) {
+            return true
+        }
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: volume.path)) ?? []
+        return names.contains { isTimeMachineBackupName($0) }
+    }
+
+    static func isTimeMachineBackupName(_ name: String) -> Bool {
+        name.hasSuffix(".backup") || name.hasSuffix(".inprogress") || name.hasSuffix(".previous")
+    }
+
+    /// Files a sync service other than iCloud Drive keeps at the top of the
+    /// folder it syncs: Dropbox, Syncthing, Resilio Sync, ownCloud, Nextcloud,
+    /// and OneDrive before Files On-Demand. A move to the Trash there is a
+    /// delete on every device, as it is in iCloud Drive (#318 review).
+    static let syncServiceMarkers = [
+        ".dropbox", ".dropbox.cache", ".stfolder", ".sync", ".owncloudsync.log",
+        ".nextcloudsync.log", ".849C9593-D756-4E56-8D6E-42412F2A707B"
+    ]
+
+    static func isSyncedByAnotherService(_ folder: URL) -> Bool {
+        syncServiceMarkers.contains { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
+    }
 
     /// The same, plus `Library`, which marks a copy of a home folder.
     private static let pickedMarkers = driveMarkers + ["Library"]
@@ -170,7 +198,8 @@ nonisolated enum AppFolders {
         /// Holds a copy of a Mac, a home folder, or a Time Machine backup, or is
         /// inside one.
         case holdsWholeDisk
-        /// Synced by iCloud Drive, where a move to the Trash leaves every device.
+        /// Synced by iCloud Drive or another sync service, where a move to the
+        /// Trash leaves every device.
         case syncs
         /// Already one of the folders, or inside one.
         case alreadyIncluded
@@ -237,8 +266,12 @@ nonisolated enum AppFolders {
         var ancestor = base
         for (index, name) in below.enumerated() {
             ancestor += "/" + name
-            let markers = onDrive && index == 0 ? driveMarkers : pickedMarkers
-            if holdsWholeDisk(URL(fileURLWithPath: ancestor), markers: markers) { return .holdsWholeDisk }
+            let folder = URL(fileURLWithPath: ancestor)
+            let isDriveTop = onDrive && index == 0
+            let markers = isDriveTop ? driveMarkers : pickedMarkers
+            if holdsWholeDisk(folder, markers: markers) { return .holdsWholeDisk }
+            if isDriveTop, isTimeMachineDrive(folder) { return .holdsWholeDisk }
+            if isSyncedByAnotherService(folder) { return .syncs }
         }
         if (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true { return .syncs }
 
@@ -378,7 +411,7 @@ nonisolated enum AppFolders {
             && isDirectory.boolValue
     }
 
-    private static func holdsWholeDisk(_ url: URL, markers: [String]) -> Bool {
+    static func holdsWholeDisk(_ url: URL, markers: [String]) -> Bool {
         markers.contains { FileManager.default.fileExists(atPath: url.appendingPathComponent($0).path) }
     }
 

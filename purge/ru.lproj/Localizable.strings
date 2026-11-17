@@ -1143,7 +1143,7 @@
 "That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use." = "Эта папка содержит копию Mac или домашней папки либо находится внутри неё. Выберите папку с приложениями, которыми вы пользуетесь.";
 "That folder holds one Purge already looks in. Remove that one first." = "В этой папке есть другая, которую Purge уже просматривает. Сначала удалите её.";
 "That folder is reached through an alias or link. Choose the folder it leads to." = "Эта папка открывается через псевдоним или ссылку. Выберите папку, на которую она указывает.";
-"That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too." = "Эта папка синхронизируется с iCloud Drive, поэтому перемещение приложения из неё в Корзину удалит его и с других ваших устройств.";
+"That folder syncs with iCloud Drive or another service, so moving an app from it to the Trash would remove it from your other devices too." = "Эта папка синхронизируется с iCloud Drive или другой службой, поэтому перемещение приложения из неё в Корзину удалит его и с других ваших устройств.";
 "That was a big one. If it helped, " = "Немало освободили. Если помогло, ";
 "That was the easy part. More clutter hides in folders macOS keeps locked." = "Это была лёгкая часть. Ещё больше хлама прячется в папках, которые закрывает macOS.";
 "That's room for" = "Этого хватит на";
@@ -1490,7 +1490,7 @@
 "Purge doesn’t scan Library, hidden folders, or the inside of apps and packages." = "Purge не сканирует «Библиотеку», скрытые папки и содержимое приложений и пакетов.";
 "Purge only scans drives attached to this Mac that it can move files on, not network, cloud or read-only drives." = "Purge сканирует только диски, подключённые к этому Mac, на которых может перемещать файлы, а не сетевые, облачные или доступные только для чтения.";
 "That folder holds a copy of a Mac, a home folder or a Time Machine backup, or is inside one." = "Эта папка содержит копию Mac, домашней папки или резервную копию Time Machine либо находится внутри неё.";
-"That folder syncs with iCloud Drive, so moving a file from it to the Trash would remove it from your other devices too." = "Эта папка синхронизируется с iCloud Drive, поэтому перемещение файла из неё в Корзину удалит его и с других ваших устройств.";
+"That folder syncs with iCloud Drive or another service, so moving a file from it to the Trash would remove it from your other devices too." = "Эта папка синхронизируется с iCloud Drive или другой службой, поэтому перемещение файла из неё в Корзину удалит его и с других ваших устройств.";
 "Purge already scans that folder." = "Purge уже сканирует эту папку.";
 "That folder holds one Purge already scans." = "Эта папка содержит папку, которую Purge уже сканирует.";
 "Stop looking in %@." = "Больше не искать в %@.";

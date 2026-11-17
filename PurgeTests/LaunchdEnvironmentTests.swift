@@ -59,4 +59,41 @@ struct LaunchdEnvironmentTests {
             #expect(!AIModelScanPolicy.isEligibleForDeletion(component, home: home, environment: [:]))
         }
     }
+
+    @Test("An OLLAMA_MODELS value that names / or the home folder or above is ignored")
+    func broadOllamaRootsAreIgnored() {
+        let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        let fallback = "/Users/someone/.ollama/models"
+        for broad in ["/", "/Users", "/Users/someone", "/Users/someone/"] {
+            #expect(AIModelScanPolicy.ollamaRoot(home: home, environment: ["OLLAMA_MODELS": broad]).path == fallback, "\(broad)")
+        }
+        // `~` expands to the real home folder.
+        let realHome = FileManager.default.homeDirectoryForCurrentUser
+        #expect(AIModelScanPolicy.ollamaRoot(home: realHome, environment: ["OLLAMA_MODELS": "~"]).path
+            == realHome.appendingPathComponent(".ollama/models").standardizedFileURL.path)
+        #expect(AIModelScanPolicy.ollamaRoot(home: home, environment: ["OLLAMA_MODELS": "/Volumes/T7/models"]).path
+            == "/Volumes/T7/models")
+    }
+
+    @Test("Under an Ollama store the gate takes only manifests and sha256 blobs")
+    func ollamaGateIsNarrow() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purge-ollama-gate-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let store = home.appendingPathComponent("Documents", isDirectory: true)
+        let files = ["notes.txt", "blobs/readme.txt", "blobs/sha256-abc", "manifests/registry.ollama.ai/library/m/latest"]
+        for file in files {
+            let url = store.appendingPathComponent(file)
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: url)
+        }
+        let environment = ["OLLAMA_MODELS": store.path]
+        func passes(_ file: String) -> Bool {
+            AIModelScanPolicy.isEligibleForDeletion(store.appendingPathComponent(file), home: home, environment: environment)
+        }
+        #expect(!passes("notes.txt"))
+        #expect(!passes("blobs/readme.txt"))
+        #expect(passes("blobs/sha256-abc"))
+        #expect(passes("manifests/registry.ollama.ai/library/m/latest"))
+    }
 }

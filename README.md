@@ -87,7 +87,7 @@ Simulators, runtimes and Xcode components are always Check First. They are delet
 
 In **Settings → Cleaning**, choose **Projects count as stale after** (1 month to 2 years, or Show all) to control which projects appear. Age is measured from the last time anything in the project changed, including git activity, not from the date on `node_modules` or `target`. A project in use right now, with a terminal or dev server running inside it or a git command in progress, never appears.
 
-Developer projects also come from the folders and drives you add under **Settings → Other folders to scan**. Projects found there are always Check First, so Clean Safe Items and scheduled cleans never take them. Without Full Disk Access, only added folders inside your home folder are searched.
+Developer projects also come from the folders and drives you add under **Settings → Other folders to scan**. Projects found outside your home folder are always Check First, so Clean Safe Items and scheduled cleans never take them. A folder you add inside your home folder keeps the usual rules. Without Full Disk Access, only added folders inside your home folder are searched.
 
 Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Claude Code) appear under **Orphaned Git Worktrees** only once their repository no longer lists them. A worktree Git still uses never appears however old it is, and neither does one a terminal or agent is working inside.
 
@@ -96,7 +96,7 @@ Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Cl
 Find space-hogging personal files without digging through folders:
 
 - Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**, plus `~/Parallels` and `~/Virtual Machines.localized` for virtual machines only, and iCloud Drive's own folder for files you can keep only in iCloud
-- Also scans the folders and drives you add under **Settings → Other folders to scan**, on disks attached to your Mac only, never a network share or a cloud drive. A folder whose drive is unplugged is skipped and named, not shown as empty. Files there go to that drive's Trash
+- Also scans the folders and drives you add under **Settings → Other folders to scan**, on disks attached to your Mac only, never a network share or a cloud drive. A folder whose drive is unplugged is skipped and named, not shown as empty. Copies of a Mac or a home folder, Time Machine backups, app bundles and folders Dropbox or another sync service keeps are never scanned there. Files there go to that drive's Trash
 - A folder you moved and replaced with a link, such as `~/Documents` pointing to another drive, is scanned where the link leads when that is inside your home folder or on a drive under `/Volumes`, on a disk attached to your Mac. Its files are listed by their real path and go to that drive's Trash. A link anywhere else, such as into `~/Library/CloudStorage`, to a network share, or to a whole drive or a copy of a Mac, is not followed, and the scan says where it leads. Links inside the folders are never followed
 - Skips managed libraries (Photos, iMovie, Music, and similar), hidden folders, and project folders like `node_modules`, `Pods`, `DerivedData` and build output. Deleting a single file out of a dependency tree only breaks the install, so those belong in Dev Tools, which removes them a folder at a time
 - **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label

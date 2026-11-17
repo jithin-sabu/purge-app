@@ -127,6 +127,51 @@ nonisolated enum ScanFolders {
         return AppFolders.save(kept, to: file)
     }
 
+    // MARK: Inside an added folder
+
+    /// A folder below an added one that Large Files and Developer Projects
+    /// never walk into, and whose files and projects their gates refuse (#318
+    /// review). The pick itself was judged when it was added, but a whole
+    /// drive can hold what no pick could be:
+    /// - a copy of a Mac or a Time Machine backup (`System`, `Users`,
+    ///   `Backups.backupdb`, `backup_manifest.plist`, a `<date>.backup`);
+    /// - a copy of a home folder: `Library` beside `Desktop`, `Documents` or
+    ///   `Downloads`. `Library` alone is a Unity project's build folder;
+    /// - a folder another sync service keeps.
+    static func isOffLimits(_ folder: URL) -> Bool {
+        if AppFolders.isTimeMachineBackupName(folder.lastPathComponent) { return true }
+        if AppFolders.holdsWholeDisk(folder, markers: AppFolders.driveMarkers) { return true }
+        if AppFolders.holdsWholeDisk(folder, markers: ["Library"]),
+           AppFolders.holdsWholeDisk(folder, markers: homeCopyMarkers) {
+            return true
+        }
+        return AppFolders.isSyncedByAnotherService(folder)
+    }
+
+    /// The same rule from a folder's name and the names in it, for a walk that
+    /// has listed the folder already.
+    static func isOffLimits(name: String, childNames: Set<String>) -> Bool {
+        if AppFolders.isTimeMachineBackupName(name) { return true }
+        if AppFolders.driveMarkers.contains(where: childNames.contains) { return true }
+        if childNames.contains("Library"), homeCopyMarkers.contains(where: childNames.contains) { return true }
+        return AppFolders.syncServiceMarkers.contains(where: childNames.contains)
+    }
+
+    /// Whether a folder from just below `root` down to `folder`, both
+    /// included, is off limits.
+    static func crossesOffLimits(from root: String, to folder: URL) -> Bool {
+        let path = folder.standardizedFileURL.path
+        guard PathContainment.isInside(path, root) else { return false }
+        var current = root
+        for name in path.dropFirst(root.count + 1).split(separator: "/") {
+            current += "/" + name
+            if isOffLimits(URL(fileURLWithPath: current, isDirectory: true)) { return true }
+        }
+        return false
+    }
+
+    private static let homeCopyMarkers = ["Desktop", "Documents", "Downloads"]
+
     // MARK: Snapshot
 
     /// The walked folders as last read, for `DeletionSafetyPolicy.evaluate`,
@@ -170,13 +215,28 @@ nonisolated enum ScanFolders {
         snapshot.first { PathContainment.isSameOrInside(path, $0) }
     }
 
-    /// Whether `path` is a saved folder or inside one, walked or not. Clean
-    /// Safe Items and scheduled cleans drop every such path, even one on a
-    /// drive that is unplugged now. Compared by spelling only, so nothing on
-    /// disk is read: the caller may be on the main thread, and without Full
-    /// Disk Access a `stat` through a link can raise a prompt.
-    static func isInsideSavedFolder(_ path: String) -> Bool {
-        savedSnapshot.contains { PathContainment.isSameOrInside(path, $0) }
+    /// The walked folder outside the home folder that holds `path`, or nil.
+    /// Only those make a project Check First and keep it out of Clean Safe
+    /// Items. A folder added inside home, such as `~/Developer`, holds what
+    /// the home rules already cover, and adding it must not change how its
+    /// projects clean (#318 review).
+    static func addedRootOutsideHome(
+        holding path: String,
+        home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    ) -> String? {
+        snapshot.first { !PathContainment.isSameOrInside($0, home) && PathContainment.isSameOrInside(path, $0) }
+    }
+
+    /// Whether `path` is a saved folder outside the home folder or inside one,
+    /// walked or not. Clean Safe Items and scheduled cleans drop every such
+    /// path, even one on a drive that is unplugged now. Compared by spelling
+    /// only, so nothing on disk is read: the caller may be on the main thread,
+    /// and without Full Disk Access a `stat` through a link can raise a prompt.
+    static func isInsideSavedFolder(
+        _ path: String,
+        home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    ) -> Bool {
+        savedSnapshot.contains { !PathContainment.isSameOrInside($0, home) && PathContainment.isSameOrInside(path, $0) }
     }
 
     struct Snapshot: Equatable, Sendable {

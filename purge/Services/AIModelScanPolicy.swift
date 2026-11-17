@@ -110,12 +110,20 @@ nonisolated enum AIModelScanPolicy {
     /// external drive, so the default path is a fallback rather than a given.
     /// Ollama.app reads it from launchd (`launchctl setenv`), which is why
     /// `modelEnvironment` looks there too.
+    ///
+    /// A value that names `/`, the home folder or a folder above it is
+    /// ignored: no store sits there, and the gate below would open on far
+    /// more than models (#318 review).
     nonisolated static func ollamaRoot(
         home: URL,
         environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> URL {
         if let override = environment["OLLAMA_MODELS"], !override.isEmpty {
-            return expanded(override)
+            let root = expanded(override)
+            let homePath = home.standardizedFileURL.path
+            if root.path != "/", !PathContainment.isSameOrInside(homePath, root.path) {
+                return root
+            }
         }
         return home.appendingPathComponent(".ollama/models", isDirectory: true).standardizedFileURL
     }
@@ -383,9 +391,16 @@ nonisolated enum AIModelScanPolicy {
         func isInside(_ root: URL) -> Bool { PathContainment.isInside(path, root.path) }
 
         // Ollama: a manifest, or a blob the manifest names. Both are plain
-        // files the scanner picked out of the store.
-        if isInside(ollamaRoot(home: home, environment: environment)) {
-            return !isDirectory.boolValue
+        // files the scanner picked out of the store, and nothing else under
+        // the root is: `OLLAMA_MODELS` can name a folder that holds more.
+        let ollama = ollamaRoot(home: home, environment: environment)
+        if isInside(ollama) {
+            guard !isDirectory.boolValue else { return false }
+            let manifests = ollama.appendingPathComponent("manifests", isDirectory: true).path
+            let blobs = ollama.appendingPathComponent("blobs", isDirectory: true).path
+            if PathContainment.isInside(path, manifests) { return true }
+            return standardized.deletingLastPathComponent().path == blobs
+                && standardized.lastPathComponent.hasPrefix("sha256-")
         }
 
         // The Hub: one `models--<org>--<name>` folder straight under the root.

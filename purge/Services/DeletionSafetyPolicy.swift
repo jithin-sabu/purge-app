@@ -1442,6 +1442,19 @@ enum DeletionSafetyPolicy {
         return evaluate(resolved) == .blockedNeverDelete
     }
 
+    /// Whether a folder from just below `base` down to `folder` is a package
+    /// on disk, such as a bundle with an extension no name list knows.
+    private nonisolated static func crossesPackage(from base: String, to folder: URL) -> Bool {
+        var current = base
+        for name in folder.standardizedFileURL.path.dropFirst(base.count + 1).split(separator: "/") {
+            current += "/" + name
+            if (try? URL(fileURLWithPath: current).resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
+                return true
+            }
+        }
+        return false
+    }
+
     /// A project artifact by the catalog's rule, in the home folder or in a folder
     /// the user added for Dev Projects (#318). An added folder counts only while it
     /// is in the list read at the last scan or clean (`ScanFolders.snapshot`; tests
@@ -1478,12 +1491,17 @@ enum DeletionSafetyPolicy {
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
             guard PathContainment.isSameOrInside(root.path, base) else { continue }
-            // On a drive the user added, never a project inside a `Library`
-            // folder, which on a drive is most often a copied home or system
-            // folder. Unity's own `Library` is the artifact, below the root.
+            // In a folder the user added, never a project inside a `Library`
+            // folder, an app or other bundle, a copy of a Mac, a home folder or
+            // a backup, or another sync service's folder (#318 review). Unity's
+            // own `Library` is the artifact, below the root.
             if base != home {
                 let between = root.path.dropFirst(base.count).split(separator: "/")
-                if between.contains(where: { $0.caseInsensitiveCompare("Library") == .orderedSame }) { continue }
+                if between.contains(where: {
+                    $0.caseInsensitiveCompare("Library") == .orderedSame || AppBundleReach.isBundleFolderName($0)
+                }) { continue }
+                if Self.crossesPackage(from: base, to: root) { continue }
+                if ScanFolders.crossesOffLimits(from: base, to: root) { continue }
             }
             guard rule.matchesRoot(root) else { continue }
             // Checked here rather than only in the scanner so that no caller can route

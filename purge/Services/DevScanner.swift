@@ -1314,6 +1314,9 @@ nonisolated final class DevScanner {
         }
 
         let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
+        // Read once here: the folders are read on other threads (#318). Both
+        // spellings, since a listing spells `/var/…` as `/private/var/…`.
+        let addedRoots = ScanFolders.snapshot.flatMap { [$0, "/private" + $0] }
 
         /// One folder the walk enters. `realPath` is the folder with its root's
         /// symlinks resolved, in a limited scan only; nil with full access, where
@@ -1335,6 +1338,14 @@ nonisolated final class DevScanner {
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey, .nameKey],
                 options: [.skipsPackageDescendants]
             )
+            // Below a folder the user added (#318), a copy of a Mac, a home folder
+            // or a backup, or another sync service's folder, is neither a project
+            // nor walked into. Judged from the listing just read.
+            if folder.depth > 0, let listing,
+               addedRoots.contains(where: { PathContainment.isInside(folder.url.path, $0) }),
+               ScanFolders.isOffLimits(name: folder.url.lastPathComponent, childNames: Set(listing.map(\.lastPathComponent))) {
+                return ([], [])
+            }
             let types = Self.projectTypes(at: folder.url, listing: listing)
 
             guard folder.depth < folder.maxDepth, let entries = listing else { return (types, []) }
@@ -1347,6 +1358,10 @@ nonisolated final class DevScanner {
                 if name.hasPrefix(".") { continue }
 
                 if shouldSkipDescending(into: name) { continue }
+                // Never into an app or another bundle: an Electron app carries a
+                // `package.json` and `node_modules` that are part of the app.
+                // `contentsOfDirectory` ignores `.skipsPackageDescendants`.
+                if AppBundleReach.isBundleFolderName(name) { continue }
                 // Decided on the path alone, before anything reads the entry. The
                 // home root walks one level down, which would open Desktop,
                 // Documents and Downloads. `realPath` is the folder's resolved path,
@@ -1628,13 +1643,14 @@ nonisolated final class DevScanner {
         case .none:
             checkFirstReason = nil
         }
-        // A project in a folder the user added is the user's to pick, folder by
-        // folder, whatever its activity says (#318). By where it really is too:
-        // a home folder linked onto an added drive spells it under home.
+        // A project in a folder the user added outside the home folder is the
+        // user's to pick, folder by folder, whatever its activity says (#318).
+        // By where it really is too: a home folder linked onto an added drive
+        // spells it under home. One added inside home keeps the home rules.
         let spelled = rootURL.standardizedFileURL.path
         let real = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
-        let inAddedFolder = ScanFolders.snapshotRoot(holding: spelled) != nil
-            || ScanFolders.snapshotRoot(holding: real) != nil
+        let inAddedFolder = ScanFolders.addedRootOutsideHome(holding: spelled) != nil
+            || ScanFolders.addedRootOutsideHome(holding: real) != nil
         let reason = inAddedFolder ? .addedFolder : checkFirstReason
 
         let artifactPaths = rows.map(\.path)

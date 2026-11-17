@@ -86,7 +86,9 @@ nonisolated final class LargeFileScanner {
                 var walks = (roots ?? LargeFileScanPolicy.scanRoots(home: home))
                     .map { Walk(root: $0, bundlesOnly: false, downloadOnly: false) }
                 let added = addedFolders ?? (roots == nil ? ScanFolders.entries(home: home) : [])
-                walks += added.filter(\.isAvailable).map { Walk(root: $0.url, bundlesOnly: false, downloadOnly: false) }
+                walks += added.filter(\.isAvailable).map {
+                    Walk(root: $0.url, bundlesOnly: false, downloadOnly: false, skipsOffLimits: true)
+                }
                 let driveRoots = iCloudDriveRoots
                     ?? (roots == nil ? [LargeFileScanPolicy.iCloudDriveRoot(home: home)] : [])
                 walks += driveRoots.map { Walk(root: $0, bundlesOnly: false, downloadOnly: true) }
@@ -127,6 +129,10 @@ nonisolated final class LargeFileScanner {
         let root: URL
         let bundlesOnly: Bool
         let downloadOnly: Bool
+        /// A folder the user added (#318): copies of a Mac, of a home folder or
+        /// of a backup below it, and folders another sync service keeps, are
+        /// never entered (`ScanFolders.isOffLimits`).
+        var skipsOffLimits = false
     }
 
     private static func run(
@@ -335,6 +341,9 @@ nonisolated final class LargeFileScanner {
                         return ([], false)
                     }
                     if modelStoreRoots.contains(fileURL.standardizedFileURL.path) {
+                        return ([], false)
+                    }
+                    if walk.skipsOffLimits, ScanFolders.isOffLimits(fileURL) {
                         return ([], false)
                     }
                     // The walk never goes into a package.

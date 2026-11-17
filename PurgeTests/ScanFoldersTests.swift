@@ -287,4 +287,109 @@ struct ScanFoldersTests {
         #expect(root.isDisconnected)
         #expect(LargeFileScanSummaryCard.unreadableText(root) == "Media isn\u{2019}t connected. Connect its drive and scan again.")
     }
+
+    // MARK: - Review fixes
+
+    @Test("A folder another sync service keeps is refused, and so is one inside it")
+    func otherSyncServicesAreRefused() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write("home/Dropbox/.dropbox", bytes: 1)
+        try fixture.folder("home/Dropbox/Photos")
+        try fixture.write("Volumes/T7/Shared/.stfolder", bytes: 1)
+
+        #expect(fixture.refusal("home/Dropbox") == .syncs)
+        #expect(fixture.refusal("home/Dropbox/Photos") == .syncs)
+        #expect(fixture.refusal("Volumes/T7/Shared") == .syncs)
+    }
+
+    @Test(
+        "An APFS Time Machine drive is refused, for these folders and the uninstaller's",
+        arguments: ["backup_manifest.plist", "2026-11-01-120000.backup", "2026-11-17-090000.inprogress"]
+    )
+    func timeMachineDriveIsRefused(marker: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        if marker.hasSuffix(".plist") {
+            try fixture.write("Volumes/Backups/\(marker)", bytes: 1)
+        } else {
+            try fixture.folder("Volumes/Backups/\(marker)")
+        }
+        try fixture.folder("Volumes/Backups/Applications")
+
+        #expect(fixture.refusal("Volumes/Backups") == .holdsWholeDisk)
+        let drives = AppFolders.driveRoots(volumes: fixture.volumes, isLocalDisk: { _ in true })
+        #expect(drives.isEmpty)
+    }
+
+    @Test("Inside an added drive, copies of a Mac, a home folder or a backup and synced folders are skipped and refused")
+    func nothingFromCopiesOrSyncedFolders() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        try fixture.folder("Volumes/T7/Archive/OldMac/System")
+        let macCopy = try fixture.write("Volumes/T7/Archive/OldMac/Users/bob/Movies/clip.mov")
+        try fixture.folder("Volumes/T7/Archive/OldHome/Library")
+        let homeCopy = try fixture.write("Volumes/T7/Archive/OldHome/Documents/report.zip")
+        try fixture.write("Volumes/T7/Dropbox/.dropbox", bytes: 1)
+        let synced = try fixture.write("Volumes/T7/Dropbox/video.mov")
+        try fixture.folder("Volumes/T7/2026-11-01-120000.backup/Data")
+        let backup = try fixture.write("Volumes/T7/2026-11-01-120000.backup/Data/disk.img")
+        // A Unity project keeps a Library folder of its own and is walked.
+        try fixture.folder("Volumes/T7/Games/Racer/Library")
+        try fixture.folder("Volumes/T7/Games/Racer/Assets")
+        let unity = try fixture.write("Volumes/T7/Games/Racer/Assets/intro.mov")
+        let plain = try fixture.write("Volumes/T7/Media/film.mov")
+
+        let stream = LargeFileScanner().scanEvents(
+            minBytes: 1024, staleDays: 0, roots: [], virtualMachineRoots: [], iCloudDriveRoots: [],
+            addedFolders: [ScanFolders.Entry(path: drive.standardizedFileURL.path, refusal: nil)],
+            installedApps: [], isAppRunning: { _ in false }, home: fixture.home,
+            exclusions: ScanExclusions(keys: []), isExcluded: { _ in false }
+        )
+        var paths: Set<String> = []
+        for await event in stream {
+            if case .file(let file) = event { paths.insert(file.id) }
+        }
+        func passes(_ url: URL) -> Bool {
+            LargeFileScanPolicy.isEligibleForDeletion(
+                url, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true }, addedRoots: [drive]
+            )
+        }
+
+        for blocked in [macCopy, homeCopy, synced, backup] {
+            #expect(!paths.contains(blocked.standardizedFileURL.path), "\(blocked.path) was listed")
+            #expect(!passes(blocked), "\(blocked.path) passed the gate")
+        }
+        for allowed in [unity, plain] {
+            #expect(paths.contains(allowed.standardizedFileURL.path), "\(allowed.path) was not listed")
+            #expect(passes(allowed), "\(allowed.path) did not pass the gate")
+        }
+    }
+
+    @Test("The off-limits rule reads the same from names as from disk")
+    func offLimitsFromNames() {
+        #expect(ScanFolders.isOffLimits(name: "OldMac", childNames: ["System", "Applications"]))
+        #expect(ScanFolders.isOffLimits(name: "OldHome", childNames: ["Library", "Desktop"]))
+        #expect(ScanFolders.isOffLimits(name: "Shared", childNames: [".sync", "notes"]))
+        #expect(ScanFolders.isOffLimits(name: "2026-11-01-120000.backup", childNames: []))
+        #expect(!ScanFolders.isOffLimits(name: "Racer", childNames: ["Library", "Assets", "ProjectSettings"]))
+        #expect(!ScanFolders.isOffLimits(name: "Code", childNames: ["website", "api"]))
+    }
+
+    @Test("Only a folder added outside the home folder changes how projects clean")
+    func homeFoldersKeepHomeRules() {
+        let home = "/Users/someone"
+        let snapshot = ScanFolders.Snapshot(
+            walked: ["/Users/someone/Developer", "/Volumes/T7"],
+            saved: ["/Users/someone/Developer", "/Volumes/T7", "/Volumes/Archive"]
+        )
+        ScanFolders.$snapshotOverride.withValue(snapshot) {
+            #expect(ScanFolders.addedRootOutsideHome(holding: "/Users/someone/Developer/app", home: home) == nil)
+            #expect(ScanFolders.addedRootOutsideHome(holding: "/Volumes/T7/Code/app", home: home) == "/Volumes/T7")
+            #expect(!ScanFolders.isInsideSavedFolder("/Users/someone/Developer/app/node_modules", home: home))
+            #expect(ScanFolders.isInsideSavedFolder("/Volumes/T7/Code/app/node_modules", home: home))
+            #expect(ScanFolders.isInsideSavedFolder("/Volumes/Archive/blog/node_modules", home: home))
+        }
+    }
 }
