@@ -130,6 +130,11 @@ nonisolated enum ScanFolders {
         isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
         date: Date = Date()
     ) -> (refusal: AppFolders.Refusal?, saveFailed: Bool) {
+        // One change at a time, from reading the list to setting it in memory,
+        // so two changes in flight can't leave the memory behind the file
+        // (#318 review). The overlap check reads the list too.
+        listLock.lock()
+        defer { listLock.unlock() }
         let others = fixedRoots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
             + roots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
         if let refusal = refusal(forPicked: folder, home: home, otherRoots: others, volumes: volumes, isLocalDisk: isLocalDisk) {
@@ -145,6 +150,8 @@ nonisolated enum ScanFolders {
     /// Returns false when the list could not be saved.
     @discardableResult
     static func remove(path: String) -> Bool {
+        listLock.lock()
+        defer { listLock.unlock() }
         let folders = pickedFolders()
         let kept = folders.filter { $0.path != path }
         guard kept.count != folders.count else { return true }
@@ -326,6 +333,8 @@ nonisolated enum ScanFolders {
     private static let snapshotStore = OSAllocatedUnfairLock<(walked: [String], generation: Int)>(
         initialState: ([], 0)
     )
+    /// Held by `add` and `remove` from reading the list to setting it.
+    private static let listLock = NSLock()
     /// Nil until first read or set.
     private static let savedStore = OSAllocatedUnfairLock<[String]?>(initialState: nil)
 }

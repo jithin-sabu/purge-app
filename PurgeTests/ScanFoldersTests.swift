@@ -651,4 +651,29 @@ struct ScanFoldersTests {
             }
         }
     }
+
+    @Test("Changes made at the same time leave the list in memory equal to the file")
+    func concurrentChangesStayInStep() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let folders = try (0..<16).map { try fixture.folder("Volumes/Drive\($0)") }
+        let home = fixture.home
+        let volumes = fixture.volumes
+        try await withTemporaryHandoffRoot {
+            await AppFolders.$volumes.withValue(volumes) {
+                await withTaskGroup(of: Void.self) { group in
+                    for folder in folders {
+                        group.addTask { _ = ScanFolders.add(folder, home: home, volumes: volumes, isLocalDisk: { _ in true }) }
+                    }
+                    // Remove half again while the others are still being added.
+                    for folder in folders.prefix(8) {
+                        group.addTask { _ = ScanFolders.remove(path: folder.standardizedFileURL.path) }
+                    }
+                }
+                let onDisk = Set(ScanFolders.pickedFolders().map(\.path))
+                #expect(Set(ScanFolders.savedSnapshot) == onDisk)
+                #expect(onDisk.isSuperset(of: folders.suffix(8).map(\.standardizedFileURL.path)))
+            }
+        }
+    }
 }
