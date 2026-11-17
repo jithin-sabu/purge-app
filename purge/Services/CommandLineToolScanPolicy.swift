@@ -97,7 +97,7 @@ nonisolated enum CommandLineToolScanPolicy {
         home: URL,
         catalog: CommandLineToolCatalog = .shared,
         appCatalog: AppDotFolderCatalog = .shared,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> [CommandLineToolInstall] {
         let homePath = home.standardizedFileURL.path
         let leads = shimLeads(home: home)

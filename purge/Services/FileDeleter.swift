@@ -696,6 +696,8 @@ nonisolated final class FileDeleter: Sendable {
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
         // A command-line tool's shims are eligible only while they point into
         // its folder, so the pairs are read once, before anything moves (#225).
+        // The gates read Ollama's store from launchd too, read again here (#318).
+        LaunchdEnvironment.refresh()
         let commandLineToolPaths = CommandLineToolScanPolicy.eligiblePaths(home: home)
         // The folders the user added for Large Files (#318), read once from
         // disk for the batch, so a folder removed in Settings is refused.

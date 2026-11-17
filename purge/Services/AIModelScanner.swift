@@ -58,6 +58,8 @@ nonisolated final class AIModelScanner {
         let discovered: [LargeFile]
         switch pass {
         case .knownStores:
+            // A store moved with `launchctl setenv` after Purge started (#318).
+            LaunchdEnvironment.refresh()
             discovered = knownStoreModels(home: home, access: access)
         case .looseWeights:
             // The sweep's walks run on threads of their own, where
@@ -88,7 +90,7 @@ nonisolated final class AIModelScanner {
     /// their roots alone.
     static func allModels(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         access: ScanAccess,
         looseWeightSizeFloor: Int64 = AIModelScanPolicy.looseWeightSizeFloorBytes
     ) -> [LargeFile] {
@@ -100,7 +102,7 @@ nonisolated final class AIModelScanner {
     /// stores. The loose sweep is left out; it is the slow part.
     static func knownStoreModels(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         access: ScanAccess
     ) -> [LargeFile] {
         var models = ollamaModels(home: home, environment: environment, access: access)
@@ -139,7 +141,7 @@ nonisolated final class AIModelScanner {
 
     static func ollamaModels(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         access: ScanAccess = .full
     ) -> [LargeFile] {
         let fm = FileManager.default
@@ -242,7 +244,7 @@ nonisolated final class AIModelScanner {
     /// are left alone.
     static func huggingFaceHubModels(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         access: ScanAccess = .full
     ) -> [LargeFile] {
         let root = AIModelScanPolicy.huggingFaceHubRoot(home: home, environment: environment)
@@ -283,7 +285,7 @@ nonisolated final class AIModelScanner {
     static func folderModels(
         store: AIModelScanPolicy.Store,
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         access: ScanAccess = .full
     ) -> [LargeFile] {
         var models: [LargeFile] = []
@@ -414,7 +416,7 @@ nonisolated final class AIModelScanner {
     /// as the walks go; it must work from any thread.
     static func looseWeights(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         access: ScanAccess = .full,
         sizeFloor: Int64 = AIModelScanPolicy.looseWeightSizeFloorBytes,
         isCancelled: () -> Bool = { Task.isCancelled }

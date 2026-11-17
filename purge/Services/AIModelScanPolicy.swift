@@ -98,11 +98,21 @@ nonisolated enum AIModelScanPolicy {
 
     // MARK: - Roots
 
+    /// The environment the store roots are read from: Purge's own, with
+    /// `OLLAMA_MODELS` filled in from launchd when Purge started without it
+    /// (#318). The scanner, this gate and the command-line tool gate all
+    /// default to it, so a model the scan lists is one the gate takes.
+    nonisolated static var modelEnvironment: [String: String] {
+        LaunchdEnvironment.merged(into: ProcessInfo.processInfo.environment)
+    }
+
     /// Ollama honours `OLLAMA_MODELS` for users who move the store to an
     /// external drive, so the default path is a fallback rather than a given.
+    /// Ollama.app reads it from launchd (`launchctl setenv`), which is why
+    /// `modelEnvironment` looks there too.
     nonisolated static func ollamaRoot(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> URL {
         if let override = environment["OLLAMA_MODELS"], !override.isEmpty {
             return expanded(override)
@@ -124,7 +134,7 @@ nonisolated enum AIModelScanPolicy {
     /// order and so does this.
     nonisolated static func huggingFaceHubRoot(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> URL {
         if let override = environment["HF_HUB_CACHE"], !override.isEmpty {
             return expanded(override)
@@ -138,7 +148,7 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static func roots(
         for store: Store,
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> [URL] {
         func under(_ relative: String) -> URL {
             home.appendingPathComponent(relative, isDirectory: true).standardizedFileURL
@@ -179,7 +189,7 @@ nonisolated enum AIModelScanPolicy {
     /// contents are models and nothing else.
     nonisolated static func allRoots(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment
     ) -> [URL] {
         Store.allCases
             .filter { $0 != .looseWeights }
@@ -196,7 +206,7 @@ nonisolated enum AIModelScanPolicy {
     /// store moved to a drive the user added stays one row in AI Models.
     nonisolated static func rootsInsideLargeFileScan(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         addedRoots: [URL]? = nil
     ) -> [URL] {
         let scanRoots = LargeFileScanPolicy.scanRoots(home: home)
@@ -356,7 +366,7 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static func isEligibleForDeletion(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = AIModelScanPolicy.modelEnvironment,
         looseWeightSizeFloor: Int64 = looseWeightSizeFloorBytes
     ) -> Bool {
         let standardized = url.standardizedFileURL

@@ -11,7 +11,9 @@ nonisolated struct CommandLineToolScanner: Sendable {
     var managerRoots: PackageManagerToolScanner.Roots = .live()
 
     @concurrent func scan() async -> CommandLineToolScanResult {
-        Self.run(home: home, managerRoots: managerRoots)
+        // A model store moved with `launchctl setenv` is never a tool's folder (#318).
+        LaunchdEnvironment.refresh()
+        return Self.run(home: home, managerRoots: managerRoots)
     }
 
     static func run(home: URL, managerRoots: PackageManagerToolScanner.Roots) -> CommandLineToolScanResult {
