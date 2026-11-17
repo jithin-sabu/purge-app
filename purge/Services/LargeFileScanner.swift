@@ -337,6 +337,11 @@ nonisolated final class LargeFileScanner {
                     if walk.skipsOffLimits, ScanFolders.isOffLimits(fileURL) {
                         return ([], false)
                     }
+                    // Nor a `Library` folder, in any case, which the gate refuses.
+                    if walk.skipsOffLimits,
+                       fileURL.lastPathComponent.caseInsensitiveCompare("Library") == .orderedSame {
+                        return ([], false)
+                    }
                     // A VM or a Safari download bundle is one item. Never walk
                     // into it, whether or not macOS calls it a package: without
                     // the VM app installed it is a plain folder, and a disk file

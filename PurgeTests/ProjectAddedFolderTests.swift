@@ -182,6 +182,32 @@ struct ProjectAddedFolderTests {
     }
 }
 
+extension ProjectAddedFolderTests {
+    @Test("Below an added folder, the project walk never lists a mount that isn't a local disk")
+    func nonLocalMountIsNotWalked() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-added-mounts-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for file in ["Share/app/package.json", "Share/app/node_modules/pkg/index.js",
+                     "Code/app/package.json", "Code/app/node_modules/pkg/index.js"] {
+            let url = root.appendingPathComponent(file)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: url)
+        }
+        let added = root.standardizedFileURL.path
+        // The listing spells the temporary folder `/private/var/…`.
+        let share = root.appendingPathComponent("Share").resolvingSymlinksInPath().path
+        let found = ScanFolders.$snapshotOverride.withValue(.init(walked: [added], saved: [added])) {
+            DevScanner.findProjectRoots(
+                in: [root], home: URL(fileURLWithPath: "/Users/purge-test-nobody"), access: .full,
+                maxDepth: 6, nonLocalMounts: [share, String(share.dropFirst("/private".count))]
+            ).roots.map { $0.0.path }
+        }
+        #expect(found.contains { $0.hasSuffix("/Code/app") })
+        #expect(!found.contains { $0.contains("/Share/") })
+    }
+}
+
 @MainActor
 @Suite("Clean Safe Items never takes anything from an added folder (#318)")
 struct AddedFolderSafeCleanTests {

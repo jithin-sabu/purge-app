@@ -1285,11 +1285,15 @@ nonisolated final class DevScanner {
     /// Walks `roots` for project markers and returns each project root once,
     /// shallowest first, with how many directories the walk visited.
     /// `onDirectory` is called with each folder as the walk enters it.
+    ///
+    /// `nonLocalMounts` are the mount points the walk never enters below a
+    /// folder the user added (#318); they default to the mount table's.
     nonisolated static func findProjectRoots(
         in roots: [URL],
         home: URL,
         access: ScanAccess,
         maxDepth: Int = 4,
+        nonLocalMounts: Set<String>? = nil,
         onDirectory: (@Sendable (URL) -> Void)? = nil
     ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
@@ -1315,6 +1319,11 @@ nonisolated final class DevScanner {
         // Read once here: the folders are read on other threads (#318). Both
         // spellings, since a listing spells `/var/…` as `/private/var/…`.
         let addedRoots = ScanFolders.snapshot.flatMap { [$0, "/private" + $0] }
+        // Below an added folder, a network share or macFUSE mount is never
+        // listed: only local disks count there. Taken from the mount table,
+        // so no share is asked anything.
+        let foreignMounts = addedRoots.isEmpty ? [] : (nonLocalMounts ?? AppFolders.nonLocalMountPaths())
+            .flatMap { [$0, "/private" + $0] }
 
         /// One folder the walk enters. `realPath` is the folder with its root's
         /// symlinks resolved, in a limited scan only; nil with full access, where
@@ -1373,6 +1382,10 @@ nonisolated final class DevScanner {
                 // with them prefetched stats nothing through a link. That is also
                 // why a linked folder was never walked, with or without access:
                 // `isDirectory` is false for it.
+                if !foreignMounts.isEmpty, foreignMounts.contains(entry.path),
+                   addedRoots.contains(where: { PathContainment.isInside(entry.path, $0) }) {
+                    continue
+                }
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 

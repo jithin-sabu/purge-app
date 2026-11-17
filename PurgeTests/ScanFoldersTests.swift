@@ -583,4 +583,26 @@ struct ScanFoldersTests {
             isAppRunning: { _ in false }, addedRoots: [drive]
         ))
     }
+
+    @Test("Under an added drive, a library folder in any case is neither listed nor taken")
+    func lowercaseLibraryOnADrive() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.folder("Volumes/T7")
+        let data = try fixture.write("Volumes/T7/Archive/library/Application Support/data.dat")
+        let stream = LargeFileScanner().scanEvents(
+            minBytes: 1024, staleDays: 0, roots: [], virtualMachineRoots: [], iCloudDriveRoots: [],
+            addedFolders: [ScanFolders.Entry(path: drive.standardizedFileURL.path, refusal: nil)],
+            installedApps: [], isAppRunning: { _ in false }, home: fixture.home,
+            exclusions: ScanExclusions(keys: []), isExcluded: { _ in false }
+        )
+        var paths: [String] = []
+        for await event in stream {
+            if case .file(let file) = event { paths.append(file.id) }
+        }
+        #expect(!paths.contains { $0.hasSuffix("data.dat") })
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(
+            data, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true }, addedRoots: [drive]
+        ))
+    }
 }

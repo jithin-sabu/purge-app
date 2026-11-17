@@ -395,6 +395,29 @@ nonisolated enum AppFolders {
         return names
     }
 
+    /// Where every mount that is not a local disk of a file system macOS
+    /// trashes on is mounted: network shares, macFUSE, rclone and the like.
+    /// Read from the mount table with `MNT_NOWAIT`, so a share that stopped
+    /// answering is never asked anything (#318 review).
+    static func nonLocalMountPaths() -> Set<String> {
+        var mounts: UnsafeMutablePointer<statfs>?
+        let count = getmntinfo(&mounts, MNT_NOWAIT)
+        guard count > 0, let mounts else { return [] }
+        var paths = Set<String>()
+        for index in 0..<Int(count) {
+            var info = mounts[index]
+            let type = withUnsafePointer(to: &info.f_fstypename) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) }
+            }
+            let path = withUnsafePointer(to: &info.f_mntonname) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+            }
+            let isLocal = info.f_flags & UInt32(MNT_LOCAL) != 0 && localFileSystems.contains(type)
+            if !isLocal { paths.insert(path) }
+        }
+        return paths
+    }
+
     static func isReadOnly(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? true
     }
