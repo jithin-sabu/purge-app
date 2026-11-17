@@ -110,6 +110,45 @@ nonisolated enum AIModelScanPolicy {
         return home.appendingPathComponent(".ollama/models", isDirectory: true).standardizedFileURL
     }
 
+    /// The two folders every Ollama store holds: `blobs` for the weights, named
+    /// by digest, and `manifests` for the models that use them. Ollama files a
+    /// model pulled from another registry under `manifests/<host>` (`hf.co`),
+    /// so the folder for its own registry is not required.
+    nonisolated static let ollamaStoreFolders: Set<String> = ["blobs", "manifests"]
+
+    /// Whether a folder is shaped like an Ollama store, read from the names of
+    /// its entries that are folders or links. Large Files skips such a folder
+    /// even when Purge doesn't know it is Ollama's, such as `OLLAMA_MODELS` set
+    /// only in a shell profile while Purge started from the Dock. Trashing one
+    /// blob from it breaks every model that uses the blob, and Ollama goes on
+    /// listing them.
+    nonisolated static func isOllamaStore(folderNames: some Sequence<String>) -> Bool {
+        ollamaStoreFolders.isSubset(of: Set(folderNames))
+    }
+
+    /// Whether a folder on disk is shaped like an Ollama store. Links are
+    /// followed: this only ever keeps files out of Large Files, so reading more
+    /// folders as stores is the safe side.
+    nonisolated static func isOllamaStore(_ folder: URL) -> Bool {
+        ollamaStoreFolders.allSatisfy { name in
+            var isDirectory: ObjCBool = false
+            let path = folder.appendingPathComponent(name, isDirectory: true).path
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+        }
+    }
+
+    /// Whether any folder above `url` is shaped like an Ollama store. Large
+    /// Files' delete gate asks this, so a blob never goes alone, even from a
+    /// row saved before the walk knew the shape.
+    nonisolated static func isInsideOllamaStore(_ url: URL) -> Bool {
+        var folder = url.standardizedFileURL.deletingLastPathComponent()
+        while folder.path != "/", !folder.path.isEmpty {
+            if isOllamaStore(folder) { return true }
+            folder = folder.deletingLastPathComponent()
+        }
+        return false
+    }
+
     /// Current LM Studio location first, then the pre-0.3 cache location. Both
     /// are checked because an upgrade leaves the old directory behind.
     nonisolated static func lmStudioRoots(home: URL) -> [URL] {

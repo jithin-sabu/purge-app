@@ -216,6 +216,12 @@ nonisolated final class LargeFileScanner {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
+            // A root that is itself shaped like an Ollama store holds nothing
+            // but blobs and manifests. See the check on each folder below.
+            if AIModelScanPolicy.isOllamaStore(folder) {
+                if !bundlesOnly { summary.checkedRoots.append(root) }
+                continue
+            }
             // How the enumerator spells the root, taken from its first child rather
             // than from `root`: it can differ (`/private/var` for `/var`), and
             // matching is on the path below this prefix. See `ScanExclusions`.
@@ -410,6 +416,16 @@ nonisolated final class LargeFileScanner {
                     }
                     // As `FileManager` lists with `.skipsHiddenFiles`.
                     let children = DirectoryListing.entries(of: folderURL.path) ?? []
+                    // A folder shaped like an Ollama store is skipped like the
+                    // known model stores, even where Purge doesn't know it is
+                    // Ollama's: listed one by one, each blob would be a row
+                    // that breaks models when trashed. Read from the names
+                    // just listed, so it costs no call.
+                    if AIModelScanPolicy.isOllamaStore(
+                        folderNames: children.lazy.filter { !$0.isRegularFile }.map(\.name)
+                    ) {
+                        return []
+                    }
                     var steps: [TreeStep<[Finding], WalkFolder>] = []
                     for child in children where !child.isHidden {
                         // A file under the size floor that is not a cloud
