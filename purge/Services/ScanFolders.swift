@@ -74,20 +74,17 @@ nonisolated enum ScanFolders {
     /// inside one, adds nothing.
     ///
     /// `insideHomeOnly` is for a scan without Full Disk Access: a folder whose
-    /// link leads out of the home folder is left out by `readlink` alone, so
-    /// nothing on another drive is read (#318 review).
+    /// link, or chain of links, leads out of the home folder is left out by
+    /// `readlink` alone, so nothing on another drive is read (#318 review).
     static func fixedRoots(
         home: URL,
         volumes: URL = AppFolders.volumes,
         isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
         insideHomeOnly: Bool = false
     ) -> [URL] {
-        let homePath = home.standardizedFileURL.path
-        return LargeFileScanPolicy.scanRoots(home: home).compactMap { root in
-            if insideHomeOnly, let target = try? FileManager.default.destinationOfSymbolicLink(atPath: root.path) {
-                let resolved = URL(fileURLWithPath: target, relativeTo: root.deletingLastPathComponent())
-                    .standardizedFileURL.path
-                guard PathContainment.isInside(resolved, homePath) else { return nil }
+        LargeFileScanPolicy.scanRoots(home: home).compactMap { root in
+            if insideHomeOnly, ProtectedLocations.resolvedStayingInside(root.path, root: home) == nil {
+                return nil
             }
             return LargeFileScanPolicy.walkedFolder(for: root, home: home, volumes: volumes, isLocalDisk: isLocalDisk)
         }

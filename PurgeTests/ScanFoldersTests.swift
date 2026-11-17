@@ -457,4 +457,27 @@ struct ScanFoldersTests {
         #expect(roots(insideHomeOnly: false).contains { $0.hasSuffix("/Volumes/T7/Documents") })
         #expect(!roots(insideHomeOnly: true).contains { $0.hasSuffix("/Volumes/T7/Documents") })
     }
+
+    @Test("A limited scan stops a chain of links before it leaves home, and keeps one that stays")
+    func limitedScanStopsLinkChains() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let fm = FileManager.default
+        try fixture.folder("Volumes/T7/Documents")
+        try fixture.folder("home/Real/Movies")
+        // ~/Documents -> ~/Linked -> the drive: the first hop stays in home.
+        try fm.createSymbolicLink(at: fixture.url("home/Linked"), withDestinationURL: fixture.url("Volumes/T7/Documents"))
+        try fm.createSymbolicLink(atPath: fixture.home.appendingPathComponent("Documents").path, withDestinationPath: "Linked")
+        // ~/Movies -> ~/Real/Movies stays in home all the way.
+        try fm.createSymbolicLink(atPath: fixture.home.appendingPathComponent("Movies").path, withDestinationPath: "Real/Movies")
+
+        let home = fixture.home
+        #expect(ProtectedLocations.resolvedStayingInside(home.appendingPathComponent("Documents").path, root: home) == nil)
+        #expect(ProtectedLocations.resolvedStayingInside(home.appendingPathComponent("Movies").path, root: home) != nil)
+        let roots = ScanFolders.fixedRoots(
+            home: home, volumes: fixture.volumes, isLocalDisk: { _ in true }, insideHomeOnly: true
+        ).map(\.path)
+        #expect(!roots.contains { $0.hasSuffix("/Volumes/T7/Documents") })
+        #expect(roots.contains { $0.hasSuffix("/home/Real/Movies") })
+    }
 }
