@@ -191,14 +191,18 @@ nonisolated enum AIModelScanPolicy {
     /// A home folder that is a link is walked where it leads (#273), so a root
     /// counts by its real path too, such as `HF_HUB_CACHE` set to the real path
     /// of a moved Documents folder.
+    ///
+    /// The folders the user added for Large Files (#318) count too, so a model
+    /// store moved to a drive the user added stays one row in AI Models.
     nonisolated static func rootsInsideLargeFileScan(
         home: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        addedRoots: [URL]? = nil
     ) -> [URL] {
         let scanRoots = LargeFileScanPolicy.scanRoots(home: home)
-        let spelled = scanRoots.map { $0.standardizedFileURL.path + "/" }
-        let walked = scanRoots
-            .compactMap { LargeFileScanPolicy.walkedFolder(for: $0, home: home) }
+        let added = addedRoots ?? ScanFolders.roots(home: home)
+        let spelled = (scanRoots + added).map { $0.standardizedFileURL.path + "/" }
+        let walked = (scanRoots.compactMap { LargeFileScanPolicy.walkedFolder(for: $0, home: home) } + added)
             .map { $0.resolvingSymlinksInPath().standardizedFileURL.path + "/" }
         return allRoots(home: home, environment: environment).filter { root in
             if spelled.contains(where: { root.path.hasPrefix($0) }) { return true }

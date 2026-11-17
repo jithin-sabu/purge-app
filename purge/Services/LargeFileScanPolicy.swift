@@ -241,7 +241,8 @@ enum LargeFileScanPolicy {
     }
 
     /// A file may be deleted only if it is a regular file under one of the scan
-    /// roots and nowhere near Library or system locations.
+    /// roots or a folder the user added, and nowhere near Library or system
+    /// locations.
     ///
     /// Two kinds of folder are allowed, each as the whole item Large Files lists:
     /// a VM bundle (`.pvm`, `.utm`, `.vmwarevm`) that is not in use, under a scan
@@ -258,12 +259,18 @@ enum LargeFileScanPolicy {
     /// (#273), and one reached through a link anywhere else does not, so the
     /// `~/Library` and excluded-folder checks also apply to where it really is.
     /// `volumes` and `isLocalDisk` are for tests, as in `walkedFolder`.
+    ///
+    /// The folders the user added in Settings (#318) count as scan roots too,
+    /// read again from disk unless the caller passes `addedRoots` it just read
+    /// for a batch. A file under one must also sit on a disk attached to this
+    /// Mac, so a share mounted inside the folder is refused.
     nonisolated static func isEligibleForDeletion(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         volumes: URL = URL(fileURLWithPath: "/Volumes", isDirectory: true),
         isLocalDisk: (URL) -> Bool = { LargeFileScanPolicy.isOnLocalDisk($0) },
-        isAppRunning: (String) -> Bool = { DeletionSafetyPolicy.isAppRunning(bundleID: $0) }
+        isAppRunning: (String) -> Bool = { DeletionSafetyPolicy.isAppRunning(bundleID: $0) },
+        addedRoots: [URL]? = nil
     ) -> Bool {
         let fm = FileManager.default
         let std = url.standardizedFileURL
@@ -303,11 +310,22 @@ enum LargeFileScanPolicy {
             return false
         }
 
-        guard isDir.boolValue else { return isUnder(scanRoots(home: home)) }
+        // An added folder is never a link (`ScanFolders` refuses one), so its
+        // path is where it is walked.
+        func isUnderAddedFolder() -> Bool {
+            let added = addedRoots ?? ScanFolders.roots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
+            let inside = added.contains { root in
+                realPath.hasPrefix(root.resolvingSymlinksInPath().standardizedFileURL.path + "/")
+            }
+            return inside && isLocalDisk(real)
+        }
+
+        guard isDir.boolValue else { return isUnder(scanRoots(home: home)) || isUnderAddedFolder() }
 
         if isSafariDownloadBundle(std, home: home) { return isUnder([downloadsRoot]) }
         guard VirtualMachineApp(bundleExtension: std.pathExtension) != nil else { return false }
-        guard isUnder(scanRoots(home: home)) || isUnder(virtualMachineRoots(home: home)) else { return false }
+        guard isUnder(scanRoots(home: home)) || isUnder(virtualMachineRoots(home: home)) || isUnderAddedFolder()
+        else { return false }
         return !virtualMachineIsInUse(std, isAppRunning: isAppRunning)
     }
 }

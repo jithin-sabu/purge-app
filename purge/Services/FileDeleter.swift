@@ -692,6 +692,9 @@ nonisolated final class FileDeleter: Sendable {
         // A command-line tool's shims are eligible only while they point into
         // its folder, so the pairs are read once, before anything moves (#225).
         let commandLineToolPaths = CommandLineToolScanPolicy.eligiblePaths(home: home)
+        // The folders the user added for Large Files (#318), read once from
+        // disk for the batch, so a folder removed in Settings is refused.
+        let addedScanRoots = ScanFolders.roots(home: home)
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
@@ -705,7 +708,7 @@ nonisolated final class FileDeleter: Sendable {
             let isAIModel = aiModelPaths.contains(standardizedPath)
             let isEligible = isAIModel
                 ? AIModelScanPolicy.isEligibleForDeletion(url, home: home)
-                : LargeFileScanPolicy.isEligibleForDeletion(url, home: home)
+                : LargeFileScanPolicy.isEligibleForDeletion(url, home: home, addedRoots: addedScanRoots)
                     || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
                     || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
                     || commandLineToolPaths.contains(standardizedPath)

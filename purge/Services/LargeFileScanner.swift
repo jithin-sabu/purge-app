@@ -24,12 +24,18 @@ nonisolated final class LargeFileScanner {
     /// offered for Remove Download only and an iCloud file there that can't
     /// have its download removed is left off (#106). They default to iCloud
     /// Drive's own folder, again only when `roots` is left to default.
+    ///
+    /// `addedFolders` are the folders the user added in Settings (#318). They
+    /// default to the saved list, again only when `roots` is left to default.
+    /// One that can't be walked now, most often because its drive is
+    /// unplugged, is named in the summary instead of read as empty.
     func scanStream(
         minBytes: Int64,
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
         iCloudDriveRoots: [URL]? = nil,
+        addedFolders: [ScanFolders.Entry]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
@@ -39,7 +45,7 @@ nonisolated final class LargeFileScanner {
         let events = scanEvents(
             minBytes: minBytes, staleDays: staleDays, roots: roots,
             virtualMachineRoots: virtualMachineRoots, iCloudDriveRoots: iCloudDriveRoots,
-            installedApps: installedApps,
+            addedFolders: addedFolders, installedApps: installedApps,
             isAppRunning: isAppRunning, home: home, exclusions: exclusions, isExcluded: isExcluded
         )
         return AsyncStream { continuation in
@@ -66,6 +72,7 @@ nonisolated final class LargeFileScanner {
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
         iCloudDriveRoots: [URL]? = nil,
+        addedFolders: [ScanFolders.Entry]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
@@ -78,6 +85,8 @@ nonisolated final class LargeFileScanner {
                 let home = home ?? FileManager.default.homeDirectoryForCurrentUser
                 var walks = (roots ?? LargeFileScanPolicy.scanRoots(home: home))
                     .map { Walk(root: $0, bundlesOnly: false, downloadOnly: false) }
+                let added = addedFolders ?? (roots == nil ? ScanFolders.entries(home: home) : [])
+                walks += added.filter(\.isAvailable).map { Walk(root: $0.url, bundlesOnly: false, downloadOnly: false) }
                 let driveRoots = iCloudDriveRoots
                     ?? (roots == nil ? [LargeFileScanPolicy.iCloudDriveRoot(home: home)] : [])
                 walks += driveRoots.map { Walk(root: $0, bundlesOnly: false, downloadOnly: true) }
@@ -88,6 +97,8 @@ nonisolated final class LargeFileScanner {
                     minBytes: minBytes,
                     staleDays: staleDays,
                     walks: walks,
+                    addedRoots: added.filter(\.isAvailable).map(\.url),
+                    unwalkedAddedFolders: added.filter { !$0.isAvailable },
                     installedApps: installedApps ?? Self.installedVirtualMachineApps(),
                     isAppRunning: isAppRunning ?? { DeletionSafetyPolicy.isAppRunning(bundleID: $0) },
                     home: home,
@@ -122,6 +133,8 @@ nonisolated final class LargeFileScanner {
         minBytes: Int64,
         staleDays: Int,
         walks: [Walk],
+        addedRoots: [URL],
+        unwalkedAddedFolders: [ScanFolders.Entry],
         installedApps: Set<VirtualMachineApp>,
         isAppRunning: @Sendable (String) -> Bool,
         home: URL,
@@ -134,6 +147,11 @@ nonisolated final class LargeFileScanner {
         let exclusions = exclusions ?? .current()
         let now = Date()
         var summary = LargeFileScanSummary(minBytes: minBytes)
+        // An added folder that can't be walked now is named, never read as
+        // empty: its files are still there when the drive is (#318).
+        for entry in unwalkedAddedFolders {
+            summary.unreadableRoots.append(.init(path: entry.url, reason: unwalkedAddedFolderReason(entry)))
+        }
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey, .isPackageKey,
@@ -147,7 +165,10 @@ nonisolated final class LargeFileScanner {
         // spells a root `/private/var/…` where the policy says `/var/…`, so each
         // folder costs one set lookup at any depth and no resolve.
         let modelStoreRoots = Set(
-            AIModelScanPolicy.rootsInsideLargeFileScan(home: home).flatMap { root -> [String] in
+            AIModelScanPolicy.rootsInsideLargeFileScan(
+                home: home,
+                addedRoots: addedRoots
+            ).flatMap { root -> [String] in
                 let path = root.resolvingSymlinksInPath().path
                 return [path, "/private" + path]
             }
@@ -520,6 +541,15 @@ nonisolated final class LargeFileScanner {
 
     /// Why a root that is a link was left out, with where it leads, so the
     /// summary doesn't read as a folder macOS refused to open.
+    /// Why an added folder was not walked: its drive is out, or it no longer
+    /// passes the rules for added folders (#318).
+    private static func unwalkedAddedFolderReason(_ entry: ScanFolders.Entry) -> String {
+        guard let refusal = entry.refusal, !entry.isDisconnected else {
+            return String(localized: "It isn\u{2019}t connected. Connect its drive and scan again.")
+        }
+        return ScanFolderAdding.message(for: refusal)
+    }
+
     private static func unwalkedLinkReason(_ root: URL) -> String {
         let target = (root.resolvingSymlinksInPath().path as NSString).abbreviatingWithTildeInPath
         return String(localized: "It links to \(target), which Large Files doesn't scan.")
