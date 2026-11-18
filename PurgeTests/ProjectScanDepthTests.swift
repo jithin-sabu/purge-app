@@ -175,6 +175,63 @@ struct ProjectScanDepthTests {
         #expect(trash.trashedPaths.isEmpty)
     }
 
+    /// The early boundary check passes here, since `.itemStarted` only comes
+    /// after it. The root is swapped for a link during the clean, so only the
+    /// last check before the Trash move can refuse it.
+    @Test func aRootReplacedDuringTheCleanIsRefusedByTheLastCheck() async throws {
+        let fm = FileManager.default
+        let fixture = trashTestHome()
+        defer { try? fm.removeItem(at: fixture) }
+        let home = fixture.appendingPathComponent("Home")
+        let saved = home.appendingPathComponent("Source/App")
+        let outside = fixture.appendingPathComponent("Outside/App")
+        let artifact = saved.appendingPathComponent("node_modules")
+        for project in [saved, outside] {
+            try fm.createDirectory(at: project.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+            try Data("{}".utf8).write(to: project.appendingPathComponent("package.json"))
+        }
+        let savedPath = saved.standardizedFileURL.path
+        let trash = FakeTrash()
+        let deleter = FileDeleter(home: home, trash: trash.trash, fullDiskAccessGranted: { true })
+        let replaced = OSAllocatedUnfairLock(initialState: false)
+        let report = try await ScanFolders.$snapshotOverride.withValue(.init(walked: [savedPath], saved: [savedPath])) {
+            try await deleter.deleteItems(at: [artifact], onProgress: { event in
+                guard case .itemStarted = event else { return }
+                replaced.withLock { done in
+                    guard !done else { return }
+                    let aside = saved.deletingLastPathComponent().appendingPathComponent("App-old")
+                    done = (try? fm.moveItem(at: saved, to: aside)) != nil
+                        && (try? fm.createSymbolicLink(at: saved, withDestinationURL: outside)) != nil
+                }
+            })
+        }
+        #expect(replaced.withLock { $0 })
+        #expect(report.skippedItems.map(\.path) == [artifact.path])
+        #expect(trash.trashedPaths.isEmpty)
+    }
+
+    /// `vendor/bundle` is the only rule for a folder named `bundle`. A `bundle`
+    /// folder anywhere else matches no rule's path, and its parent is checked.
+    @Test func anArtifactNoRuleMatchesIsCheckedAgainstItsParent() throws {
+        let fm = FileManager.default
+        let project = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: project) }
+        let artifact = project.appendingPathComponent("bundle")
+        try fm.createDirectory(at: artifact, withIntermediateDirectories: true)
+        try fm.createDirectory(at: project.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        let rules = try #require(ProjectArtifactCatalog.rulesByFolderName["bundle"])
+        #expect(!rules.contains { artifact.path.hasSuffix("/" + $0.folder) })
+
+        // The git lookup stays inside home or an added folder, so the fixture
+        // is added the way the scan would see it.
+        let path = project.standardizedFileURL.path
+        try ScanFolders.$snapshotOverride.withValue(.init(walked: [path], saved: [path])) {
+            #expect(!ProjectActivityPolicy.artifactBelongsToActiveProject(artifact, access: .full))
+            try Data().write(to: project.appendingPathComponent(".git/index.lock"))
+            #expect(ProjectActivityPolicy.artifactBelongsToActiveProject(artifact, access: .full))
+        }
+    }
+
     private func trashTestHome() -> URL {
         // /tmp is scratch space and, unlike /var/folders, is outside the
         // system /var denylist. Inject the walk and intercept Trash.

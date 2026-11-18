@@ -239,7 +239,10 @@ nonisolated final class FileDeleter: Sendable {
     /// fake, since the real one only knows the real home's `~/.nvm`.
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
-    /// Whether Purge has Full Disk Access. Tests can hand in a fixed answer.
+    /// Whether Purge has Full Disk Access. A clean asks once at the start, to read
+    /// the added folders the way the scan did, and again after a permission
+    /// error, since it changes how that error reads (#299). Tests hand in a
+    /// fixed answer.
     private let fullDiskAccessGranted: @Sendable () -> Bool
 
     init(
@@ -304,7 +307,7 @@ nonisolated final class FileDeleter: Sendable {
         // disk before anything moves. A folder removed in Settings, or on a drive
         // that went away, is refused.
         let scanAccess: ScanAccess = fullDiskAccessGranted() ? .full : .limited
-        ScanFolders.refreshSnapshot(insideHomeOnly: scanAccess == .limited)
+        ScanFolders.refreshSnapshot(home: home, insideHomeOnly: scanAccess == .limited)
         let projectHome = home.standardizedFileURL.path
 
         for url in urls {

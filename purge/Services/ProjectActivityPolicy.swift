@@ -61,18 +61,22 @@ nonisolated enum ProjectActivityPolicy {
 
     /// The scan's activity check can be stale by the time an artifact reaches
     /// the Trash, especially on Retry. Infer roots from the catalog's folder
-    /// paths even if a project marker disappeared after discovery.
+    /// paths even if a project marker disappeared after discovery. When no rule's
+    /// path matches, the folder holding the artifact is checked instead, so an
+    /// unmatched artifact never skips the check. One sweep of the process list
+    /// took 1.5 ms with 940 processes (#392 review).
     static func artifactBelongsToActiveProject(_ artifact: URL, access: ScanAccess) -> Bool {
         guard let rules = ProjectArtifactCatalog.rulesByFolderName[artifact.lastPathComponent] else { return false }
         if !ProtectedLocations.isReadable(artifact, access: access) { return true }
-        let path = artifact.standardizedFileURL.path
-        let roots = Set(rules.compactMap { rule -> URL? in
+        let standardized = artifact.standardizedFileURL
+        let path = standardized.path
+        var roots = Set(rules.compactMap { rule -> URL? in
             guard path.hasSuffix("/" + rule.folder) else { return nil }
-            var root = artifact.standardizedFileURL
+            var root = standardized
             for _ in rule.folder.split(separator: "/") { root.deleteLastPathComponent() }
             return root
         })
-        guard !roots.isEmpty else { return false }
+        if roots.isEmpty { roots.insert(standardized.deletingLastPathComponent()) }
         let live = LiveContext.current()
         return roots.contains { isInUse(projectRoot: $0, live: live, access: access) }
     }
