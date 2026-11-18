@@ -877,7 +877,7 @@
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity'nin web görevleri için kullandığı tarayıcının sayfa ve betik önbellekleri; sayfaları yükledikçe yeniden dolar. Oturum açmalarına, geçmişe ve uzantılara dokunulmaz.";
 
 "nvm Node.js Version" = "nvm Node.js Sürümü";
-"An older Node.js nvm installed. No nvm alias, .nvmrc or global package uses it, and the newest of each major stays. nvm install brings it back." = "nvm ile yüklenmiş daha eski bir Node.js. Hiçbir nvm takma adı, .nvmrc veya global paket onu kullanmıyor ve her ana sürümün en yenisi kalır. nvm install onu geri getirir.";
+"An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back." = "nvm'den daha eski bir Node.js. Hiçbir takma ad, Purge'ün bulduğu .nvmrc, global paket veya npm yapılandırması onu kullanmıyor. Her ana sürümün en yenisi kalır. nvm install onu geri getirir.";
 
 "nvm Download Cache" = "nvm İndirme Önbelleği";
 "Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it." = "nvm'in bir sürümü yükledikten sonra tuttuğu Node.js indirmeleri. Yüklü sürümlere dokunulmaz. Silmek güvenlidir; bir sürümü yeniden yüklerseniz nvm onu yeniden indirir.";

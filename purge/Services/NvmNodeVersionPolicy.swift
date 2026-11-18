@@ -9,16 +9,19 @@ import Foundation
 ///
 /// - it is not the newest installed version of its major,
 /// - no file in `~/.nvm/alias` resolves to it, nor `~/.nvm/current`,
-/// - no `.nvmrc` a Dev Projects scan found resolves to it,
-/// - it holds no global npm package or command besides the ones Node ships,
-///   since nvm installs those inside the version,
-/// - no LaunchAgent or MCP config names a path inside it,
+/// - no `.nvmrc` resolves to it: `~/.nvmrc`, and the ones beside each project a
+///   Dev Projects scan found or in a folder above it, which nvm also reads,
+/// - it holds no global npm package or command besides the ones Node ships, and
+///   no global npm config (`etc/npmrc`, which can hold a token), since nvm
+///   keeps those inside the version,
+/// - no LaunchAgent, MCP or Claude Code config, or shell startup file names a
+///   path inside it, and no link in a `bin` folder on the `PATH` points into it,
 /// - and, right before the move, no process has a file open inside it.
 ///
 /// The checks run in three places, each as much as it can afford. The gate
 /// `isOfferedForCleanup` runs on every Dev Tools list update, on the main
 /// thread, so it reads only small files (`Check.quick`). The scan also reads
-/// the LaunchAgents and MCP configs (`Check.scan`). `FileDeleter` runs every
+/// the configs and `bin` folders (`Check.scan`). `FileDeleter` runs every
 /// check again right before the move, `lsof` included, off the main thread
 /// (`passesImmediateTrashBoundary`).
 ///
@@ -40,17 +43,30 @@ nonisolated enum NvmNodeVersionPolicy {
     static let bundledPackages: Set<String> = ["npm", "corepack"]
     static let bundledCommands: Set<String> = ["node", "npm", "npx", "corepack"]
 
-    /// Files that may name a Node path directly, relative to home. A LaunchAgent
-    /// or an MCP server set up this way breaks when its Node goes.
+    /// Files that may name a Node path directly, relative to home. An MCP server,
+    /// a Claude Code hook or a `PATH` line set up this way breaks when its Node goes.
     static let referenceFiles = [
         "Library/Application Support/Claude/claude_desktop_config.json",
         ".claude.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
         ".cursor/mcp.json",
         "Library/Application Support/Code/User/settings.json",
         "Library/Application Support/Code/User/mcp.json",
         "Library/Application Support/Cursor/User/settings.json",
+        ".zshrc", ".zprofile", ".zshenv", ".bashrc", ".bash_profile", ".profile",
+        ".config/fish/config.fish",
     ]
     static let launchAgents = "Library/LaunchAgents"
+    /// `bin` folders where people link one Node version so apps and build
+    /// scripts find it, such as `/usr/local/bin/node`. Relative ones are in home.
+    static let linkFolders = [".local/bin", "bin", "/usr/local/bin", "/opt/homebrew/bin"]
+    /// Where a version keeps its global npm config, which `npm config set -g` writes.
+    static let globalNpmConfig = "etc/npmrc"
+
+    /// How long the main-thread gate may answer from an earlier read of what
+    /// keeps a version. A move always reads again.
+    static let recentReadLifetime: TimeInterval = 10
 
     // MARK: Labels and names
 
@@ -83,13 +99,17 @@ nonisolated enum NvmNodeVersionPolicy {
         var mayRead: @Sendable (_ path: String) -> Bool
         /// The `lsof` listing, read only right before a move.
         var openFiles: OpenFileCheck.Lister
+        /// The `bin` folders searched for links into a version. Tests use their own.
+        var linkFolders: [String] = NvmNodeVersionPolicy.linkFolders
 
-        static func current(home: String) -> Context {
+        /// `access` is worked out once here, not for each file: it probes Full
+        /// Disk Access by opening folders.
+        static func current(home: String, access: ScanAccess = ScanAccess.current()) -> Context {
             let homeURL = URL(fileURLWithPath: home, isDirectory: true)
             return Context(
                 nvmrcFiles: { NvmrcLedger.shared.files() },
                 mayRead: { path in
-                    ProtectedLocations.isReadable(URL(fileURLWithPath: path), access: ScanAccess.current(), home: homeURL)
+                    ProtectedLocations.isReadable(URL(fileURLWithPath: path), access: access, home: homeURL)
                 },
                 openFiles: OpenFileCheck.liveListing
             )
@@ -116,14 +136,18 @@ nonisolated enum NvmNodeVersionPolicy {
               versionNumber(ofFolderName: name) != nil,
               !PathContainment.containsSymlinkComponent(url, home: home),
               OldToolVersionScanPolicy.isRealFolder(path),
-              let kept = keptVersions(home: home, context: context),
+              let kept = check == .quick
+                ? recentKeptVersions(home: home, context: context)
+                : keptVersions(home: home, context: context),
               !kept.contains(name),
-              !hasGlobalPackages(path) else { return false }
+              !hasGlobalPackages(path),
+              !hasGlobalNpmConfig(path) else { return false }
         switch check {
         case .quick:
             return true
         case .scan, .move:
-            guard let named = isNamedByReferenceFile(path, home: home, context: context), !named else { return false }
+            guard let named = isNamedByReferenceFile(path, home: home, context: context), !named,
+                  let linked = isLinkedFromBinFolder(path, home: home, context: context), !linked else { return false }
         }
         switch check {
         case .quick, .scan:
@@ -143,6 +167,26 @@ nonisolated enum NvmNodeVersionPolicy {
         let path = url.standardizedFileURL.path
         guard OldToolVersionScanPolicy.kind(of: path, home: home) == .nvmNodeVersion else { return true }
         return isOffered(path, home: home, context: context ?? .current(home: home), check: .move)
+    }
+
+    private static let recentLock = NSLock()
+    private nonisolated(unsafe) static var recent: [String: (at: Date, kept: Set<String>?)] = [:]
+
+    /// `keptVersions`, from a read in the last `recentReadLifetime` seconds when
+    /// there is one. Only the main-thread gate uses it: it runs for every nvm
+    /// row on every Dev Tools list update.
+    static func recentKeptVersions(home: String, context: Context, now: Date = Date()) -> Set<String>? {
+        recentLock.lock()
+        let cached = recent[home]
+        recentLock.unlock()
+        if let cached, now.timeIntervalSince(cached.at) < recentReadLifetime, now >= cached.at {
+            return cached.kept
+        }
+        let kept = keptVersions(home: home, context: context)
+        recentLock.lock()
+        recent[home] = (now, kept)
+        recentLock.unlock()
+        return kept
     }
 
     /// The version folders nothing may remove now: the newest of each major, every
@@ -183,14 +227,18 @@ nonisolated enum NvmNodeVersionPolicy {
             return nil
         }
 
-        guard let nvmrcFiles = context.nvmrcFiles() else { return nil }
-        for file in nvmrcFiles {
+        guard let recorded = context.nvmrcFiles() else { return nil }
+        // nvm falls back to `~/.nvmrc` when no folder above has one.
+        let homeNvmrc = "\(home)/.nvmrc"
+        for file in [homeNvmrc] + recorded.filter({ $0 != homeNvmrc }) {
             guard context.mayRead(file) else { return nil }
             var fileInfo = stat()
             if lstat(file, &fileInfo) != 0 {
-                // A project that is gone, or no longer pins a version.
-                if errno == ENOENT || errno == ENOTDIR { continue }
-                return nil
+                guard errno == ENOENT || errno == ENOTDIR else { return nil }
+                // Gone pins nothing. Missing from a drive that may only be
+                // unplugged keeps every version.
+                guard file == homeNvmrc || isGone(file, home: home) == true else { return nil }
+                continue
             }
             guard let text = readText(file),
                   let line = nvmrcVersionLine(text),
@@ -318,6 +366,70 @@ nonisolated enum NvmNodeVersionPolicy {
             || extras(in: "\(versionPath)/bin", bundled: bundledCommands)
     }
 
+    /// Whether the version holds a global npm config: `etc/npmrc` that is not an
+    /// empty regular file. It can hold a registry, a proxy or a token. True when
+    /// it can't be checked.
+    static func hasGlobalNpmConfig(_ versionPath: String) -> Bool {
+        var info = stat()
+        let file = "\(versionPath)/\(globalNpmConfig)"
+        guard lstat(file, &info) == 0 else { return !isMissing(file) }
+        return (info.st_mode & S_IFMT) != S_IFREG || info.st_size > 0
+    }
+
+    /// Whether a recorded `.nvmrc` that is missing is really gone. True in home
+    /// when no folder on the way down is a link, on a mounted `/Volumes` drive,
+    /// and anywhere else on the startup disk. Nil when it may sit on a drive
+    /// that is only unplugged: under a `/Volumes` name that isn't mounted, or
+    /// behind a link in home that may lead to one.
+    static func isGone(_ path: String, home: String) -> Bool? {
+        if PathContainment.isInside(path, home) {
+            var current = home
+            for part in path.dropFirst(home.count + 1).split(separator: "/").dropLast() {
+                current += "/\(part)"
+                var info = stat()
+                guard lstat(current, &info) == 0 else {
+                    return errno == ENOENT || errno == ENOTDIR ? true : nil
+                }
+                if (info.st_mode & S_IFMT) == S_IFLNK { return nil }
+            }
+            return true
+        }
+        let parts = path.split(separator: "/")
+        if parts.first == "Volumes" {
+            guard parts.count > 2 else { return nil }
+            return OldToolVersionScanPolicy.isRealFolder("/Volumes/\(parts[1])") ? true : nil
+        }
+        return true
+    }
+
+    /// Whether a link in one of `linkFolders` points into the version. Nil when
+    /// a folder is there but can't be listed.
+    static func isLinkedFromBinFolder(_ versionPath: String, home: String, context: Context) -> Bool? {
+        let spellings = OldToolVersionScanPolicy.comparableSpellings(of: versionPath)
+        for relative in context.linkFolders {
+            let folder = relative.hasPrefix("/") ? relative : "\(home)/\(relative)"
+            guard context.mayRead(folder) else { return nil }
+            let names: [String]
+            do {
+                names = try FileManager.default.contentsOfDirectory(atPath: folder)
+            } catch {
+                if isMissing(folder) { continue }
+                return nil
+            }
+            for name in names {
+                let entry = "\(folder)/\(name)"
+                guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: entry) else { continue }
+                let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: folder, isDirectory: true))
+                    .standardizedFileURL.path
+                let targets = OldToolVersionScanPolicy.comparableSpellings(of: resolved)
+                if targets.contains(where: { t in spellings.contains { PathContainment.isSameOrInside(t, $0) } }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     /// Whether a LaunchAgent or an MCP config names a path inside the version. Nil
     /// when one is there but can't be read.
     static func isNamedByReferenceFile(_ versionPath: String, home: String, context: Context) -> Bool? {
@@ -365,10 +477,22 @@ nonisolated enum NvmNodeVersionPolicy {
 
     // MARK: Scan
 
-    /// The `.nvmrc` files directly in `roots`, for the ledger.
-    static func nvmrcFiles(inProjectRoots roots: [URL]) -> [String] {
-        roots.map { $0.standardizedFileURL.appendingPathComponent(".nvmrc").path }
-            .filter { OldToolVersionScanPolicy.isRegularFile($0) }
+    /// The `.nvmrc` files in `roots` and in every folder above them, for the
+    /// ledger: nvm walks up from where it runs until it finds one. In home the
+    /// walk up stops at home; elsewhere it stops below `/` and `/Volumes`.
+    static func nvmrcFiles(inProjectRoots roots: [URL], home: String) -> [String] {
+        var seen = Set<String>()
+        var found: [String] = []
+        for root in roots {
+            var folder = root.standardizedFileURL.path
+            while !folder.isEmpty, folder != "/", folder != "/Volumes", seen.insert(folder).inserted {
+                let file = "\(folder)/.nvmrc"
+                if OldToolVersionScanPolicy.isRegularFile(file) { found.append(file) }
+                if folder == home { break }
+                folder = (folder as NSString).deletingLastPathComponent
+            }
+        }
+        return found
     }
 }
 
@@ -376,48 +500,74 @@ nonisolated enum NvmNodeVersionPolicy {
 /// `nvmrc-files.json` beside Purge's other files. The Dev Tools scan runs
 /// before the project walk, so the list from earlier walks is what it reads.
 /// Each walk adds what it found and keeps the rest, so a narrower walk, such as
-/// one without Full Disk Access, never drops a pin. A file that is gone pins
-/// nothing. Until a walk has saved the list, nvm offers no version.
+/// one without Full Disk Access, never drops a pin. Only a file confirmed gone
+/// (`NvmNodeVersionPolicy.isGone`) leaves the list. Until a walk has saved the
+/// list, and while it holds more than `limit` files, nvm offers no version.
 nonisolated final class NvmrcLedger: @unchecked Sendable {
     static let fileName = "nvmrc-files.json"
     static let shared = NvmrcLedger(fileURL: AppSupportFolder.url().appendingPathComponent(fileName))
 
-    /// Far more than any Mac holds. Past it, the newest walk's files are kept first.
-    static let limit = 5_000
-
     private let fileURL: URL
+    private let limit: Int
     private let lock = NSLock()
+    /// The list as last read or written. Only Purge writes the file.
+    private var cached: [String]??
 
-    init(fileURL: URL) {
+    init(fileURL: URL, limit: Int = 5_000) {
         self.fileURL = fileURL
+        self.limit = limit
     }
 
     private struct Contents: Codable {
         var files: [String]
     }
 
-    /// The recorded files, or nil when no walk has saved them or the list can't be read.
+    /// The recorded files. Nil when no walk has saved them, the list can't be
+    /// read, or it is longer than `limit`, which keeps every version.
     func files() -> [String]? {
         lock.lock()
         defer { lock.unlock() }
-        return read()
+        let files: [String]?
+        if let cached {
+            files = cached
+        } else {
+            files = read()
+            cached = .some(files)
+        }
+        guard let files, files.count <= limit else { return nil }
+        return files
     }
 
-    /// Adds the files a finished walk found.
-    func record(_ found: [String]) {
+    /// Adds the files a finished walk found. A recorded file is dropped only
+    /// when `isGone` confirms it, and never one macOS would ask about reading.
+    func record(
+        _ found: [String],
+        home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
+        mayRead: (String) -> Bool = { _ in true }
+    ) {
         lock.lock()
         defer { lock.unlock() }
+        let foundSet = Set(found)
+        let kept = (read() ?? []).filter { file in
+            if foundSet.contains(file) { return true }
+            guard mayRead(file) else { return true }
+            var info = stat()
+            if lstat(file, &info) == 0 { return true }
+            guard errno == ENOENT || errno == ENOTDIR else { return true }
+            return NvmNodeVersionPolicy.isGone(file, home: home) != true
+        }
         var seen = Set<String>()
-        let merged = (found + (read() ?? [])).filter { seen.insert($0).inserted }
-        let kept = Array(merged.prefix(Self.limit))
+        let merged = (found + kept).filter { seen.insert($0).inserted }
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try JSONEncoder().encode(Contents(files: kept)).write(to: fileURL, options: .atomic)
+            try JSONEncoder().encode(Contents(files: merged)).write(to: fileURL, options: .atomic)
+            cached = .some(merged)
         } catch {
             // Unsaved, the next walk tries again. Until one saves, nothing is offered.
+            cached = nil
         }
     }
 

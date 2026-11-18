@@ -3555,7 +3555,7 @@
     "key": "nvm-node-version",
     "display_name": "nvm Node.js Version",
     "tag": "medium",
-    "explanation": "An older Node.js nvm installed. No nvm alias, .nvmrc or global package uses it, and the newest of each major stays. nvm install brings it back.",
+    "explanation": "An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"

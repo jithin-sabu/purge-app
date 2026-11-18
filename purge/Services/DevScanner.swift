@@ -1216,10 +1216,16 @@ nonisolated final class DevScanner {
         // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
         guard !Task.isCancelled else { return [] }
 
-        // The `.nvmrc` files this walk found keep their Node versions (#400). Only
-        // a walk of the usual roots counts, never one a caller narrowed.
+        // The `.nvmrc` files this walk found, beside a project or above it, keep
+        // their Node versions (#400). Only a walk of the usual roots counts, never
+        // one a caller narrowed.
         if roots == nil {
-            NvmrcLedger.shared.record(NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: discoveredRoots.map(\.0)))
+            let homePath = home.standardizedFileURL.path
+            NvmrcLedger.shared.record(
+                NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: discoveredRoots.map(\.0), home: homePath),
+                home: homePath,
+                mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }
+            )
         }
 
         ScanPhaseTiming.finish(

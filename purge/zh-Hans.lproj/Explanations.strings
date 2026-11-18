@@ -1174,7 +1174,7 @@
 
 /* nvm-node-version */
 "nvm Node.js Version" = "nvm Node.js 版本";
-"An older Node.js nvm installed. No nvm alias, .nvmrc or global package uses it, and the newest of each major stays. nvm install brings it back." = "nvm 安装的较旧 Node.js。没有 nvm 别名、.nvmrc 或全局包在用它，每个主版本的最新版会保留。用 nvm install 可以装回来。";
+"An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back." = "nvm 安装的较旧 Node.js。没有别名、Purge 找到的 .nvmrc、全局包或 npm 配置在用它。每个主版本的最新版会保留。用 nvm install 可以装回来。";
 
 /* nvm-download-cache */
 "nvm Download Cache" = "nvm 下载缓存";
