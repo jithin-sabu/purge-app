@@ -143,36 +143,71 @@ for name in "${NAMES[@]}"; do
   fi
 done
 
-i=0
-for shot in "$@"; do
-  name="${NAMES[$i]}"
-  i=$((i + 1))
-  mv "$TMP/$name" "$REPO/$FOLDER/$name"
-  echo "$FOLDER/$name: $(wc -c <"$shot" | tr -d ' ') bytes -> $(wc -c <"$REPO/$FOLDER/$name" | tr -d ' ') bytes" >&2
-done
+# Paths this run puts into the checkout, so a failure can take them out
+# again, ignored by git or not.
+INSTALLED=()
+remove_installed() {
+  for path in "${INSTALLED[@]+"${INSTALLED[@]}"}"; do rm -f "$REPO/$path"; done
+}
 
 # Puts the screenshots repo back to GitHub's main, so a failed run leaves
 # nothing behind that blocks the next one or rides along with it. The
 # source PNGs are untouched.
 give_up() {
   git -C "$REPO" rebase --abort >/dev/null 2>&1 || true
+  # Before the reset: on a Mac volume, our k-dark and someone else's
+  # published K-dark are one file, and the reset must win.
+  remove_installed
   git -C "$REPO" reset -q --hard origin/main
-  git -C "$REPO" clean -q -fd -- "$FOLDER"
   echo "$1 Nothing was published." >&2
   exit 1
 }
 
-git -C "$REPO" add -- "$FOLDER" || give_up "Couldn't stage the shots."
+links() {
+  for name in "${NAMES[@]}"; do
+    echo "![${name%.webp}]($WEB/blob/$1/$FOLDER/$name?raw=true)"
+  done
+}
+
+i=0
+for shot in "$@"; do
+  name="${NAMES[$i]}"
+  i=$((i + 1))
+  INSTALLED+=("$FOLDER/$name")
+  mv "$TMP/$name" "$REPO/$FOLDER/$name" || give_up "Couldn't move $name into $REPO."
+  echo "$FOLDER/$name: $(wc -c <"$shot" | tr -d ' ') bytes -> $(wc -c <"$REPO/$FOLDER/$name" | tr -d ' ') bytes" >&2
+done
+
+# Exact paths, so git refuses a shot that an ignore rule would skip.
+git -C "$REPO" add -- "${INSTALLED[@]}" || give_up "Couldn't stage the shots."
 git -C "$REPO" commit -q -m "Add shots for $WHAT" || give_up "Couldn't commit the shots."
+COMMIT="$(git -C "$REPO" rev-parse HEAD)"
 if ! git -C "$REPO" push -q origin main; then
-  # Another session may have pushed first. Different names rebase cleanly.
-  git -C "$REPO" fetch -q origin main || give_up "The push failed and GitHub can't be reached."
-  git -C "$REPO" rebase -q origin/main >/dev/null 2>&1 || give_up "Someone published a file with the same name meanwhile. Pick another name."
-  git -C "$REPO" push -q origin main || give_up "The push to jithin-sabu/purge-screenshots failed. $NO_ACCESS_HINT"
+  if ! git -C "$REPO" fetch -q origin main; then
+    # The push may have landed before the connection dropped, so keep the
+    # commit. If it didn't land, the next run says how to drop it.
+    echo "The push failed and GitHub can't be reached, so it's unclear whether commit $COMMIT got there." >&2
+    echo "If it did, these links work. Open one to check:" >&2
+    links "$COMMIT"
+    exit 1
+  fi
+  if git -C "$REPO" merge-base --is-ancestor "$COMMIT" origin/main; then
+    # The push landed after all; only the reply was lost.
+    git -C "$REPO" merge -q --ff-only origin/main
+  else
+    # Another session may have pushed first. Names that differ only in case
+    # are different paths to git, so check them before the rebase.
+    published="$(git -C "$REPO" ls-tree --name-only origin/main -- "$FOLDER/" | sed 's|.*/||' | tr '[:upper:]' '[:lower:]')"
+    for name in "${NAMES[@]}"; do
+      if printf '%s\n' "$published" | grep -Fqx "$(lower "$name")"; then
+        give_up "Someone published $FOLDER/$name, or the same name in other case, meanwhile. Pick another name."
+      fi
+    done
+    git -C "$REPO" rebase -q origin/main >/dev/null 2>&1 || give_up "The rebase onto GitHub's main failed."
+    git -C "$REPO" push -q origin main || give_up "The push to jithin-sabu/purge-screenshots failed. $NO_ACCESS_HINT"
+  fi
 fi
 
 SHA="$(git -C "$REPO" rev-parse HEAD)"
 echo >&2
-for name in "${NAMES[@]}"; do
-  echo "![${name%.webp}]($WEB/blob/$SHA/$FOLDER/$name?raw=true)"
-done
+links "$SHA"

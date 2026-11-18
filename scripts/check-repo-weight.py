@@ -32,7 +32,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 IMAGES = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".heic", ".heif", ".bmp", ".tif", ".tiff",
-    ".svg", ".pdf",
+    ".svg", ".pdf", ".icns",
 }
 VIDEOS = {".mov", ".mp4", ".m4v", ".webm"}
 
@@ -83,6 +83,16 @@ def tracked_files():
     return [(path, int(size)) for (path, _), size in zip(entries, sizes)]
 
 
+def shrink_hint(suffix):
+    if suffix == ".svg":
+        return "Strip editor data and simplify paths (svgo does both), or drop embedded bitmaps."
+    if suffix == ".pdf":
+        return "Export it as an SVG, or as a PNG sized at 2x its display width."
+    if suffix == ".icns":
+        return "Keep only the sizes it needs, or add it to ALLOWED_LARGE with the reason."
+    return "Size it at 2x the width it is shown at, then compress it (pngquant or cwebp)."
+
+
 def kb(size):
     return f"{size / 1024:.0f} KB"
 
@@ -103,10 +113,7 @@ def main():
         elif path in ALLOWED_LARGE:
             continue
         elif is_image and size > MAX_IMAGE:
-            problems.append(
-                f"{path}: {kb(size)}, over the {kb(MAX_IMAGE)} cap for images. "
-                "Size it at 2x the width it is shown at, then compress it (pngquant or cwebp)."
-            )
+            problems.append(f"{path}: {kb(size)}, over the {kb(MAX_IMAGE)} cap for images. {shrink_hint(suffix)}")
         elif size > MAX_FILE:
             problems.append(
                 f"{path}: {kb(size)}, over the {kb(MAX_FILE)} cap. "
