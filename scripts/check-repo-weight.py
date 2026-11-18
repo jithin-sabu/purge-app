@@ -90,7 +90,12 @@ def shrink_hint(suffix):
         return "Export it as an SVG, or as a PNG sized at 2x its display width."
     if suffix == ".icns":
         return "Keep only the sizes it needs, or add it to ALLOWED_LARGE with the reason."
-    return "Size it at 2x the width it is shown at, then compress it (pngquant or cwebp)."
+    if suffix == ".png":
+        return "Size it at 2x the width it is shown at, then compress it with pngquant."
+    if suffix in {".jpg", ".jpeg", ".tif", ".tiff", ".webp"}:
+        return "Size it at 2x the width it is shown at, then convert it with cwebp."
+    # GIF, AVIF, HEIC and BMP: neither pngquant nor cwebp reads them.
+    return "Export it again as PNG or WebP at 2x the width it is shown at, then compress it."
 
 
 def kb(size):
