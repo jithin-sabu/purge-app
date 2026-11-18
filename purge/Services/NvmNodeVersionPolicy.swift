@@ -15,6 +15,13 @@ import Foundation
 /// - no LaunchAgent or MCP config names a path inside it,
 /// - and, right before the move, no process has a file open inside it.
 ///
+/// The checks run in three places, each as much as it can afford. The gate
+/// `isOfferedForCleanup` runs on every Dev Tools list update, on the main
+/// thread, so it reads only small files (`Check.quick`). The scan also reads
+/// the LaunchAgents and MCP configs (`Check.scan`). `FileDeleter` runs every
+/// check again right before the move, `lsof` included, off the main thread
+/// (`passesImmediateTrashBoundary`).
+///
 /// Anything that can't be read or understood keeps every version. Only `~/.nvm`
 /// counts: an app started from Finder never sees `NVM_DIR`.
 nonisolated enum NvmNodeVersionPolicy {
@@ -91,21 +98,51 @@ nonisolated enum NvmNodeVersionPolicy {
 
     // MARK: Gate
 
-    /// Whether the version folder at `path` is offered now. `checkOpenFiles` runs
-    /// `lsof`, which only the move itself needs.
-    static func isOffered(_ path: String, home: String, context: Context, checkOpenFiles: Bool) -> Bool {
+    nonisolated enum Check: Sendable {
+        /// Shape, aliases, `.nvmrc` files and global packages: small reads only,
+        /// safe on the main thread, where `isOfferedForCleanup` may run.
+        case quick
+        /// Also the LaunchAgents and MCP configs, which can be megabytes.
+        case scan
+        /// Also `lsof`, right before the move. Never on the main thread.
+        case move
+    }
+
+    /// Whether the version folder at `path` is offered now, judged as far as `check` goes.
+    static func isOffered(_ path: String, home: String, context: Context, check: Check) -> Bool {
         let url = URL(fileURLWithPath: path)
         let root = "\(home)/\(versionsRoot)"
         guard let name = OldToolVersionScanPolicy.onlyChild(path, of: root),
               versionNumber(ofFolderName: name) != nil,
+              !PathContainment.containsSymlinkComponent(url, home: home),
               OldToolVersionScanPolicy.isRealFolder(path),
               let kept = keptVersions(home: home, context: context),
               !kept.contains(name),
-              !hasGlobalPackages(path),
-              let named = isNamedByReferenceFile(path, home: home, context: context),
-              !named else { return false }
-        guard checkOpenFiles else { return true }
-        return OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free
+              !hasGlobalPackages(path) else { return false }
+        switch check {
+        case .quick:
+            return true
+        case .scan, .move:
+            guard let named = isNamedByReferenceFile(path, home: home, context: context), !named else { return false }
+        }
+        switch check {
+        case .quick, .scan:
+            return true
+        case .move:
+            return OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free
+        }
+    }
+
+    /// `FileDeleter`'s last check before it moves an nvm version: every rule
+    /// again, `lsof` included. True for every other path, which other rules judge.
+    static func passesImmediateTrashBoundary(
+        _ url: URL,
+        home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
+        context: Context? = nil
+    ) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard OldToolVersionScanPolicy.kind(of: path, home: home) == .nvmNodeVersion else { return true }
+        return isOffered(path, home: home, context: context ?? .current(home: home), check: .move)
     }
 
     /// The version folders nothing may remove now: the newest of each major, every

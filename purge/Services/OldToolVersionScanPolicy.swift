@@ -211,12 +211,13 @@ nonisolated enum OldToolVersionScanPolicy {
             path, kind: kind, home: home, now: now,
             android: android ?? .current(home: home),
             nvm: nvm ?? .current(home: home),
-            atMove: true
+            nvmCheck: .quick
         )
     }
 
-    /// `atMove` is true for the check right before a move, which also asks `lsof`
-    /// whether an nvm version is in use.
+    /// `nvmCheck` says how far an nvm version is judged: `refusesDeletion` may run
+    /// on the main thread, so it takes `.quick`, and `FileDeleter` runs the rest
+    /// right before the move (`NvmNodeVersionPolicy.passesImmediateTrashBoundary`).
     static func isOffered(
         _ path: String,
         kind: Kind,
@@ -224,7 +225,7 @@ nonisolated enum OldToolVersionScanPolicy {
         now: Date,
         android: AndroidContext,
         nvm: NvmNodeVersionPolicy.Context = .current(home: DeletionSafetyPolicy.cachedHomePath),
-        atMove: Bool = false
+        nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
         guard !PathContainment.containsSymlinkComponent(url, home: home) else { return false }
@@ -267,7 +268,7 @@ nonisolated enum OldToolVersionScanPolicy {
                   let current = currentFigmaProfile(in: url.deletingLastPathComponent().path) else { return false }
             return number < current
         case .nvmNodeVersion:
-            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm, checkOpenFiles: atMove)
+            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm, check: nvmCheck)
         }
     }
 

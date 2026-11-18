@@ -436,7 +436,13 @@ nonisolated final class FileDeleter: Sendable {
                     && !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url)
                 let failsWorktreeBoundary = AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(url, home: allowlistHome)
                     && !AgentWorktreeScanPolicy.passesImmediateTrashBoundary(url)
-                if failsCursorBoundary || failsWorktreeBoundary {
+                // An nvm version a LaunchAgent or MCP config names, or a process
+                // has open, stays. `isOfferedForCleanup` skips these reads because
+                // it also runs on the main thread (#400).
+                let failsNvmBoundary = !NvmNodeVersionPolicy.passesImmediateTrashBoundary(
+                    url, home: allowlistHome.standardizedFileURL.path
+                )
+                if failsCursorBoundary || failsWorktreeBoundary || failsNvmBoundary {
                     skippedItems.append(SkippedDeletionItem(
                         path: url.path,
                         displayName: friendlyTitle,

@@ -62,8 +62,17 @@ private enum Nvm {
         .map(\.lastPathComponent)
     }
 
-    /// Whether the gate right before a move lets the version go.
+    /// Whether `FileDeleter`'s last check, right before the move, lets the version go.
     static func movable(_ home: URL, _ version: String, _ context: Policy.Context = context()) -> Bool {
+        Policy.passesImmediateTrashBoundary(
+            home.appendingPathComponent("\(node)/\(version)"),
+            home: home.path,
+            context: context
+        )
+    }
+
+    /// Whether `isOfferedForCleanup`'s gate, which may run on the main thread, keeps the row.
+    static func gateKeeps(_ home: URL, _ version: String, _ context: Policy.Context = context()) -> Bool {
         !OldToolVersionScanPolicy.refusesDeletion(
             home.appendingPathComponent("\(node)/\(version)"),
             home: home.path,
@@ -329,6 +338,47 @@ struct NvmNodeVersionGateTests {
         let context = Nvm.context(lsof: "p4242\ncnode\nftxt\nn\(node)\n")
         #expect(Nvm.offered(home, context) == ["v20.1.0"])
         #expect(!Nvm.movable(home, "v20.1.0", context))
+    }
+
+    /// The gate runs on every Dev Tools list update, on the main thread, where
+    /// `lsof` must never run (the first live run crashed there). It lets a row
+    /// in use stay listed, and the move refuses it.
+    @Test
+    func theListGateNeverRunsLsof() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0")
+        final class Calls: @unchecked Sendable {
+            let lock = NSLock()
+            var count = 0
+            func hit() { lock.lock(); count += 1; lock.unlock() }
+        }
+        let calls = Calls()
+        let context = NvmNodeVersionPolicy.Context(
+            nvmrcFiles: { [] }, mayRead: { _ in true }, openFiles: { calls.hit(); return nil }
+        )
+        #expect(Nvm.gateKeeps(home, "v20.1.0", context))
+        #expect(calls.count == 0)
+        #expect(!Nvm.movable(home, "v20.1.0", context))
+        #expect(calls.count == 1)
+    }
+
+    /// A config read only at the scan and the move still keeps the version at the move.
+    @Test
+    func aConfigWrittenAfterTheScanStopsTheMove() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0")
+        #expect(Nvm.offered(home) == ["v20.1.0"])
+        let node = home.appendingPathComponent("\(Nvm.node)/v20.1.0/bin/node").path
+        try Nvm.write(#"{"command":"\#(node)"}"#, home, ".cursor/mcp.json")
+        #expect(!Nvm.movable(home, "v20.1.0"))
+    }
+
+    @Test
+    func otherPathsPassTheMoveCheck() {
+        let url = URL(fileURLWithPath: "/Users/someone/Library/Caches/com.example")
+        #expect(NvmNodeVersionPolicy.passesImmediateTrashBoundary(url, home: "/Users/someone", context: Nvm.context(lsof: nil)))
     }
 
     @Test
