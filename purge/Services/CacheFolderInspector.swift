@@ -17,15 +17,20 @@ nonisolated enum CacheFolderInspector {
     static func inspect(
         at root: URL,
         knownPaths: [URL],
-        isExcluded: (URL) -> Bool = ExcludedPathsStore.isExcluded
+        exclusions: ScanExclusions = .current()
     ) -> Result {
         let fm = FileManager.default
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
         guard let values = try? root.resourceValues(forKeys: keys),
-              values.isDirectory == true, values.isSymbolicLink != true,
-              !isExcluded(root),
+              values.isDirectory == true, values.isSymbolicLink != true else { return .unavailable }
+        let scoped = exclusions.scoped(to: root)
+        guard !scoped.excludesRoot,
               let children = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys)),
               !Task.isCancelled else { return .unavailable }
+
+        // The inspector shows whole-folder totals. Leave out any direct child
+        // that contains an exclusion instead of walking it for a partial size.
+        let excludedChildren = Set(scoped.relativePaths.compactMap { $0.split(separator: "/", maxSplits: 1).first })
 
         // Foundation listings can spell /var as /private/var. Compare the
         // paths as text so inspecting this folder never opens a known path.
@@ -36,9 +41,9 @@ nonisolated enum CacheFolderInspector {
 
         let known = knownPaths.map(comparisonPath)
         let folders = children.filter { url in
-            guard !Task.isCancelled, let values = try? url.resourceValues(forKeys: keys),
-                  values.isDirectory == true, values.isSymbolicLink != true,
-                  !isExcluded(url) else { return false }
+            guard !Task.isCancelled, !excludedChildren.contains(Substring(url.lastPathComponent)),
+                  let values = try? url.resourceValues(forKeys: keys),
+                  values.isDirectory == true, values.isSymbolicLink != true else { return false }
             let path = comparisonPath(url)
             return !known.contains { PathContainment.isSameOrInside(path, $0) || PathContainment.isSameOrInside($0, path) }
         }
