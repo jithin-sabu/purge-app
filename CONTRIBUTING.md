@@ -54,8 +54,10 @@ for good. Features that fit that model are more likely to land.
    ```
 
 7. **Open a pull request** against `main`. Describe what changed and why, and
-   link the issue it addresses if there is one. Screenshots are appreciated
-   for UI changes.
+   link the issue it addresses if there is one. For UI changes, add before
+   and after screenshots in dark mode by dragging them into the PR
+   description. Don't commit them: every file stays in the history, and CI
+   refuses images outside the app's own folders.
 
 ### A note on the deletion logic
 
