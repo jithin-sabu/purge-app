@@ -83,39 +83,72 @@ struct FeedbackLinksTests {
     @Test
     func fieldIDReaderSkipsMarkdownTextAndQuotes() {
         let form = """
+        name: Bug report
         body:
           - type: markdown
             attributes:
               value: |
                 id: purge-version
+                - type: input
+                  id: crash-log
           - type: input
             id: "macos-version"
-          - type: textarea
-            id: 'logs'
+          - id: 'logs'
+            type: textarea
+          - type: checkboxes
+            attributes:
+              label: Extra
         """
 
         #expect(Self.fieldIDs(inIssueForm: form) == ["macos-version", "logs"])
     }
 
     /// The `id` of each field in an issue form's `body`, read the way YAML
-    /// reads it: only an `id:` key of a body item counts, never text inside a
-    /// markdown block, and quotes around the value are dropped. Foundation has
-    /// no YAML parser, and the forms only use this plain block style.
+    /// reads it. Only a key of a `body` item counts, in any order, so text
+    /// inside a markdown block never does, even when it looks like an item.
+    /// Quotes around the value are dropped. Foundation has no YAML parser, and
+    /// the forms only use this plain block style.
     static func fieldIDs(inIssueForm form: String) -> Set<String> {
         var ids: Set<String> = []
-        var itemKeyIndent: Int?
-        var itemType: String?
+        var inBody = false
+        var dashIndent: Int?
+        var item: [String: String] = [:]
+
+        func finishItem() {
+            if let id = item["id"], item["type"] != "markdown" { ids.insert(id) }
+            item = [:]
+        }
+        func readKey(_ text: Substring) {
+            guard let colon = text.firstIndex(of: ":") else { return }
+            let key = text[..<colon].trimmingCharacters(in: .whitespaces)
+            let value = text[text.index(after: colon)...]
+                .trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            if item[key] == nil { item[key] = value }
+        }
+
         for line in form.split(separator: "\n", omittingEmptySubsequences: false) {
             let indent = line.prefix { $0 == " " }.count
             let trimmed = line.drop { $0 == " " }
-            if trimmed.hasPrefix("- type:") {
-                itemKeyIndent = indent + 2
-                itemType = trimmed.dropFirst("- type:".count).trimmingCharacters(in: .whitespaces)
-            } else if indent == itemKeyIndent, itemType != "markdown", trimmed.hasPrefix("id:") {
-                let value = trimmed.dropFirst("id:".count).trimmingCharacters(in: .whitespaces)
-                ids.insert(value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
+            if trimmed.isEmpty { continue }
+            if indent == 0 {
+                // A top-level key ends the body list.
+                if inBody { finishItem() }
+                inBody = trimmed.hasPrefix("body:")
+                dashIndent = nil
+                continue
+            }
+            guard inBody else { continue }
+            if dashIndent == nil, trimmed.hasPrefix("- ") { dashIndent = indent }
+            guard let dashIndent else { continue }
+            if indent == dashIndent, trimmed.hasPrefix("- ") {
+                finishItem()
+                readKey(trimmed.dropFirst(2))
+            } else if indent == dashIndent + 2 {
+                readKey(trimmed)
             }
         }
+        if inBody { finishItem() }
         return ids
     }
 }

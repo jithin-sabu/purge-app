@@ -250,7 +250,12 @@ struct AboutView: View {
     /// Shows "Copied" only when the clipboard took the address, for two
     /// seconds after the latest click, and tells VoiceOver too.
     private func copyEmailAddress() {
-        guard FinderReveal.copyText(FeedbackLinks.emailAddress) else { return }
+        copiedResetWork?.cancel()
+        guard FinderReveal.copyText(FeedbackLinks.emailAddress) else {
+            // An earlier copy's "Copied" would be wrong now.
+            copiedEmailAddress = false
+            return
+        }
         copiedEmailAddress = true
         let announcer: NSObject = NSApp.keyWindow ?? NSApp
         NSAccessibility.post(
@@ -261,7 +266,6 @@ struct AboutView: View {
                 .priority: NSAccessibilityPriorityLevel.high.rawValue,
             ]
         )
-        copiedResetWork?.cancel()
         let reset = DispatchWorkItem { copiedEmailAddress = false }
         copiedResetWork = reset
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: reset)
