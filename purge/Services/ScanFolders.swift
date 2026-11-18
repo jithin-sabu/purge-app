@@ -49,17 +49,24 @@ nonisolated enum ScanFolders {
         volumes: URL = AppFolders.volumes,
         isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) },
         including: (String) -> Bool = { _ in true },
-        insideHomeOnly: Bool = false
+        insideHomeOnly: Bool = false,
+        savedFolders: [AppFolders.PickedFolder]? = nil
     ) -> [Entry] {
         var others = fixedRoots(home: home, volumes: volumes, isLocalDisk: isLocalDisk, insideHomeOnly: insideHomeOnly)
-        return pickedFolders().filter { including($0.path) }.map { folder in
-            // A saved folder in home that became a link out of it is refused by
-            // `readlink` alone, before anything could read where it leads (#318
-            // review): `refusal` asks `fileExists` first.
-            if insideHomeOnly, ProtectedLocations.resolvedStayingInside(folder.path, root: home) == nil {
+        let homePath = home.standardizedFileURL.path
+        let volumesPath = volumes.standardizedFileURL.path
+        return (savedFolders ?? pickedFolders()).filter { including($0.path) }.map { folder in
+            // Check each component before the folder checks that follow links.
+            // A replaced root must never open another tree.
+            let boundary: String
+            if PathContainment.isInside(folder.path, homePath) { boundary = homePath }
+            else if PathContainment.isSameOrInside(homePath, folder.path) { return Entry(path: folder.path, refusal: .tooBroad) }
+            else if !insideHomeOnly, PathContainment.isInside(folder.path, volumesPath) { boundary = volumesPath }
+            else { return Entry(path: folder.path, refusal: .outsideHomeAndDrives) }
+            let url = URL(fileURLWithPath: folder.path, isDirectory: true)
+            guard !PathContainment.containsSymlinkComponent(url, home: boundary) else {
                 return Entry(path: folder.path, refusal: .throughLink)
             }
-            let url = URL(fileURLWithPath: folder.path, isDirectory: true)
             let refusal = refusal(forPicked: url, home: home, otherRoots: others, volumes: volumes, isLocalDisk: isLocalDisk)
             if refusal == nil { others.append(url) }
             return Entry(path: folder.path, refusal: refusal)
@@ -251,7 +258,8 @@ nonisolated enum ScanFolders {
     @discardableResult
     static func refreshSnapshot(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        insideHomeOnly: Bool? = nil
+        insideHomeOnly: Bool? = nil,
+        onSkipped: ((Entry) -> Void)? = nil
     ) -> [URL] {
         // Numbered before anything is read, so a refresh that started later,
         // and so read a newer list, is never replaced by an older one that
@@ -262,6 +270,9 @@ nonisolated enum ScanFolders {
         let all = entries(home: home, including: { path in
             !insideHomeOnly || PathContainment.isInside(path, homePath)
         }, insideHomeOnly: insideHomeOnly)
+        if let onSkipped {
+            all.filter { !$0.isAvailable }.forEach(onSkipped)
+        }
         let roots = all.filter(\.isAvailable).map(\.url)
         publish(walked: roots.map { $0.standardizedFileURL.path }, generation: generation)
         return roots
@@ -270,6 +281,18 @@ nonisolated enum ScanFolders {
     /// The walked folder that holds `path`, or nil.
     static func snapshotRoot(holding path: String) -> String? {
         snapshot.first { PathContainment.isSameOrInside(path, $0) }
+    }
+
+    /// A stale result from an added folder must not fall back to the home
+    /// folder-name allowlist when the saved folder or one of its children changes.
+    static func permitsProjectArtifactMove(_ url: URL, home: String = DeletionSafetyPolicy.cachedHomePath) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard ProjectArtifactCatalog.rulesByFolderName[url.lastPathComponent] != nil,
+              let root = savedSnapshot.first(where: { PathContainment.isSameOrInside(path, $0) })
+        else { return true }
+        guard snapshot.contains(root) else { return false }
+        let boundary = PathContainment.isInside(root, home) ? home : "/"
+        return !PathContainment.containsSymlinkComponent(url, home: boundary)
     }
 
     /// The walked folder outside the home folder that holds `path`, or nil.

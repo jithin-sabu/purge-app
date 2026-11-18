@@ -239,8 +239,10 @@ nonisolated final class FileDeleter: Sendable {
     /// fake, since the real one only knows the real home's `~/.nvm`.
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
-    /// Whether Purge has Full Disk Access, asked only after a permission error. Tests
-    /// hand in a fixed answer, since it changes how such an error reads (#299).
+    /// Whether Purge has Full Disk Access. A clean asks once at the start, to read
+    /// the added folders the way the scan did, and again after a permission
+    /// error, since it changes how that error reads (#299). Tests hand in a
+    /// fixed answer.
     private let fullDiskAccessGranted: @Sendable () -> Bool
 
     init(
@@ -277,6 +279,7 @@ nonisolated final class FileDeleter: Sendable {
     ///   by the standardized path of their asset folder, with the component
     ///   `xcodebuild -deleteComponent` takes. Same rule: the path is Apple's asset
     ///   store, which only `xcodebuild` may change (#132).
+    /// - Parameter requireOnDisk: On retry, drop files that have already disappeared.
     /// - Parameter onProgress: Called on the engine's executor after each item starts / successfully
     ///   deletes. Must be cheap; UI publishing is buffered elsewhere.
     @concurrent func deleteItems(
@@ -285,6 +288,7 @@ nonisolated final class FileDeleter: Sendable {
         pathToExpectedSizeBytes: [String: Int64] = [:],
         simulatorRuntimeIDsByPath: [String: String] = [:],
         xcodeComponentsByPath: [String: XcodeComponent.Kind] = [:],
+        requireOnDisk: Bool = false,
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var bytesMovedToTrash: Int64 = 0
@@ -302,11 +306,15 @@ nonisolated final class FileDeleter: Sendable {
         // only while that folder is on the list, so the list is read again from
         // disk before anything moves. A folder removed in Settings, or on a drive
         // that went away, is refused.
-        ScanFolders.refreshSnapshot()
+        let scanAccess: ScanAccess = fullDiskAccessGranted() ? .full : .limited
+        ScanFolders.refreshSnapshot(home: home, insideHomeOnly: scanAccess == .limited)
+        let projectHome = home.standardizedFileURL.path
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
             let friendlyTitle = pathToDisplayName[standardizedPath]
+            let passesProjectBoundary = ScanFolders.permitsProjectArtifactMove(url, home: projectHome)
+            if requireOnDisk, passesProjectBoundary, !Self.stillOnDisk(url) { continue }
 
             // Root-owned, so a plain Trash move can only fail. The helper moves them
             // after this loop, all in one request (#127).
@@ -425,7 +433,8 @@ nonisolated final class FileDeleter: Sendable {
             // The scan offered every row here, so a refusal now means the answer
             // changed since: Mail opened, Spotify downloaded music, a project
             // started holding state. The row says so instead of vanishing (#174).
-            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else {
+            guard passesProjectBoundary, DeletionSafetyPolicy.isOfferedForCleanup(url)
+            else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,
                     displayName: friendlyTitle,
@@ -448,7 +457,8 @@ nonisolated final class FileDeleter: Sendable {
                 // open, stays. `isOfferedForCleanup` skips these reads because it
                 // also runs on the main thread (#400).
                 let failsNvmBoundary = !immediateMoveCheck(url)
-                if failsCursorBoundary || failsWorktreeBoundary || failsNvmBoundary {
+                let projectIsInUse = ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess)
+                if failsCursorBoundary || failsWorktreeBoundary || failsNvmBoundary || projectIsInUse {
                     skippedItems.append(SkippedDeletionItem(
                         path: url.path,
                         displayName: friendlyTitle,
@@ -547,10 +557,13 @@ nonisolated final class FileDeleter: Sendable {
                         ))
                     }
                 } else {
-                    // Re-check after sizing. A browser can start using a framework
-                    // folder, or retarget Current onto it, during that wait, and a
-                    // Node process can start in an nvm version (#400).
-                    guard DeletionSafetyPolicy.isOfferedForCleanup(url), immediateMoveCheck(url) else {
+                    // Sizing gives browsers, Node, and other projects time to
+                    // start using a folder. Recheck before the Trash move.
+                    guard ScanFolders.permitsProjectArtifactMove(url, home: projectHome),
+                          DeletionSafetyPolicy.isOfferedForCleanup(url),
+                          !ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess),
+                          immediateMoveCheck(url)
+                    else {
                         skippedItems.append(SkippedDeletionItem(
                             path: url.path,
                             displayName: friendlyTitle,
@@ -1311,7 +1324,10 @@ nonisolated final class FileDeleter: Sendable {
         // `simctl` or `xcodebuild`, so only a file row can be seen to be gone.
         let isToolHandle = simulatorRuntimeID != nil || xcodeComponent != nil
             || Self.coreSimulatorDeviceUDID(from: url) != nil
-        if !isToolHandle, !Self.stillOnDisk(url) { return .alreadyGone }
+        // The cache route checks existence only after validating an added folder.
+        if route != .cache, !isToolHandle, !Self.stillOnDisk(url) {
+            return .alreadyGone
+        }
 
         let names = [key: displayName ?? url.lastPathComponent]
         let sizes = [key: expectedSizeBytes]
@@ -1324,7 +1340,8 @@ nonisolated final class FileDeleter: Sendable {
                     pathToDisplayName: names,
                     pathToExpectedSizeBytes: sizes,
                     simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:],
-                    xcodeComponentsByPath: xcodeComponent.map { [key: $0] } ?? [:]
+                    xcodeComponentsByPath: xcodeComponent.map { [key: $0] } ?? [:],
+                    requireOnDisk: !isToolHandle
                 )
             case .userSelected(let isAIModel, let privilegedEligible):
                 report = try await deleteUserSelectedFiles(

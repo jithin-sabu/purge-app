@@ -1544,3 +1544,19 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge ana klasörlerinizi zaten tarar. Onu da taramak için harici bir sürücü ya da başka bir klasör ekleyin.";
 "No folders added." = "Eklenmiş klasör yok.";
 "Choose a drive or folder to scan too." = "Taranacak bir sürücü ya da klasör seçin.";
+
+"Folders needing attention (%lld)" = "İlgilenilmesi gereken klasörler (%lld)";
+
+"This folder couldn't be read. Check its access permissions in Finder." = "Bu klasör okunamadı. Finder’da erişim izinlerini kontrol edin.";
+
+"This folder is missing or its drive is disconnected." = "Klasör bulunamadı veya sürücüsünün bağlantısı kesildi.";
+
+"This saved folder now points through a symbolic link." = "Bu kayıtlı klasör artık bir sembolik bağlantı üzerinden erişiliyor.";
+
+"This folder can no longer be used as a scan location. Review it in Settings." = "Bu klasör artık taranamıyor. Ayarlar’da gözden geçirin.";
+
+"This folder is excluded from scans." = "Bu klasör taramaların dışında tutuluyor.";
+
+"Reached the scan limit of %lld folder levels." = "%lld klasör düzeyi olan tarama sınırına ulaşıldı.";
+
+"Skipped subfolders because this folder has more than %lld entries." = "Bu klasörde %lld öğeden fazla olduğu için alt klasörler atlandı.";

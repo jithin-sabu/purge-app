@@ -704,6 +704,7 @@ final class PurgeStore: ObservableObject {
     /// Simulators discovered but not yet sized; published once their size resolves.
     private var stagedSimulatorsByID: [UUID: SimulatorDevice] = [:]
     private var scanTask: Task<Void, Never>?
+    @Published private(set) var projectScanIssues: [ProjectScanIssue] = []
     private var projectDiscoveryTask: Task<Void, Never>?
     /// Project discovery finished while the full scan it started with was still
     /// running. The project list is saved once that scan finishes.
@@ -4599,7 +4600,7 @@ final class PurgeStore: ObservableObject {
                     lastModified: lastModified
                 )
                 scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
-            case .projectGroupFound:
+            case .projectGroupFound, .projectScanIssue:
                 break
             case .simulatorFound(let simulator):
                 simulatorsFound += 1
@@ -4688,6 +4689,7 @@ final class PurgeStore: ObservableObject {
 
             let streamStart = Date()
             var projectGroupsFound = 0
+            var issues: [String: ProjectScanIssue] = [:]
             let coalesce = ProjectGroupCoalesceBuffers()
             defer { coalesce.debounceTask?.cancel() }
 
@@ -4698,6 +4700,8 @@ final class PurgeStore: ObservableObject {
                     projectGroupsFound += 1
                     coalesce.ingest(group)
                     scheduleProjectGroupFlush(coalesce: coalesce, generation: generation)
+                case .projectScanIssue(let issue):
+                    issues[issue.path] = issue
                 case .devToolFound, .devToolSizeResolved, .simulatorFound, .simulatorSizeResolved,
                      .runningSimulatorsFound, .simulatorRuntimeFound, .xcodeComponentFound:
                     // The developer scan's stream carries these; project discovery never sends them.
@@ -4709,6 +4713,7 @@ final class PurgeStore: ObservableObject {
             // What it still holds belongs to a list a newer scan has cleared, where
             // the newer discovery's git check would mark it clean (#173).
             guard scanGeneration == generation, !Task.isCancelled else { return }
+            projectScanIssues = issues.values.sorted { $0.path < $1.path }
             flushProjectGroupBuffers(coalesce: coalesce, animate: false)
             // Ended before the full scan it started with: the list is saved when
             // that scan finishes, as it was when discovery only ran after it.
@@ -5353,6 +5358,7 @@ final class PurgeStore: ObservableObject {
     }
 
     private func clearDeveloperScanState() {
+        projectScanIssues = []
         lastScanListsStarted([.devTools, .simulators, .runtimes, .xcodeComponents, .projects])
         projectDiscoveryTask?.cancel()
         projectDiscoveryTask = nil
