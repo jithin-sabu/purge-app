@@ -59,6 +59,23 @@ nonisolated enum ProjectActivityPolicy {
         return gitLockFiles.contains { modificationDate(gitDir.appendingPathComponent($0)) != nil }
     }
 
+    /// The scan's activity check can be stale by the time an artifact reaches
+    /// the Trash, especially on Retry. Match the same catalog roots again.
+    static func artifactBelongsToActiveProject(_ artifact: URL, access: ScanAccess) -> Bool {
+        guard let rules = ProjectArtifactCatalog.rulesByFolderName[artifact.lastPathComponent] else { return false }
+        if !ProtectedLocations.isReadable(artifact, access: access) { return true }
+        let path = artifact.standardizedFileURL.path
+        let roots = rules.compactMap { rule -> URL? in
+            guard path.hasSuffix("/" + rule.folder) else { return nil }
+            var root = artifact.standardizedFileURL
+            for _ in rule.folder.split(separator: "/") { root.deleteLastPathComponent() }
+            return rule.matchesRoot(root) ? root : nil
+        }
+        guard !roots.isEmpty else { return false }
+        let live = LiveContext.current()
+        return roots.contains { isInUse(projectRoot: $0, live: live, access: access) }
+    }
+
     /// What the activity check found. A walk that stopped at its limit has proved
     /// nothing either way, so it is neither recent nor unused.
     enum Activity: Equatable {

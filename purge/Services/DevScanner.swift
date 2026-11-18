@@ -4,6 +4,7 @@ enum DeveloperScanEvent {
     case devToolFound(DevTool)
     case devToolSizeResolved(id: String, pathSizeBytesByPath: [String: Int64], sizeBytes: Int64, lastModified: Date)
     case projectGroupFound(ProjectGroup)
+    case projectScanIssue(ProjectScanIssue)
     case simulatorFound(SimulatorDevice)
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
     /// Booted simulators, already sized. Shown so their space is accounted for, never
@@ -1139,6 +1140,7 @@ nonisolated final class DevScanner {
     // MARK: - Project-aware scan
 
     private static let maxDirectoryEntriesBeforeSkip = 2000
+    private static let addedProjectDepth = 12
 
     /// Whether a root still needs walking to `depth`. `~/Developer` and `~/developer`
     /// are one folder on the default case-insensitive volume, and a root can be a
@@ -1185,12 +1187,17 @@ nonisolated final class DevScanner {
         onDirectory: (@Sendable (URL) -> Void)? = nil
     ) async -> [ProjectGroup] {
         let walkStart = Date()
+        let report: @Sendable (ProjectScanIssue) -> Void = { issue in
+            continuation?.yield(.projectScanIssue(issue))
+        }
+        let added = roots == nil ? Self.addedSearchRoots(home: home, access: access, onIssue: report) : []
         let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
-            in: roots ?? (Self.projectSearchRoots(home: home) + Self.addedSearchRoots(home: home, access: access)),
+            in: roots ?? (added + Self.projectSearchRoots(home: home)),
             home: home,
             access: access,
             maxDepth: maxDepth,
-            onDirectory: onDirectory
+            onDirectory: onDirectory,
+            onIssue: report
         )
         // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
         guard !Task.isCancelled else { return [] }
@@ -1228,12 +1235,14 @@ nonisolated final class DevScanner {
     /// are walked: a folder on another drive raises macOS's removable volume
     /// prompt, which a limited scan never does. Decided on the path alone, so
     /// nothing on the drive is read first.
-    nonisolated static func addedSearchRoots(home: URL, access: ScanAccess) -> [URL] {
-        switch access {
-        case .full:
-            return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: false)
-        case .limited:
-            return ScanFolders.refreshSnapshot(home: home, insideHomeOnly: true)
+    nonisolated static func addedSearchRoots(
+        home: URL,
+        access: ScanAccess,
+        onIssue: (@Sendable (ProjectScanIssue) -> Void)? = nil
+    ) -> [URL] {
+        ScanFolders.refreshSnapshot(home: home, insideHomeOnly: access == .limited) { entry in
+            guard let refusal = entry.refusal else { return }
+            onIssue?(ProjectScanIssue(path: entry.path, reason: .unavailable(refusal)))
         }
     }
 
@@ -1288,7 +1297,8 @@ nonisolated final class DevScanner {
         access: ScanAccess,
         maxDepth: Int = 4,
         nonLocalMounts: Set<String>? = nil,
-        onDirectory: (@Sendable (URL) -> Void)? = nil
+        onDirectory: (@Sendable (URL) -> Void)? = nil,
+        onIssue: (@Sendable (ProjectScanIssue) -> Void)? = nil
     ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
         var discoveredRoots: [(URL, [ProjectType])] = []
@@ -1330,12 +1340,17 @@ nonisolated final class DevScanner {
             let realPath: String?
             let depth: Int
             let maxDepth: Int
+            let isAdded: Bool
             var types: [ProjectType] = []
             var children: [Int] = []
         }
 
         /// Reads one folder: its project markers, and the folders to walk next.
         func read(_ folder: Folder) -> (types: [ProjectType], next: [(URL, String?)]) {
+            if folder.isAdded, ExcludedPathsStore.isExcluded(folder.url) {
+                if folder.depth == 0 { onIssue?(ProjectScanIssue(path: folder.url.path, reason: .excluded)) }
+                return ([], [])
+            }
             // One listing serves the project markers and the walk below (#190).
             let listing = try? fm.contentsOfDirectory(
                 at: folder.url,
@@ -1350,10 +1365,22 @@ nonisolated final class DevScanner {
                ScanFolders.isOffLimits(name: folder.url.lastPathComponent, childNames: Set(listing.map(\.lastPathComponent))) {
                 return ([], [])
             }
-            let types = Self.projectTypes(at: folder.url, listing: listing)
-
-            guard folder.depth < folder.maxDepth, let entries = listing else { return (types, []) }
-            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return (types, []) }
+            guard let entries = listing else {
+                if folder.isAdded {
+                    onIssue?(ProjectScanIssue(path: folder.url.path, reason: .unreadable))
+                    return ([], [])
+                }
+                return (Self.projectTypes(at: folder.url, listing: nil), [])
+            }
+            let types = Self.projectTypes(at: folder.url, listing: entries)
+            let reachedDepth = folder.depth >= folder.maxDepth
+            if reachedDepth, !folder.isAdded || onIssue == nil { return (types, []) }
+            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else {
+                if folder.isAdded {
+                    onIssue?(ProjectScanIssue(path: folder.url.path, reason: .entryLimit(Self.maxDirectoryEntriesBeforeSkip)))
+                }
+                return (types, [])
+            }
 
             var next: [(URL, String?)] = []
             for entry in entries {
@@ -1383,6 +1410,11 @@ nonisolated final class DevScanner {
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 
+                if folder.isAdded, ExcludedPathsStore.isExcluded(entry) { continue }
+                if reachedDepth {
+                    onIssue?(ProjectScanIssue(path: folder.url.path, reason: .depthLimit(folder.maxDepth)))
+                    break
+                }
                 next.append((entry, entryRealPath))
             }
             return (types, next)
@@ -1396,20 +1428,27 @@ nonisolated final class DevScanner {
             // root that is a link into a protected folder is never opened.
             let realRoot: String?
             if access == .limited {
-                guard let resolved = ProtectedLocations.readablePath(of: root, home: home) else { continue }
+                guard let resolved = ProtectedLocations.readablePath(of: root, home: home) else {
+                    if addedRoots.contains(root.path) { onIssue?(ProjectScanIssue(path: root.path, reason: .unreadable)) }
+                    continue
+                }
                 realRoot = resolved
             } else {
                 realRoot = nil
             }
-            guard fm.fileExists(atPath: root.path) else { continue }
+            let isAdded = addedRoots.contains(root.path)
+            guard fm.fileExists(atPath: root.path) else {
+                if isAdded { onIssue?(ProjectScanIssue(path: root.path, reason: .unavailable(.notAFolder))) }
+                continue
+            }
             // When the root is the home directory itself, limit to depth 1
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
-            let effectiveMaxDepth = (root.path == home.path) ? 1 : maxDepth
+            let effectiveMaxDepth = root.path == home.path ? 1 : (isAdded ? max(maxDepth, Self.addedProjectDepth) : maxDepth)
             // After the checks above, since `stat` follows a link.
             guard Self.shouldWalk(root, toDepth: effectiveMaxDepth, walkedDepths: &walkedDepths) else { continue }
             rootIndices.append(folders.count)
-            folders.append(Folder(url: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth))
+            folders.append(Folder(url: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth, isAdded: isAdded))
         }
 
         // The folders at one depth are read side by side, then the next depth.
@@ -1435,7 +1474,7 @@ nonisolated final class DevScanner {
                 for (url, realPath) in result.next {
                     folders[index].children.append(folders.count)
                     nextLevel.append(folders.count)
-                    folders.append(Folder(url: url, realPath: realPath, depth: parent.depth + 1, maxDepth: parent.maxDepth))
+                    folders.append(Folder(url: url, realPath: realPath, depth: parent.depth + 1, maxDepth: parent.maxDepth, isAdded: parent.isAdded))
                 }
             }
             level = nextLevel

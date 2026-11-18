@@ -1502,3 +1502,19 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge уже сканирует ваши домашние папки. Добавьте внешний диск или другую папку, чтобы сканировать и её.";
 "No folders added." = "Папки не добавлены.";
 "Choose a drive or folder to scan too." = "Выберите диск или папку, которые тоже нужно сканировать.";
+
+"Folders needing attention (%lld)" = "Папки, требующие внимания (%lld)";
+
+"This folder couldn't be read. Check its access permissions in Finder." = "Не удалось прочитать папку. Проверьте права доступа в Finder.";
+
+"This folder is missing or its drive is disconnected." = "Папка отсутствует или её диск отключён.";
+
+"This saved folder now points through a symbolic link." = "Путь к сохранённой папке теперь проходит через символическую ссылку.";
+
+"This folder can no longer be used as a scan location. Review it in Settings." = "Эту папку больше нельзя сканировать. Проверьте её в настройках.";
+
+"This folder is excluded from scans." = "Эта папка исключена из сканирования.";
+
+"Reached the scan limit of %lld folder levels." = "Достигнут предел глубины сканирования: %lld уровней.";
+
+"Skipped subfolders because this folder has more than %lld entries." = "Подпапки пропущены, поскольку в этой папке более %lld элементов.";

@@ -20,6 +20,7 @@ struct DevToolsView: View {
         self.usesExternalScrollContainer = usesExternalScrollContainer
     }
 
+    @State private var showsProjectScanIssues = false
     @State private var expandedProjectRoots = Set<String>()
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
@@ -655,11 +656,14 @@ struct DevToolsView: View {
             }
         }
         .background(AppColors.surfaceBase)
+        .sheet(isPresented: $showsProjectScanIssues) {
+            ProjectScanIssuesSheet(issues: store.projectScanIssues)
+        }
         .scanListKeyboard(
             keyboard,
             rows: keyboardRows,
             actions: keyboardActions,
-            isBlocked: { [store] in store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
+            isBlocked: { [store] in showsProjectScanIssues || store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
         )
     }
 
@@ -867,6 +871,14 @@ struct DevToolsView: View {
             HStack(alignment: .bottom) {
                 SafeFirstSelectAllControl(model: selectAll, apply: applySelectAll)
                 Spacer()
+                if !store.projectScanIssues.isEmpty {
+                    Button {
+                        showsProjectScanIssues = true
+                    } label: {
+                        Label("Folders needing attention (\(store.projectScanIssues.count))", systemImage: "exclamationmark.circle")
+                    }
+                    .buttonStyle(.purge(.secondary, size: .small))
+                }
                 AppSortMenu(selection: sortOptionBinding)
             }
             .scanTabSelectAllRowLayout()
