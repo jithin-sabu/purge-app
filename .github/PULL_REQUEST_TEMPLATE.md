@@ -16,7 +16,7 @@
 
 ## Screenshots
 
-<!-- For UI changes, before/after screenshots or a screen recording. Delete this section if not applicable. -->
+<!-- For UI changes, before/after screenshots in dark mode. Don't commit them: run scripts/publish-screenshots.sh <issue> <shots> and paste the links it prints. Delete this section if not applicable. -->
 
 ## Checklist
 
