@@ -1210,6 +1210,7 @@ nonisolated final class DevScanner {
         )
         let (groups, artifactsSized) = await buildProjectGroups(
             for: discoveredRoots,
+            home: home,
             access: access,
             filter: filter,
             continuation: continuation
@@ -1558,6 +1559,7 @@ nonisolated final class DevScanner {
 
     private func buildProjectGroups(
         for discovered: [(URL, [ProjectType])],
+        home: URL,
         access: ScanAccess,
         filter: ProjectListingFilter,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
@@ -1575,7 +1577,7 @@ nonisolated final class DevScanner {
 
             while inFlight < Self.maxConcurrentProjectSizings, let next = pending.next() {
                 group.addTask { [next] in
-                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access, filter: filter)
+                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access, filter: filter, home: home)
                 }
                 inFlight += 1
             }
@@ -1591,7 +1593,7 @@ nonisolated final class DevScanner {
                 if Task.isCancelled { continue }
                 if let next = pending.next() {
                     group.addTask { [next] in
-                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access, filter: filter)
+                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access, filter: filter, home: home)
                     }
                 }
             }
@@ -1615,7 +1617,8 @@ nonisolated final class DevScanner {
         rootURL: URL,
         types: [ProjectType],
         access: ScanAccess,
-        filter: ProjectListingFilter
+        filter: ProjectListingFilter,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> (ProjectGroup?, Int) {
         let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types, access: access)
         guard !rows.isEmpty else { return (nil, 0) }
@@ -1691,10 +1694,21 @@ nonisolated final class DevScanner {
                 rootPath: rootURL,
                 inferredTypes: types,
                 artifacts: sized,
-                repositoryRoot: GitRepositoryFinder.enclosingRepository(for: rootURL)
+                repositoryRoot: Self.projectRepositoryRoot(for: rootURL, home: home)
             ),
             rows.count
         )
+    }
+
+    nonisolated static func projectRepositoryRoot(for project: URL, home: URL) -> URL? {
+        // The chosen folder can itself be a repository. For the normal home
+        // scan, stop below home so a dotfiles repository can't own every card.
+        let addedRoot = ScanFolders.snapshotRoot(holding: project.standardizedFileURL.path)
+        let homePath = home.standardizedFileURL.path
+        return GitRepositoryFinder.enclosingRepository(for: project) { candidate in
+            if let addedRoot { return PathContainment.isSameOrInside(candidate, addedRoot) }
+            return PathContainment.isInside(candidate, homePath)
+        }
     }
 
     struct SizedArtifactIntermediate {

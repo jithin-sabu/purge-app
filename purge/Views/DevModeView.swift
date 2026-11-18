@@ -405,7 +405,7 @@ struct DevToolsView: View {
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
         let filter = currentSafetyFilter
-        return g.artifacts.indices.filter { filter.matches(g.artifacts[$0].safetyInfo) }
+        return g.artifacts.indices.filter { store.showsRow(g.artifacts[$0], under: filter) }
     }
 
     private func projectSelectTriState(forGroupIndex gi: Int) -> SelectAllTriState {
@@ -435,8 +435,7 @@ struct DevToolsView: View {
     private func sortedVisibleArtifactIndices(forGroup gi: Int) -> [Int] {
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
-        let filter = currentSafetyFilter
-        let raw = g.artifacts.indices.filter { store.showsRow(g.artifacts[$0], under: filter) }
+        let raw = eligibleArtifactIndices(forGroupIndex: gi)
         switch currentSort {
         case .sizeDesc:
             return raw.sorted { g.artifacts[$0].sizeBytes > g.artifacts[$1].sizeBytes }

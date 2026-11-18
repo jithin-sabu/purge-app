@@ -1,9 +1,12 @@
 import Foundation
 
 enum GitRepositoryFinder {
-    nonisolated static func enclosingRepository(for itemPath: URL) -> URL? {
+    nonisolated static func enclosingRepository(
+        for itemPath: URL,
+        isInScope: (String) -> Bool = { _ in true }
+    ) -> URL? {
         var candidate = itemPath.standardizedFileURL
-        while true {
+        while isInScope(candidate.path) {
             if hasGit(at: candidate) {
                 return candidate
             }

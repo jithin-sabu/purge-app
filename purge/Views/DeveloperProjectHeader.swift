@@ -122,6 +122,10 @@ struct DeveloperProjectHeader: View {
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .textSelection(.enabled)
+                if let reason = artifacts.lazy.filter({ $0.safetyInfo.level == .medium })
+                    .compactMap(\.checkFirstReason).first {
+                    Text(reason.summary).font(AppStyle.Typography.callout)
+                }
                 ForEach(artifacts) { artifact in
                     VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
                         HStack {
@@ -140,9 +144,6 @@ struct DeveloperProjectHeader: View {
                         }
                         Text(LocalizedStringKey(artifact.safetyInfo.explanation))
                             .font(AppStyle.Typography.callout)
-                        if let reason = artifact.checkFirstReason, artifact.safetyInfo.level == .medium {
-                            Text(reason.summary).font(AppStyle.Typography.callout)
-                        }
                         if artifact.reinstallSafety == .reinstallable {
                             AppBadge(text: String(localized: "Can be rebuilt"), tone: .safe)
                         } else if artifact.reinstallSafety == .missingLockfile {
