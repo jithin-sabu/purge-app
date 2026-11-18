@@ -137,6 +137,16 @@
 "CMake build" = "CMake derlemesi";
 "Cabal build" = "Cabal derlemesi";
 "Cache rebuilds on launch." = "Önbellek açılışta yeniden oluşur.";
+
+/* Cache folder inspector (#392) */
+"Review these folders in Finder before deciding what to keep." = "Neyi tutacağınıza karar vermeden önce bu klasörleri Finder'da inceleyin.";
+"Inspect Cache Folders" = "Önbellek Klasörlerini İncele";
+"Other cache folders to inspect" = "İncelenecek diğer önbellek klasörleri";
+"Measuring cache folders…" = "Önbellek klasörleri ölçülüyor…";
+"Purge couldn't read ~/.cache." = "Purge ~/.cache klasörünü okuyamadı.";
+"No other cache folders found." = "Başka önbellek klasörü bulunamadı.";
+"Size unavailable" = "Boyut bilinmiyor";
+
 "Caches" = "Önbellekler";
 "Calculating…" = "Hesaplanıyor…";
 "Can be rebuilt" = "Yeniden oluşturulabilir";
@@ -1543,17 +1553,3 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge ana klasörlerinizi zaten tarar. Onu da taramak için harici bir sürücü ya da başka bir klasör ekleyin.";
 "No folders added." = "Eklenmiş klasör yok.";
 "Choose a drive or folder to scan too." = "Taranacak bir sürücü ya da klasör seçin.";
-
-"Review these folders in Finder before deciding what to keep." = "Neyi tutacağınıza karar vermeden önce bu klasörleri Finder'da inceleyin.";
-
-"Inspect Cache Folders" = "Önbellek Klasörlerini İncele";
-
-"Other cache folders to inspect" = "İncelenecek diğer önbellek klasörleri";
-
-"Measuring cache folders…" = "Önbellek klasörleri ölçülüyor…";
-
-"Purge couldn't read ~/.cache." = "Purge ~/.cache klasörünü okuyamadı.";
-
-"No other cache folders found." = "Başka önbellek klasörü bulunamadı.";
-
-"Size unavailable" = "Boyut bilinmiyor";

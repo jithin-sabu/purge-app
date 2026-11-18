@@ -137,6 +137,16 @@
 "CMake build" = "CMake 构建";
 "Cabal build" = "Cabal 构建";
 "Cache rebuilds on launch." = "启动时会重新生成缓存。";
+
+/* Cache folder inspector (#392) */
+"Review these folders in Finder before deciding what to keep." = "决定保留哪些内容之前，请先在访达中检查这些文件夹。";
+"Inspect Cache Folders" = "检查缓存文件夹";
+"Other cache folders to inspect" = "其他待检查的缓存文件夹";
+"Measuring cache folders…" = "正在测量缓存文件夹…";
+"Purge couldn't read ~/.cache." = "Purge 无法读取 ~/.cache。";
+"No other cache folders found." = "未找到其他缓存文件夹。";
+"Size unavailable" = "大小未知";
+
 "Caches" = "缓存";
 "Calculating…" = "正在计算…";
 "Can be rebuilt" = "可以重建";
@@ -1543,17 +1553,3 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge 已经会扫描你的个人文件夹。添加外置磁盘或其他文件夹，它也会一并被扫描。";
 "No folders added." = "尚未添加文件夹。";
 "Choose a drive or folder to scan too." = "选择一个也要扫描的磁盘或文件夹。";
-
-"Review these folders in Finder before deciding what to keep." = "决定保留哪些内容之前，请先在访达中检查这些文件夹。";
-
-"Inspect Cache Folders" = "检查缓存文件夹";
-
-"Other cache folders to inspect" = "其他待检查的缓存文件夹";
-
-"Measuring cache folders…" = "正在测量缓存文件夹…";
-
-"Purge couldn't read ~/.cache." = "Purge 无法读取 ~/.cache。";
-
-"No other cache folders found." = "未找到其他缓存文件夹。";
-
-"Size unavailable" = "大小未知";

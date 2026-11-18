@@ -20,8 +20,8 @@ struct DevToolsView: View {
         self.usesExternalScrollContainer = usesExternalScrollContainer
     }
 
-    @State private var showsCacheInspector = false
     @State private var expandedProjectRoots = Set<String>()
+    @State private var showsCacheInspector = false
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
     /// view never observes the highlight; only the rows do.
@@ -656,17 +656,11 @@ struct DevToolsView: View {
             }
         }
         .background(AppColors.surfaceBase)
-        .sheet(isPresented: $showsCacheInspector) {
-            CacheFolderInspectorSheet(
-                root: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache", isDirectory: true),
-                knownPaths: knownCacheInspectorPaths
-            )
-        }
         .scanListKeyboard(
             keyboard,
             rows: keyboardRows,
             actions: keyboardActions,
-            isBlocked: { [store] in showsCacheInspector || store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
+            isBlocked: { [store] in store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
         )
     }
 
@@ -871,8 +865,22 @@ struct DevToolsView: View {
     }
 
     private var filterToolbarChrome: some View {
-        SafetyFilterChipRow(safetyFilter: safetyFilterBinding, chipCounts: chipCounts)
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        HStack(spacing: AppStyle.Spacing.small) {
+            SafetyFilterChipRow(safetyFilter: safetyFilterBinding, chipCounts: chipCounts)
+            Button {
+                showsCacheInspector = true
+            } label: {
+                Label("Inspect Cache Folders", systemImage: "folder.badge.questionmark")
+            }
+            .buttonStyle(.purge(.secondary, size: .small))
+            .sheet(isPresented: $showsCacheInspector) {
+                CacheFolderInspectorSheet(
+                    root: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache", isDirectory: true),
+                    knownPaths: knownCacheInspectorPaths
+                )
+            }
+        }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
@@ -883,12 +891,6 @@ struct DevToolsView: View {
             HStack(alignment: .bottom) {
                 SafeFirstSelectAllControl(model: selectAll, apply: applySelectAll)
                 Spacer()
-                Button {
-                    showsCacheInspector = true
-                } label: {
-                    Label("Inspect Cache Folders", systemImage: "folder.badge.questionmark")
-                }
-                .buttonStyle(.purge(.secondary, size: .small))
                 AppSortMenu(selection: sortOptionBinding)
             }
             .scanTabSelectAllRowLayout()
