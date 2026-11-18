@@ -233,8 +233,13 @@ nonisolated final class FileDeleter: Sendable {
     /// Whether `macOS Install Data` still holds only leftovers from a finished update.
     private let installLeftoverRule: @Sendable () -> Bool
 
-    /// Whether Purge has Full Disk Access, asked only after a permission error. Tests
-    /// hand in a fixed answer, since it changes how such an error reads (#299).
+    /// The last check before a Dev Tools row moves that reads what the list gate
+    /// can't afford on the main thread: for an nvm Node version, its configs,
+    /// `bin` links and `lsof` (#400). True lets the move go. Tests hand in a
+    /// fake, since the real one only knows the real home's `~/.nvm`.
+    private let immediateMoveCheck: @Sendable (URL) -> Bool
+
+    /// Whether Purge has Full Disk Access. Tests can hand in a fixed answer.
     private let fullDiskAccessGranted: @Sendable () -> Bool
 
     init(
@@ -246,8 +251,10 @@ nonisolated final class FileDeleter: Sendable {
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
         listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) },
-        fullDiskAccessGranted: @escaping @Sendable () -> Bool = { PermissionChecker().hasFullDiskAccess() }
+        fullDiskAccessGranted: @escaping @Sendable () -> Bool = { PermissionChecker().hasFullDiskAccess() },
+        immediateMoveCheck: @escaping @Sendable (URL) -> Bool = { NvmNodeVersionPolicy.passesImmediateTrashBoundary($0) }
     ) {
+        self.immediateMoveCheck = immediateMoveCheck
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
         self.simulatorDeviceRemover = simulatorDeviceRemover
         self.xcodeComponentRemover = xcodeComponentRemover
@@ -443,8 +450,12 @@ nonisolated final class FileDeleter: Sendable {
                     && !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url)
                 let failsWorktreeBoundary = AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(url, home: allowlistHome)
                     && !AgentWorktreeScanPolicy.passesImmediateTrashBoundary(url)
+                // An nvm version a config or `bin` link names, or a process has
+                // open, stays. `isOfferedForCleanup` skips these reads because it
+                // also runs on the main thread (#400).
+                let failsNvmBoundary = !immediateMoveCheck(url)
                 let projectIsInUse = ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess)
-                if failsCursorBoundary || failsWorktreeBoundary || projectIsInUse {
+                if failsCursorBoundary || failsWorktreeBoundary || failsNvmBoundary || projectIsInUse {
                     skippedItems.append(SkippedDeletionItem(
                         path: url.path,
                         displayName: friendlyTitle,
@@ -543,11 +554,12 @@ nonisolated final class FileDeleter: Sendable {
                         ))
                     }
                 } else {
-                    // Re-check after sizing. A browser can start using a framework
-                    // folder, or retarget Current onto it, during that wait.
+                    // Sizing gives browsers, Node, and other projects time to
+                    // start using a folder. Recheck before the Trash move.
                     guard ScanFolders.permitsProjectArtifactMove(url, home: projectHome),
                           DeletionSafetyPolicy.isOfferedForCleanup(url),
-                          !ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess)
+                          !ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess),
+                          immediateMoveCheck(url)
                     else {
                         skippedItems.append(SkippedDeletionItem(
                             path: url.path,

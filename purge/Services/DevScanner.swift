@@ -118,6 +118,21 @@ nonisolated final class DevScanner {
                 reinstallCommand: base.reinstallCommand
             )
         }
+        // One row per nvm Node version, named like the NDK rows (#400).
+        if let version = NvmNodeVersionPolicy.version(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: NvmNodeVersionPolicy.explanationKey,
+                friendlyFallback: toolLabel,
+                path: primaryPath
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Node.js \(version) (nvm)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: "nvm install \(version)"
+            )
+        }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -1201,6 +1216,18 @@ nonisolated final class DevScanner {
         )
         // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
         guard !Task.isCancelled else { return [] }
+
+        // The `.nvmrc` paths nvm reads for the projects this walk found, in each
+        // one and every folder above it, keep their Node versions (#400). Only a
+        // walk of the usual roots counts, never one a caller narrowed.
+        if roots == nil {
+            NvmrcLedger.shared.record(
+                NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: discoveredRoots.map(\.0)),
+                home: home.standardizedFileURL.path,
+                fullAccess: access == .full,
+                mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }
+            )
+        }
 
         ScanPhaseTiming.finish(
             "discoverProjects walk",

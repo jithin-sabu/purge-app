@@ -150,6 +150,31 @@ struct ProjectScanDepthTests {
         }
     }
 
+    @Test func upstreamMoveCheckCanStillRefuseAfterAnItemStarts() async throws {
+        let fm = FileManager.default
+        let home = trashTestHome()
+        defer { try? fm.removeItem(at: home) }
+        let added = home.appendingPathComponent("Source")
+        let project = added.appendingPathComponent("App")
+        let artifact = project.appendingPathComponent("node_modules")
+        try fm.createDirectory(at: artifact, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: project.appendingPathComponent("package.json"))
+        let moveAllowed = OSAllocatedUnfairLock(initialState: true)
+        let trash = FakeTrash()
+        let deleter = FileDeleter(home: home, trash: trash.trash, fullDiskAccessGranted: { true },
+            immediateMoveCheck: { _ in moveAllowed.withLock { $0 } })
+        let path = added.standardizedFileURL.path
+        let report = try await ScanFolders.$snapshotOverride.withValue(.init(walked: [path], saved: [path])) {
+            try await deleter.deleteItems(at: [artifact], onProgress: { event in
+                guard case .itemStarted = event else { return }
+                moveAllowed.withLock { $0 = false }
+            })
+        }
+        #expect(!moveAllowed.withLock { $0 })
+        #expect(report.skippedItems.map(\.path) == [artifact.path])
+        #expect(trash.trashedPaths.isEmpty)
+    }
+
     private func trashTestHome() -> URL {
         // /tmp is scratch space and, unlike /var/folders, is outside the
         // system /var denylist. Inject the walk and intercept Trash.

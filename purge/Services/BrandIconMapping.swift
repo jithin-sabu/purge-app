@@ -250,6 +250,10 @@ enum BrandIconMapping {
         if OldToolVersionScanPolicy.ndkVersion(inLabel: key) != nil {
             return "androidstudio"
         }
+        // Each nvm Node row's key is its label, `nvm Node.js <version>` (#400).
+        if NvmNodeVersionPolicy.version(inLabel: key) != nil {
+            return "nodedotjs"
+        }
         return nil
     }
 
