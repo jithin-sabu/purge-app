@@ -421,7 +421,7 @@
 "Downloaded installation files for Homebrew packages. Safe to delete and Homebrew will simply re-download them if you reinstall any packages." = "Homebrew paketleri için indirilmiş kurulum dosyaları. Silmek güvenlidir ve herhangi bir paketi yeniden yüklerseniz Homebrew bunları yeniden indirir.";
 
 "nvm Node.js Versions" = "nvm Node.js Sürümleri";
-"Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on." = "nvm tarafından yönetilen Node.js sürümleri. Kullanılmayan sürümleri silmek güvenlidir — projelerinizin bağlı olduğu sürümleri kaldırmaktan kaçının.";
+"Node.js versions managed by nvm. Each one also holds the global npm packages installed with it, so removing a version removes those too." = "nvm tarafından yönetilen Node.js sürümleri. Her biri, onunla birlikte yüklenen global npm paketlerini de içerir; bu yüzden bir sürümü kaldırmak bu paketleri de kaldırır.";
 
 "Volta Tool Cache" = "Volta Araç Önbelleği";
 "Cached Node.js and package manager versions managed by Volta. Safe to delete and Volta will re-download versions as needed." = "Volta tarafından yönetilen önbelleğe alınmış Node.js ve paket yöneticisi sürümleri. Silmek güvenlidir ve Volta sürümleri gerektiğinde yeniden indirir.";
@@ -875,6 +875,9 @@
 
 "Antigravity Browser Cache" = "Antigravity Tarayıcı Önbelleği";
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity'nin web görevleri için kullandığı tarayıcının sayfa ve betik önbellekleri; sayfaları yükledikçe yeniden dolar. Oturum açmalarına, geçmişe ve uzantılara dokunulmaz.";
+
+"nvm Node.js Version" = "nvm Node.js Sürümü";
+"An older Node.js nvm installed. No nvm alias, .nvmrc or global package uses it, and the newest of each major stays. nvm install brings it back." = "nvm ile yüklenmiş daha eski bir Node.js. Hiçbir nvm takma adı, .nvmrc veya global paket onu kullanmıyor ve her ana sürümün en yenisi kalır. nvm install onu geri getirir.";
 
 "nvm Download Cache" = "nvm İndirme Önbelleği";
 "Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it." = "nvm'in bir sürümü yükledikten sonra tuttuğu Node.js indirmeleri. Yüklü sürümlere dokunulmaz. Silmek güvenlidir; bir sürümü yeniden yüklerseniz nvm onu yeniden indirir.";

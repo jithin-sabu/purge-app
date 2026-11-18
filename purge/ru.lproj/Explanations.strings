@@ -18,6 +18,7 @@
 "Alfred Launcher" = "Лаунчер Alfred";
 "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "Все образы, контейнеры и тома; в некоторых из них хранятся базы данных. Чтобы сохранить тома, запустите docker --context desktop-linux system prune, пока Docker открыт, или закройте Docker.";
 "An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays." = "Более старый Android NDK. Gradle скачает его снова, когда он понадобится проекту. Сборка без Gradle может не пройти, пока вы не установите его заново. Самая новая версия остаётся.";
+"An older Node.js nvm installed. No nvm alias, .nvmrc or global package uses it, and the newest of each major stays. nvm install brings it back." = "Более старая версия Node.js, установленная через nvm. Её не использует ни один алиас nvm, .nvmrc или глобальный пакет, а самая новая версия каждой основной ветки остаётся. Вернуть её можно командой nvm install.";
 "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "Результаты анализа, которые языковой сервер Dart и Flutter хранит в ~/.dartServer, чтобы проекты открывались быстрее. Удалять безопасно — анализатор создаст их заново.";
 "Android Build Cache" = "Кэш сборки Android";
 "Android Build Output" = "Результаты сборки Android";
@@ -267,7 +268,7 @@
 "Node.js Packages" = "Пакеты Node.js";
 "Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it." = "Загрузки Node.js, которые nvm оставляет после установки версии. Установленные версии не затрагиваются. Можно безопасно удалить — при переустановке версии nvm скачает её заново.";
 "Node.js header files that node-gyp downloads to build native add-ons. Safe to delete; it downloads them again on the next native build." = "Заголовочные файлы Node.js, которые node-gyp скачивает для сборки нативных расширений. Удалять безопасно — при следующей нативной сборке он скачает их снова.";
-"Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on." = "Версии Node.js, которыми управляет nvm. Ненужные версии можно безопасно удалить, но не удаляйте те, от которых зависят ваши проекты.";
+"Node.js versions managed by nvm. Each one also holds the global npm packages installed with it, so removing a version removes those too." = "Версии Node.js, которыми управляет nvm. В каждой также лежат глобальные пакеты npm, установленные вместе с ней, поэтому при удалении версии удаляются и они.";
 "Notion" = "Notion";
 "NuGet Package Cache" = "Кэш пакетов NuGet";
 "Nuxt Build Cache" = "Кэш сборки Nuxt";
@@ -591,6 +592,7 @@
 "npm Package Cache" = "Кэш пакетов npm";
 "npm npx Cache" = "Кэш npm npx";
 "nvm Download Cache" = "Кэш загрузок nvm";
+"nvm Node.js Version" = "Версия Node.js в nvm";
 "nvm Node.js Versions" = "Версии Node.js в nvm";
 "opam Download Cache" = "Кэш загрузок opam";
 "photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images." = "Photoshop, Lightroom и Bridge кэшируют здесь RAW-превью. Можно безопасно очистить — при открытии изображений они создадутся заново автоматически.";

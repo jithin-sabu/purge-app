@@ -596,9 +596,11 @@ struct MissedCacheAllowlistTests {
         #expect(MissedPaths.evaluate(relative) == .allow, "\(relative)")
     }
 
-    /// Installed Node versions, nvm itself, and the rest of `~/.cache` stay out.
+    /// nvm itself and the rest of `~/.cache` stay out. A Node version folder is
+    /// allowed by its shape since #400, and `NvmNodeVersionPolicy` decides at the
+    /// move, but nothing inside one is.
     @Test(arguments: [
-        ".nvm", ".nvm/versions", ".nvm/versions/node/v22.14.0", ".nvm/nvm.sh", ".nvm/alias",
+        ".nvm", ".nvm/versions", ".nvm/versions/node", ".nvm/versions/node/v22.14.0/bin", ".nvm/nvm.sh", ".nvm/alias",
         ".cache/firebase", ".cache/codex-runtimes", ".cache/hyperframes", ".cache/gh",
     ])
     func neighboursStayOut(relative: String) {

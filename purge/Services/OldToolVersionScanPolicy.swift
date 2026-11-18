@@ -3,8 +3,8 @@ import Foundation
 
 /// Old tool versions kept next to the one in use (#324): Cursor's unfinished
 /// agent-CLI installs, old Claude Code downloads, Android NDK versions, Android
-/// system images no emulator uses, and Figma profiles Figma has migrated away
-/// from.
+/// system images no emulator uses, Figma profiles Figma has migrated away
+/// from, and Node.js versions nvm keeps that nothing uses (#400).
 ///
 /// Every row is Check First. These are installed tools and profiles, not data an
 /// app rebuilds by itself, and whether one is unused depends on the disk at the
@@ -27,6 +27,8 @@ nonisolated enum OldToolVersionScanPolicy {
         case androidSystemImage
         /// `~/Library/Application Support/Figma/DesktopProfile/v<number>`.
         case figmaProfile
+        /// `~/.nvm/versions/node/v<version>` (#400), judged by `NvmNodeVersionPolicy`.
+        case nvmNodeVersion
     }
 
     // MARK: Rows
@@ -99,6 +101,10 @@ nonisolated enum OldToolVersionScanPolicy {
         }
         if let name = onlyChild(path, of: "\(home)/\(figmaProfiles)"), figmaProfileNumber(name) != nil {
             return .figmaProfile
+        }
+        if let name = onlyChild(path, of: "\(home)/\(NvmNodeVersionPolicy.versionsRoot)"),
+           NvmNodeVersionPolicy.versionNumber(ofFolderName: name) != nil {
+            return .nvmNodeVersion
         }
         return nil
     }
@@ -196,14 +202,30 @@ nonisolated enum OldToolVersionScanPolicy {
         _ url: URL,
         home: String = DeletionSafetyPolicy.cachedHomePath,
         now: Date = Date(),
-        android: AndroidContext? = nil
+        android: AndroidContext? = nil,
+        nvm: NvmNodeVersionPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
-        return !isOffered(path, kind: kind, home: home, now: now, android: android ?? .current(home: home))
+        return !isOffered(
+            path, kind: kind, home: home, now: now,
+            android: android ?? .current(home: home),
+            nvm: nvm ?? .current(home: home),
+            atMove: true
+        )
     }
 
-    static func isOffered(_ path: String, kind: Kind, home: String, now: Date, android: AndroidContext) -> Bool {
+    /// `atMove` is true for the check right before a move, which also asks `lsof`
+    /// whether an nvm version is in use.
+    static func isOffered(
+        _ path: String,
+        kind: Kind,
+        home: String,
+        now: Date,
+        android: AndroidContext,
+        nvm: NvmNodeVersionPolicy.Context = .current(home: DeletionSafetyPolicy.cachedHomePath),
+        atMove: Bool = false
+    ) -> Bool {
         let url = URL(fileURLWithPath: path)
         guard !PathContainment.containsSymlinkComponent(url, home: home) else { return false }
         switch kind {
@@ -244,6 +266,8 @@ nonisolated enum OldToolVersionScanPolicy {
             guard isRealFolder(path), let number = figmaProfileNumber(url.lastPathComponent),
                   let current = currentFigmaProfile(in: url.deletingLastPathComponent().path) else { return false }
             return number < current
+        case .nvmNodeVersion:
+            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm, checkOpenFiles: atMove)
         }
     }
 
@@ -502,10 +526,12 @@ nonisolated enum OldToolVersionScanPolicy {
     static func definitions(
         home: URL,
         now: Date = Date(),
-        android: AndroidContext? = nil
+        android: AndroidContext? = nil,
+        nvm: NvmNodeVersionPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
+        let nvm = nvm ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -520,7 +546,7 @@ nonisolated enum OldToolVersionScanPolicy {
             }
             return found.filter { path in
                 guard let kind = kind(of: path, home: homePath) else { return false }
-                return isOffered(path, kind: kind, home: homePath, now: now, android: android)
+                return isOffered(path, kind: kind, home: homePath, now: now, android: android, nvm: nvm)
             }
             .sorted { isLower($0, than: $1) }
         }
@@ -539,6 +565,13 @@ nonisolated enum OldToolVersionScanPolicy {
         }
         add(systemImagesLabel, offered(in: "\(homePath)/\(androidSDK)/system-images", depth: 3))
         add(figmaProfilesLabel, offered(in: "\(homePath)/\(figmaProfiles)"))
+        // One row per version, like the NDK rows (#400).
+        for version in offered(in: "\(homePath)/\(NvmNodeVersionPolicy.versionsRoot)") {
+            let name = URL(fileURLWithPath: version).lastPathComponent
+            if let number = NvmNodeVersionPolicy.versionNumber(ofFolderName: name) {
+                add(NvmNodeVersionPolicy.labelPrefix + number, [version])
+            }
+        }
         return rows
     }
 }
