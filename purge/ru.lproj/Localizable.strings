@@ -1502,3 +1502,17 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge уже сканирует ваши домашние папки. Добавьте внешний диск или другую папку, чтобы сканировать и её.";
 "No folders added." = "Папки не добавлены.";
 "Choose a drive or folder to scan too." = "Выберите диск или папку, которые тоже нужно сканировать.";
+
+"Review these folders in Finder before deciding what to keep." = "Просмотрите эти папки в Finder, прежде чем решать, что сохранить.";
+
+"Inspect Cache Folders" = "Проверить папки кэша";
+
+"Other cache folders to inspect" = "Другие папки кэша для проверки";
+
+"Measuring cache folders…" = "Измерение папок кэша…";
+
+"Purge couldn't read ~/.cache." = "Не удалось прочитать ~/.cache.";
+
+"No other cache folders found." = "Другие папки кэша не найдены.";
+
+"Size unavailable" = "Размер неизвестен";

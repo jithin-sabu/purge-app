@@ -20,6 +20,7 @@ struct DevToolsView: View {
         self.usesExternalScrollContainer = usesExternalScrollContainer
     }
 
+    @State private var showsCacheInspector = false
     @State private var expandedProjectRoots = Set<String>()
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
@@ -655,11 +656,17 @@ struct DevToolsView: View {
             }
         }
         .background(AppColors.surfaceBase)
+        .sheet(isPresented: $showsCacheInspector) {
+            CacheFolderInspectorSheet(
+                root: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache", isDirectory: true),
+                knownPaths: knownCacheInspectorPaths
+            )
+        }
         .scanListKeyboard(
             keyboard,
             rows: keyboardRows,
             actions: keyboardActions,
-            isBlocked: { [store] in store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
+            isBlocked: { [store] in showsCacheInspector || store.isShowingReviewOrCleaning || store.isAnotherSheetOpen }
         )
     }
 
@@ -808,6 +815,15 @@ struct DevToolsView: View {
         )
     }
 
+    private var knownCacheInspectorPaths: [URL] {
+        let tools = store.devTools + store.lastScanRows.devTools
+        let caches = store.cacheItems + store.lastScanRows.cacheItems
+        let projects = store.projectGroups + store.lastScanRows.projectGroups
+        return tools.flatMap(\.paths)
+            + caches.flatMap { $0.locations.map(\.path) }
+            + projects.flatMap { $0.artifacts.map(\.path) }
+    }
+
     private func highlightAction(_ key: DevRowKey) -> () -> Void {
         { [keyboard] in keyboard.highlight(key) }
     }
@@ -867,6 +883,12 @@ struct DevToolsView: View {
             HStack(alignment: .bottom) {
                 SafeFirstSelectAllControl(model: selectAll, apply: applySelectAll)
                 Spacer()
+                Button {
+                    showsCacheInspector = true
+                } label: {
+                    Label("Inspect Cache Folders", systemImage: "folder.badge.questionmark")
+                }
+                .buttonStyle(.purge(.secondary, size: .small))
                 AppSortMenu(selection: sortOptionBinding)
             }
             .scanTabSelectAllRowLayout()
