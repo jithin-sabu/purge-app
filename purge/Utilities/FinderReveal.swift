@@ -37,9 +37,11 @@ enum FinderReveal {
     }
 
     /// Puts plain text on the clipboard, such as a command to run in Terminal.
-    static func copyText(_ text: String) {
+    /// Returns false when the clipboard did not take it.
+    @discardableResult
+    static func copyText(_ text: String) -> Bool {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        return NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// Submenu label: abbreviated path, plus size when known.

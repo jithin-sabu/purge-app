@@ -516,6 +516,8 @@
 "Replay onboarding" = "Tanıtımı yeniden oynat";
 "Report a bug" = "Hata bildir";
 "Request a feature" = "Özellik iste";
+"No GitHub account? Email %@" = "GitHub hesabınız yok mu? %@ adresine e-posta gönderin";
+"Copy email address" = "E-posta adresini kopyala";
 "Rescan" = "Yeniden Tara";
 "Reset to automatic" = "Otomatiğe sıfırla";
 "Restart Watcher" = "İzleyiciyi Yeniden Başlat";
