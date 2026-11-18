@@ -1690,7 +1690,8 @@ nonisolated final class DevScanner {
                 displayName: rootURL.lastPathComponent,
                 rootPath: rootURL,
                 inferredTypes: types,
-                artifacts: sized
+                artifacts: sized,
+                repositoryRoot: GitRepositoryFinder.enclosingRepository(for: rootURL)
             ),
             rows.count
         )

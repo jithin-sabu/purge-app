@@ -1502,3 +1502,11 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge уже сканирует ваши домашние папки. Добавьте внешний диск или другую папку, чтобы сканировать и её.";
 "No folders added." = "Папки не добавлены.";
 "Choose a drive or folder to scan too." = "Выберите диск или папку, которые тоже нужно сканировать.";
+
+"Build data modified %@" = "Данные сборки изменены %@";
+
+"%@ · Modified %@" = "%@ · Изменено %@";
+
+"Project details" = "Сведения о проекте";
+
+"Select cleanup item" = "Выбрать для очистки";

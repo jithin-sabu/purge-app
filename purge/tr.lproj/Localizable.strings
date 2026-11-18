@@ -1543,3 +1543,11 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge ana klasörlerinizi zaten tarar. Onu da taramak için harici bir sürücü ya da başka bir klasör ekleyin.";
 "No folders added." = "Eklenmiş klasör yok.";
 "Choose a drive or folder to scan too." = "Taranacak bir sürücü ya da klasör seçin.";
+
+"Build data modified %@" = "Derleme verileri %@ tarihinde değiştirildi";
+
+"%@ · Modified %@" = "%@ · Değiştirilme: %@";
+
+"Project details" = "Proje ayrıntıları";
+
+"Select cleanup item" = "Temizlenecek öğeyi seç";

@@ -1543,3 +1543,11 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge 已经会扫描你的个人文件夹。添加外置磁盘或其他文件夹，它也会一并被扫描。";
 "No folders added." = "尚未添加文件夹。";
 "Choose a drive or folder to scan too." = "选择一个也要扫描的磁盘或文件夹。";
+
+"Build data modified %@" = "构建数据修改于 %@";
+
+"%@ · Modified %@" = "%@ · 修改于 %@";
+
+"Project details" = "项目详情";
+
+"Select cleanup item" = "选择清理项目";
