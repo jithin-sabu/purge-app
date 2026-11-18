@@ -11,6 +11,7 @@ on:
     paths:
       - purge/Services/DeletionSafetyPolicy.swift
       - purge/Services/OldToolVersionScanPolicy.swift
+      - purge/Services/NvmNodeVersionPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
@@ -25,6 +26,7 @@ on:
     paths:
       - purge/Services/DeletionSafetyPolicy.swift
       - purge/Services/OldToolVersionScanPolicy.swift
+      - purge/Services/NvmNodeVersionPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
