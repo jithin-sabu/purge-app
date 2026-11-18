@@ -194,6 +194,7 @@
 "An app manages this library and expects every file in it. Removing parts of it from outside the app can corrupt the library, so Purge only ever shows it." = "Этой библиотекой управляет приложение, и ему нужны все файлы в ней. Удаление части файлов извне может повредить библиотеку, поэтому Purge только показывает её.";
 "An unused leftover Chromium framework in %@. Relaunch the browser to clean versions still loaded; relaunching also removes old ones." = "Неиспользуемый фреймворк Chromium, оставшийся в %@. Перезапустите браузер, чтобы очистить ещё загруженные версии; перезапуск также удалит старые.";
 "Android NDK %@" = "Android NDK %@";
+"Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Angular cache" = "Кэш Angular";
 "Another app you still have installed uses this too, so Purge kept it." = "Это использует и другое приложение, которое у вас всё ещё установлено, поэтому Purge оставил это.";
 "Another copy of Purge is on this Mac, so they stay." = "На этом Mac есть ещё одна копия Purge, поэтому они остаются.";
@@ -360,7 +361,6 @@
 "Dart tool cache" = "Кэш инструментов Dart";
 "Date modified (newest first)" = "Дата изменения (сначала новые)";
 "Date modified (oldest first)" = "Дата изменения (сначала старые)";
-"Day" = "День";
 "Days" = "Дни";
 "Delete %lld Permanently" = "Удалить %lld навсегда";
 "Delete Selected" = "Удалить выбранное";
@@ -634,7 +634,6 @@
 "Model in Draw Things' models folder. It may be one you imported or trained, which can't be downloaded again. Draw Things may still list it until it checks its models folder." = "Модель в папке моделей Draw Things. Возможно, вы импортировали или обучили её, и скачать её снова нельзя. Draw Things может показывать её, пока не проверит папку моделей.";
 "Model weights outside any model store Purge knows. The folder they sit in names the app that downloaded them, and that app may still list the model as installed." = "Веса моделей за пределами хранилищ моделей, известных Purge. Папка, в которой они лежат, указывает на скачавшее их приложение, и это приложение может по-прежнему считать модель установленной.";
 "Models on disk" = "Модели на диске";
-"Month" = "Месяц";
 "Monthly" = "Ежемесячно";
 "Months" = "Месяцы";
 "More about %@" = "Подробнее о %@";
@@ -966,6 +965,8 @@
 "Replay onboarding" = "Пройти знакомство заново";
 "Report a bug" = "Сообщить об ошибке";
 "Request a feature" = "Предложить функцию";
+"No GitHub account? Email %@" = "Нет аккаунта GitHub? Напишите на %@";
+"Copy email address" = "Скопировать адрес почты";
 "Rescan" = "Сканировать снова";
 "Reset to automatic" = "Вернуть автоматический выбор";
 "Restart Watcher" = "Перезапустить наблюдение";
@@ -1303,7 +1304,6 @@
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "Не удалось найти файл с инструкциями по переустановке этой папки. Удалять, скорее всего, можно, но при переустановке могут скачаться немного другие версии, чем раньше.";
 "We could not identify this folder. We recommend leaving it alone." = "Не удалось определить эту папку. Рекомендуем её не трогать.";
 "Website Data" = "Данные веб-сайтов";
-"Week" = "Неделя";
 "Weekly" = "Раз в неделю";
 "Weeks" = "Недели";
 "Welcome to" = "Добро пожаловать в";

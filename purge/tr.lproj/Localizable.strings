@@ -88,6 +88,7 @@
 "All" = "Tümü";
 "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "Algılanan tüm projeler, son kullanım tarihlerinden bağımsız olarak (şu anda kullanımda olanlar hariç) Geliştirici Projeleri'nde görünür. Son 6 ayda üzerinde çalışılan projeler \"Önce Kontrol Et\" olarak işaretlenir; bu yüzden Güvenli Öğeleri Temizle ve zamanlanmış temizlikler onları atlar.";
 "Android NDK %@" = "Android NDK %@";
+"Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Also in this cleanup" = "Bu temizlikte ayrıca";
 "Also select" = "Ayrıca seç";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ uygulamasını bir yönetici yüklediği için Çöp Sepeti'ne taşınabilmesi macOS'in izninizi almasını gerektirir.";
@@ -193,7 +194,6 @@
 "Dart tool cache" = "Dart araç önbelleği";
 "Date modified (newest first)" = "Değiştirilme tarihi (en yeni önce)";
 "Date modified (oldest first)" = "Değiştirilme tarihi (en eski önce)";
-"Day" = "Gün";
 "Days" = "Gün";
 "Delete Selected" = "Seçilenleri Sil";
 "Delete anyway" = "Yine de sil";
@@ -347,7 +347,6 @@
 "Measuring each app and its files…" = "Her uygulama ve dosyaları ölçülüyor…";
 "Measuring the Trash" = "Çöp Sepeti ölçülüyor";
 "Missing reinstall instructions" = "Yeniden kurulum yönergeleri eksik";
-"Month" = "Ay";
 "Monthly" = "Aylık";
 "Months" = "Ay";
 "Move %@ to Trash" = "%@ Çöp Sepeti'ne taşı";
@@ -518,6 +517,8 @@
 "Replay onboarding" = "Tanıtımı yeniden oynat";
 "Report a bug" = "Hata bildir";
 "Request a feature" = "Özellik iste";
+"No GitHub account? Email %@" = "GitHub hesabınız yok mu? %@ adresine e-posta gönderin";
+"Copy email address" = "E-posta adresini kopyala";
 "Rescan" = "Yeniden Tara";
 "Reset to automatic" = "Otomatiğe sıfırla";
 "Restart Watcher" = "İzleyiciyi Yeniden Başlat";
@@ -706,7 +707,6 @@
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "Bu klasörün nasıl yeniden kurulacağını söyleyen dosyayı bulamadık. Silmek muhtemelen sorun değil, ancak daha sonra yeniden kurduğunuzda öncekinden biraz farklı sürümler indirilebilir.";
 "We could not identify this folder. We recommend leaving it alone." = "Bu klasörü tanıyamadık. Dokunmamanızı öneririz.";
 "Website Data" = "Web Sitesi Verileri";
-"Week" = "Hafta";
 "Weekly" = "Haftalık";
 "Weeks" = "Hafta";
 "Welcome to" = "Hoş geldiniz:";

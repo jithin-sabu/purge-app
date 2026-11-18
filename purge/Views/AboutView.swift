@@ -9,6 +9,8 @@ struct AboutView: View {
     /// Counts rapid taps on the app icon; reaching the threshold toggles developer mode.
     @State private var iconTapCount = 0
     @State private var devModeFlash: String? = nil
+    @State private var copiedEmailAddress = false
+    @State private var copiedResetWork: DispatchWorkItem?
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
@@ -38,7 +40,10 @@ struct AboutView: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.large) {
             appIdentitySection
             lifetimeStatsSection
-            actionCardSection
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                actionCardSection
+                emailFallbackLine
+            }
             footerSection
         }
         .frame(maxWidth: 560)
@@ -196,13 +201,13 @@ struct AboutView: View {
                 InsetCardDivider()
 
                 AboutActionRow(icon: "ant.fill", label: String(localized: "Report a bug")) {
-                    NSWorkspace.shared.open(reportBugURL)
+                    NSWorkspace.shared.open(FeedbackLinks.bugReportForThisMac)
                 }
 
                 InsetCardDivider()
 
                 AboutActionRow(icon: "lightbulb.fill", label: String(localized: "Request a feature")) {
-                    NSWorkspace.shared.open(featureRequestURL)
+                    NSWorkspace.shared.open(FeedbackLinks.featureRequest)
                 }
 
                 InsetCardDivider()
@@ -220,6 +225,50 @@ struct AboutView: View {
                 }
             }
         }
+    }
+
+    /// Report a bug and Request a feature open GitHub, so people without a
+    /// GitHub account get the address to write to instead (#401).
+    private var emailFallbackLine: some View {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
+            Text(String(localized: "No GitHub account? Email \(FeedbackLinks.emailAddress)"))
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(copiedEmailAddress ? String(localized: "Copied") : String(localized: "Copy")) {
+                copyEmailAddress()
+            }
+            .buttonStyle(.purge(.secondary, size: .small))
+            .accessibilityLabel(String(localized: "Copy email address"))
+        }
+        .padding(.horizontal, AppStyle.Spacing.medium)
+        .onDisappear { copiedResetWork?.cancel() }
+    }
+
+    /// Shows "Copied" only when the clipboard took the address, for two
+    /// seconds after the latest click, and tells VoiceOver too.
+    private func copyEmailAddress() {
+        copiedResetWork?.cancel()
+        guard FinderReveal.copyText(FeedbackLinks.emailAddress) else {
+            // An earlier copy's "Copied" would be wrong now.
+            copiedEmailAddress = false
+            return
+        }
+        copiedEmailAddress = true
+        let announcer: NSObject = NSApp.keyWindow ?? NSApp
+        NSAccessibility.post(
+            element: announcer,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: String(localized: "Copied"),
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ]
+        )
+        let reset = DispatchWorkItem { copiedEmailAddress = false }
+        copiedResetWork = reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: reset)
     }
 
     private var footerSection: some View {
@@ -293,14 +342,6 @@ struct AboutView: View {
         }
         return formatter
     }()
-
-    private var reportBugURL: URL {
-        URL(string: "mailto:jithin@purgemac.com?subject=Purge%20Bug%20Report")!
-    }
-
-    private var featureRequestURL: URL {
-        URL(string: "mailto:jithin@purgemac.com?subject=Purge%20Feature%20Request")!
-    }
 
     private var xProfileURL: URL {
         URL(string: "https://x.com/sabu_jithin")!

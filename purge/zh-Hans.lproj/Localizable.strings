@@ -88,6 +88,7 @@
 "All" = "全部";
 "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "“开发项目”会显示所有检测到的项目，不限上次使用时间，但正在使用的项目除外。过去 6 个月内使用过的项目会标记为“先检查”，“清理安全项目”和定时清理都会跳过它们。";
 "Android NDK %@" = "Android NDK %@";
+"Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Also in this cleanup" = "此次清理中的其他项目";
 "Also select" = "同时选择";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ 由管理员安装，因此 macOS 需要获得许可才能将其移到废纸篓。";
@@ -193,7 +194,6 @@
 "Dart tool cache" = "Dart 工具缓存";
 "Date modified (newest first)" = "修改时间（从新到旧）";
 "Date modified (oldest first)" = "修改时间（从旧到新）";
-"Day" = "天";
 "Days" = "天";
 "Delete Selected" = "删除所选项目";
 "Delete anyway" = "仍然删除";
@@ -347,7 +347,6 @@
 "Measuring each app and its files…" = "正在计算各应用及其文件的大小…";
 "Measuring the Trash" = "正在计算废纸篓大小";
 "Missing reinstall instructions" = "缺少重新安装说明";
-"Month" = "个月";
 "Monthly" = "每月";
 "Months" = "个月";
 "Move %@ to Trash" = "将 %@ 移到废纸篓";
@@ -519,6 +518,8 @@
 "Replay onboarding" = "重新查看初始引导";
 "Report a bug" = "报告问题";
 "Request a feature" = "建议功能";
+"No GitHub account? Email %@" = "没有 GitHub 账号？请发邮件至 %@";
+"Copy email address" = "复制邮箱地址";
 "Rescan" = "重新扫描";
 "Reset to automatic" = "恢复自动选择";
 "Restart Watcher" = "重新启动监测";
@@ -706,7 +707,6 @@
 "We are not sure what this is. We recommend leaving it alone." = "无法确定这是什么，建议保留。";
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "找不到用于重新安装此文件夹的说明文件。删除通常不会有问题，但以后重新安装时，下载的版本可能与之前不同。";
 "We could not identify this folder. We recommend leaving it alone." = "无法识别此文件夹，建议保留。";
-"Week" = "周";
 "Weekly" = "每周";
 "Weeks" = "周";
 "Welcome to" = "欢迎使用";

@@ -1736,7 +1736,7 @@
     "key": "nvm-cache",
     "display_name": "nvm Node.js Versions",
     "tag": "medium",
-    "explanation": "Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on.",
+    "explanation": "Node.js versions managed by nvm. Each one also holds the global npm packages installed with it, so removing a version removes those too.",
     "bundle_ids": [],
     "aliases": [
       ".nvm",
@@ -3547,6 +3547,15 @@
     "display_name": "nvm Download Cache",
     "tag": "safe",
     "explanation": "Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "nvm-node-version",
+    "display_name": "nvm Node.js Version",
+    "tag": "medium",
+    "explanation": "An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"

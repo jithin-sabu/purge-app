@@ -166,8 +166,6 @@ final class TrashStore: ObservableObject {
         return urls
     }
 
-    var hasTrashContents: Bool { access == .readable && trashBytes > 0 }
-
     /// Sums every trash directory, and treats a reading that proves nothing as a question
     /// rather than an answer.
     ///
