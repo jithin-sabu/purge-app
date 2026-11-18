@@ -393,12 +393,6 @@ nonisolated final class DevScanner {
         var running: [SimulatorDevice] = []
     }
 
-    /// Metadata only (`sizeOnDisk` is `nil`). Requires a `simctl` that runs (see
-    /// `Simctl`) and a CoreSimulator devices folder.
-    func discoverShutdownSimulatorsWithoutSizes(access: ScanAccess = .full) async -> [SimulatorDevice] {
-        await discoverSimulatorsWithoutSizes(access: access).shutdown
-    }
-
     func discoverSimulatorsWithoutSizes(
         access: ScanAccess = .full,
         deviceListing: DeviceListingOnce = .live()

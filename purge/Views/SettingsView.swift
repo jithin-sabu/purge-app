@@ -1629,14 +1629,6 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
     }
 }
 
-private enum ScheduleStatusHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 private extension ScheduledCleaningFrequency {
     func everyPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
         switch self {

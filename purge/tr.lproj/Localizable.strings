@@ -193,7 +193,6 @@
 "Dart tool cache" = "Dart araç önbelleği";
 "Date modified (newest first)" = "Değiştirilme tarihi (en yeni önce)";
 "Date modified (oldest first)" = "Değiştirilme tarihi (en eski önce)";
-"Day" = "Gün";
 "Days" = "Gün";
 "Delete Selected" = "Seçilenleri Sil";
 "Delete anyway" = "Yine de sil";
@@ -347,7 +346,6 @@
 "Measuring each app and its files…" = "Her uygulama ve dosyaları ölçülüyor…";
 "Measuring the Trash" = "Çöp Sepeti ölçülüyor";
 "Missing reinstall instructions" = "Yeniden kurulum yönergeleri eksik";
-"Month" = "Ay";
 "Monthly" = "Aylık";
 "Months" = "Ay";
 "Move %@ to Trash" = "%@ Çöp Sepeti'ne taşı";
@@ -706,7 +704,6 @@
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "Bu klasörün nasıl yeniden kurulacağını söyleyen dosyayı bulamadık. Silmek muhtemelen sorun değil, ancak daha sonra yeniden kurduğunuzda öncekinden biraz farklı sürümler indirilebilir.";
 "We could not identify this folder. We recommend leaving it alone." = "Bu klasörü tanıyamadık. Dokunmamanızı öneririz.";
 "Website Data" = "Web Sitesi Verileri";
-"Week" = "Hafta";
 "Weekly" = "Haftalık";
 "Weeks" = "Hafta";
 "Welcome to" = "Hoş geldiniz:";
