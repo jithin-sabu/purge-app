@@ -210,7 +210,7 @@ nonisolated enum OldToolVersionScanPolicy {
         return !isOffered(
             path, kind: kind, home: home, now: now,
             android: android ?? .current(home: home),
-            nvm: nvm ?? .current(home: home),
+            nvm: nvm,
             nvmCheck: .quick
         )
     }
@@ -224,7 +224,7 @@ nonisolated enum OldToolVersionScanPolicy {
         home: String,
         now: Date,
         android: AndroidContext,
-        nvm: NvmNodeVersionPolicy.Context = .current(home: DeletionSafetyPolicy.cachedHomePath),
+        nvm: NvmNodeVersionPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -268,7 +268,8 @@ nonisolated enum OldToolVersionScanPolicy {
                   let current = currentFigmaProfile(in: url.deletingLastPathComponent().path) else { return false }
             return number < current
         case .nvmNodeVersion:
-            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm, check: nvmCheck)
+            // Built here, not before: it probes Full Disk Access, which no other row needs.
+            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm ?? .current(home: home), check: nvmCheck)
         }
     }
 

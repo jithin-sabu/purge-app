@@ -63,7 +63,7 @@ struct FileDeleterMoveCheckTests {
 
         #expect(asked.all == [terraform.standardizedFileURL.path])
         #expect(trash.trashedPaths.isEmpty)
-        if case .deleted = outcome { Issue.record("the row moved: \(outcome)") }
+        #expect(outcome == .failed(.safetySkipped))
     }
 
     /// The check lets every other row through, so a clean that passes it moves.

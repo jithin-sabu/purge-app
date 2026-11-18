@@ -548,8 +548,9 @@ nonisolated final class FileDeleter: Sendable {
                     }
                 } else {
                     // Re-check after sizing. A browser can start using a framework
-                    // folder, or retarget Current onto it, during that wait.
-                    guard DeletionSafetyPolicy.isOfferedForCleanup(url) else {
+                    // folder, or retarget Current onto it, during that wait, and a
+                    // Node process can start in an nvm version (#400).
+                    guard DeletionSafetyPolicy.isOfferedForCleanup(url), immediateMoveCheck(url) else {
                         skippedItems.append(SkippedDeletionItem(
                             path: url.path,
                             displayName: friendlyTitle,

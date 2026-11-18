@@ -34,6 +34,13 @@ private enum Nvm {
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    /// The file at `relative`, with its folder made.
+    static func file(_ home: URL, _ relative: String) throws -> URL {
+        let url = home.appendingPathComponent(relative)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        return url
+    }
+
     static func link(_ home: URL, _ relative: String, to destination: String) throws {
         let url = home.appendingPathComponent(relative)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -343,21 +350,75 @@ struct NvmNodeVersionReviewTests {
         #expect(!Nvm.movable(home, "v20.1.0"))
     }
 
-    /// nvm walks up from a project. The walk records the `.nvmrc` above a project
-    /// too, up to home and never above it.
+    /// nvm walks up from a project until it finds an `.nvmrc`, all the way to
+    /// `/`. The walk records each path on the way, whether a file is there or not.
     @Test
-    func aWalkRecordsTheNvmrcAboveAProject() throws {
+    func aWalkRecordsEveryNvmrcPathAboveAProject() {
+        let found = NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: [
+            URL(fileURLWithPath: "/Users/someone/work/clients/site"),
+            URL(fileURLWithPath: "/Volumes/Work/api"),
+        ])
+        #expect(found == [
+            "/Users/someone/work/clients/site/.nvmrc", "/Users/someone/work/clients/.nvmrc",
+            "/Users/someone/work/.nvmrc", "/Users/someone/.nvmrc", "/Users/.nvmrc", "/.nvmrc",
+            "/Volumes/Work/api/.nvmrc", "/Volumes/Work/.nvmrc", "/Volumes/.nvmrc",
+        ])
+    }
+
+    /// A recorded path with no file pins nothing, so a project with no `.nvmrc`
+    /// blocks nothing. One added after the scan stops the move.
+    @Test
+    func anNvmrcAddedAfterTheScanStopsTheMove() throws {
         let home = try Nvm.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        try Nvm.write("20.1", home, "work/.nvmrc")
-        try Nvm.write("20.1", home, ".nvmrc")
+        try Nvm.install(home, "v20.1.0", "v20.2.0")
         try FileManager.default.createDirectory(
-            at: home.appendingPathComponent("work/clients/site"), withIntermediateDirectories: true
+            at: home.appendingPathComponent("Developer/site"), withIntermediateDirectories: true
         )
-        let found = NvmNodeVersionPolicy.nvmrcFiles(
-            inProjectRoots: [home.appendingPathComponent("work/clients/site")], home: home.path
+        let paths = NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: [home.appendingPathComponent("Developer/site")])
+            .filter { $0.hasPrefix(home.path) }
+        let context = Nvm.context(nvmrc: paths)
+        #expect(Nvm.offered(home, context) == ["v20.1.0"])
+        try Nvm.write("20.1\n", home, "Developer/.nvmrc")
+        #expect(!Nvm.movable(home, "v20.1.0", context))
+    }
+
+    /// nvm reads a linked `.nvmrc`, so Purge does too. One whose target macOS
+    /// would ask about keeps every version.
+    @Test
+    func aLinkedNvmrcPins() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0", "v20.3.0")
+        try Nvm.write("v20.1.0\n", home, "shared/node-version")
+        try Nvm.link(home, "Developer/site/.nvmrc", to: home.appendingPathComponent("shared/node-version").path)
+        let pin = home.appendingPathComponent("Developer/site/.nvmrc").path
+        #expect(Nvm.offered(home, Nvm.context(nvmrc: [pin])) == ["v20.2.0"])
+
+        let target = home.appendingPathComponent("shared/node-version").path
+        let guarded = NvmNodeVersionPolicy.Context(
+            nvmrcFiles: { [pin] }, mayRead: { $0 != target }, openFiles: { "" }, linkFolders: []
         )
-        #expect(found == [home.appendingPathComponent("work/.nvmrc").path, home.appendingPathComponent(".nvmrc").path])
+        #expect(Nvm.offered(home, guarded).isEmpty)
+    }
+
+    /// A folder named `.nvmrc` is not one nvm reads.
+    @Test
+    func anNvmrcFolderPinsNothing() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0")
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent("Developer/odd/.nvmrc"), withIntermediateDirectories: true
+        )
+        let pin = home.appendingPathComponent("Developer/odd/.nvmrc").path
+        #expect(Nvm.offered(home, Nvm.context(nvmrc: [pin])) == ["v20.1.0"])
+    }
+
+    /// `/Volumes/.nvmrc` is on the startup disk, so its absence is real.
+    @Test
+    func noNvmrcRightInVolumesPinsNothing() {
+        #expect(NvmNodeVersionPolicy.isGone("/Volumes/.nvmrc", home: "/Users/someone") == true)
     }
 
     /// A recorded `.nvmrc` on a drive that isn't mounted may be back tomorrow.
@@ -384,14 +445,80 @@ struct NvmNodeVersionReviewTests {
         #expect(NvmNodeVersionPolicy.isGone(home.appendingPathComponent("gone/site/.nvmrc").path, home: home.path) == true)
     }
 
-    @Test(arguments: [".claude/settings.json", ".claude/settings.local.json", ".zshrc", ".config/fish/config.fish"])
-    func aVersionAClaudeHookOrShellPathNamesStays(file: String) throws {
+    @Test(arguments: [".claude/settings.json", ".claude/settings.local.json"])
+    func aVersionAClaudeHookNamesStays(file: String) throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0", "v20.3.0")
+        let node = home.appendingPathComponent("\(Nvm.node)/v20.1.0/bin/node").path
+        let settings: [String: Any] = ["hooks": ["PostToolUse": [["hooks": [["type": "command", "command": "\(node) hook.js"]]]]]]
+        try JSONSerialization.data(withJSONObject: settings).write(to: try Nvm.file(home, file))
+        #expect(Nvm.offered(home) == ["v20.2.0"], "\(file)")
+    }
+
+    @Test(arguments: [".zshrc", ".config/fish/config.fish"])
+    func aVersionAShellPathNamesStays(file: String) throws {
         let home = try Nvm.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
         try Nvm.install(home, "v20.1.0", "v20.2.0", "v20.3.0")
         let bin = home.appendingPathComponent("\(Nvm.node)/v20.1.0/bin").path
         try Nvm.write("export PATH=\"\(bin):$PATH\"\n", home, file)
         #expect(Nvm.offered(home) == ["v20.2.0"], "\(file)")
+    }
+
+    /// JSON may write `/` as `\/`, and the Mac's disk ignores case. A longer
+    /// version is a different folder.
+    @Test
+    func referencesMatchAsTheDiskReadsThem() {
+        let name = "v20.1.1"
+        #expect(NvmNodeVersionPolicy.names(#"{"command":"\/Users\/me\/.nvm\/versions\/node\/v20.1.1\/bin\/node"}"#, versionFolder: name))
+        #expect(NvmNodeVersionPolicy.names("/Users/me/.NVM/Versions/Node/V20.1.1/bin/node", versionFolder: name))
+        #expect(NvmNodeVersionPolicy.names("PATH=/Users/me/.nvm/versions/node/v20.1.1", versionFolder: name))
+        #expect(!NvmNodeVersionPolicy.names("/Users/me/.nvm/versions/node/v20.1.10/bin/node", versionFolder: name))
+        #expect(!NvmNodeVersionPolicy.names("/Users/me/.nvm/versions/node/v20.1.1.bak/bin", versionFolder: name))
+    }
+
+    /// Node 25 stopped shipping Corepack, so from then on one in the version is the user's.
+    @Test
+    func corepackIsTheUsersFromNode25() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v24.1.0", "v24.2.0")
+        for version in ["v25.1.0", "v25.2.0"] {
+            for file in ["lib/node_modules/npm/package.json", "bin/node", "bin/npm", "bin/npx"] {
+                try Nvm.write("x", home, "\(Nvm.node)/\(version)/\(file)")
+            }
+        }
+        try Nvm.write("x", home, "\(Nvm.node)/v25.1.0/lib/node_modules/corepack/package.json")
+        #expect(Nvm.offered(home) == ["v24.1.0"])
+    }
+
+    /// nvm uses a linked version, and a pin on it would keep the folder it leads to.
+    @Test
+    func aLinkedVersionNameKeepsEverything() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0")
+        try Nvm.link(home, "\(Nvm.node)/v20.1.5", to: "v20.1.0")
+        #expect(Nvm.offered(home).isEmpty)
+        #expect(!Nvm.movable(home, "v20.1.0"))
+    }
+
+    /// Reading a `bin` link's target can prompt when it is in a protected
+    /// folder. Such a target isn't followed, and keeps every version.
+    @Test
+    func aBinLinkIntoAProtectedFolderKeepsEverything() throws {
+        let home = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Nvm.install(home, "v20.1.0", "v20.2.0")
+        let documents = home.appendingPathComponent("Documents").path
+        try Nvm.link(home, ".local/bin/node", to: "\(documents)/tools/node")
+        let context = NvmNodeVersionPolicy.Context(
+            nvmrcFiles: { [] }, mayRead: { !$0.hasPrefix(documents) }, openFiles: { "" }, linkFolders: [".local/bin"]
+        )
+        let version = home.appendingPathComponent("\(Nvm.node)/v20.1.0").path
+        #expect(NvmNodeVersionPolicy.isLinkedFromBinFolder(version, home: home.path, context: context) == nil)
+        #expect(Nvm.offered(home, context).isEmpty)
     }
 
     /// People link one Node into a `bin` folder so apps and build scripts find it.
@@ -423,11 +550,15 @@ struct NvmNodeVersionReviewTests {
         let home = try Nvm.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
         try Nvm.install(home, "v20.1.0", "v20.2.0")
+        #expect(Nvm.movable(home, "v20.1.0"))
         let now = Date()
         let first = NvmNodeVersionPolicy.recentKeptVersions(home: home.path, context: Nvm.context(), now: now)
         try Nvm.write("v20.1.0", home, ".nvm/alias/default")
         let reused = NvmNodeVersionPolicy.recentKeptVersions(home: home.path, context: Nvm.context(), now: now.addingTimeInterval(1))
         #expect(first == reused)
+        #expect(reused?.contains("v20.1.0") == false)
+        // The list gate still answers from the old read, and the move doesn't.
+        #expect(!Nvm.movable(home, "v20.1.0"))
         let later = NvmNodeVersionPolicy.recentKeptVersions(
             home: home.path, context: Nvm.context(),
             now: now.addingTimeInterval(NvmNodeVersionPolicy.recentReadLifetime + 1)
@@ -535,33 +666,12 @@ struct NvmNodeVersionGateTests {
 
 @Suite("nvm Node versions (#400): the .nvmrc list")
 struct NvmrcLedgerTests {
-    @Test
-    func walksAddToTheListAndNeverDropFromIt() throws {
-        let folder = try Nvm.makeHome()
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let (a, b, c) = try (pin(folder, "a"), pin(folder, "b"), pin(folder, "c"))
-        let ledger = NvmrcLedger(fileURL: folder.appendingPathComponent(NvmrcLedger.fileName))
-        #expect(ledger.files() == nil)
-        ledger.record([], home: folder.path)
-        #expect(ledger.files() == [])
-        ledger.record([a, b], home: folder.path)
-        ledger.record([c, a], home: folder.path)
-        #expect(ledger.files() == [c, a, b])
+    private func ledger(_ folder: URL, limit: Int = 5_000) -> NvmrcLedger {
+        NvmrcLedger(fileURL: folder.appendingPathComponent(NvmrcLedger.fileName), limit: limit)
     }
 
-    /// Past the limit nothing is dropped. The list keeps every version instead.
-    @Test
-    func aListOverTheLimitKeepsEveryVersion() throws {
-        let folder = try Nvm.makeHome()
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let (a, b, c) = try (pin(folder, "a"), pin(folder, "b"), pin(folder, "c"))
-        let ledger = NvmrcLedger(fileURL: folder.appendingPathComponent(NvmrcLedger.fileName), limit: 2)
-        ledger.record([a, b], home: folder.path)
-        #expect(ledger.files()?.count == 2)
-        ledger.record([c], home: folder.path)
-        #expect(ledger.files() == nil)
-        let reread = NvmrcLedger(fileURL: folder.appendingPathComponent(NvmrcLedger.fileName), limit: 2)
-        #expect(reread.files() == nil)
+    private func record(_ ledger: NvmrcLedger, _ found: [String], _ home: URL, fullAccess: Bool = true) {
+        ledger.record(found, home: home.path, fullAccess: fullAccess, mayRead: { _ in true })
     }
 
     private func pin(_ folder: URL, _ project: String) throws -> String {
@@ -569,35 +679,103 @@ struct NvmrcLedgerTests {
         return folder.appendingPathComponent("\(project)/.nvmrc").path
     }
 
-    /// A walk drops a recorded file only once it is confirmed gone. One on a
-    /// drive that isn't mounted, or one macOS would ask about, stays.
     @Test
-    func aWalkDropsOnlyFilesThatAreGone() throws {
-        let home = try Nvm.makeHome()
-        defer { try? FileManager.default.removeItem(at: home) }
-        let ledger = NvmrcLedger(fileURL: home.appendingPathComponent(NvmrcLedger.fileName))
-        let gone = home.appendingPathComponent("old/site/.nvmrc").path
-        let unplugged = "/Volumes/purge-test-400-\(UUID().uuidString)/site/.nvmrc"
-        let protected = home.appendingPathComponent("Documents/gone/.nvmrc").path
-        ledger.record([gone, unplugged, protected], home: home.path)
-        ledger.record([], home: home.path, mayRead: { $0 != protected })
-        #expect(ledger.files() == [unplugged, protected])
+    func walksAddToTheListAndNeverDropFromIt() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (a, b, c) = try (pin(folder, "a"), pin(folder, "b"), pin(folder, "c"))
+        let ledger = ledger(folder)
+        #expect(ledger.files() == nil)
+        record(ledger, [], folder)
+        #expect(ledger.files() == [])
+        record(ledger, [a, b], folder)
+        record(ledger, [c, a], folder)
+        #expect(ledger.files() == [c, a, b])
     }
 
+    /// A walk without Full Disk Access can't see projects in Documents, so the
+    /// list counts only once a walk with it has added its paths.
     @Test
-    func aWalkFindsTheNvmrcBesideEachProject() throws {
+    func theListCountsOnlyAfterAWalkWithFullDiskAccess() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (a, b) = try (pin(folder, "a"), pin(folder, "b"))
+        let ledger = ledger(folder)
+        record(ledger, [a], folder, fullAccess: false)
+        #expect(ledger.files() == nil)
+        #expect(self.ledger(folder).files() == nil)
+        record(ledger, [b], folder, fullAccess: true)
+        record(ledger, [], folder, fullAccess: false)
+        #expect(ledger.files() == [b, a])
+        #expect(self.ledger(folder).files() == [b, a])
+    }
+
+    /// A list that can't be read may have held pins only a wider walk saw. A
+    /// walk without Full Disk Access doesn't make it count again.
+    @Test
+    func anUnreadableListCountsOnlyAfterAWalkWithFullDiskAccess() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let a = try pin(folder, "a")
+        try Data("not json".utf8).write(to: folder.appendingPathComponent(NvmrcLedger.fileName))
+        let ledger = ledger(folder)
+        #expect(ledger.files() == nil)
+        record(ledger, [a], folder, fullAccess: false)
+        #expect(ledger.files() == nil)
+        record(ledger, [a], folder, fullAccess: true)
+        #expect(ledger.files() == [a])
+    }
+
+    /// When a walk's paths can't be saved, the list on disk lacks them, so it
+    /// stops counting until a walk saves again.
+    @Test
+    func aListThatCouldNotBeSavedStopsCounting() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (a, b) = try (pin(folder, "a"), pin(folder, "b"))
+        let ledger = ledger(folder)
+        record(ledger, [a], folder)
+        #expect(ledger.files() == [a])
+        // A folder the list can't be written to makes the save fail.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+        record(ledger, [b], folder)
+        #expect(ledger.files() == nil)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        record(ledger, [b], folder)
+        #expect(ledger.files() == [b, a])
+    }
+
+    /// Past the limit nothing is dropped. The list keeps every version instead,
+    /// and a larger limit reads all of it back.
+    @Test
+    func aListOverTheLimitKeepsEveryVersion() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (a, b, c) = try (pin(folder, "a"), pin(folder, "b"), pin(folder, "c"))
+        let ledger = ledger(folder, limit: 2)
+        record(ledger, [a, b], folder)
+        #expect(ledger.files()?.count == 2)
+        record(ledger, [c], folder)
+        #expect(ledger.files() == nil)
+        #expect(self.ledger(folder, limit: 2).files() == nil)
+        #expect(self.ledger(folder, limit: 3).files() == [c, a, b])
+    }
+
+    /// A walk drops a recorded path only once the folder it is in is confirmed
+    /// gone. One with no file in a folder that is there, one on a drive that
+    /// isn't mounted, and one macOS would ask about all stay.
+    @Test
+    func aWalkDropsOnlyPathsWhoseFolderIsGone() throws {
         let home = try Nvm.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        try Nvm.write("20", home, "Developer/site/.nvmrc")
-        try FileManager.default.createDirectory(
-            at: home.appendingPathComponent("Developer/api"), withIntermediateDirectories: true
-        )
-        try FileManager.default.createDirectory(
-            at: home.appendingPathComponent("Developer/odd/.nvmrc"), withIntermediateDirectories: true
-        )
-        let found = NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: ["site", "api", "odd"].map {
-            home.appendingPathComponent("Developer/\($0)")
-        }, home: home.path)
-        #expect(found == [home.appendingPathComponent("Developer/site/.nvmrc").path])
+        let ledger = ledger(home)
+        let gone = home.appendingPathComponent("old/site/.nvmrc").path
+        try FileManager.default.createDirectory(at: home.appendingPathComponent("empty"), withIntermediateDirectories: true)
+        let empty = home.appendingPathComponent("empty/.nvmrc").path
+        let unplugged = "/Volumes/purge-test-400-\(UUID().uuidString)/site/.nvmrc"
+        let protected = home.appendingPathComponent("Documents/gone/.nvmrc").path
+        record(ledger, [gone, empty, unplugged, protected], home)
+        ledger.record([], home: home.path, fullAccess: true, mayRead: { $0 != protected })
+        #expect(ledger.files() == [empty, unplugged, protected])
     }
 }
