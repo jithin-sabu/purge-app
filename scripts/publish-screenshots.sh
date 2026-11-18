@@ -106,12 +106,17 @@ NO_ACCESS_HINT="Without write access to jithin-sabu/purge-screenshots, drag the 
 
 if [ -d "$REPO/.git" ]; then
   # The links name jithin-sabu/purge-screenshots, so the push must go there.
-  for url in "$(git -C "$REPO" remote get-url origin)" "$(git -C "$REPO" remote get-url --push origin)"; do
+  # A push goes to every push URL, so check them all.
+  URLS="$(git -C "$REPO" remote get-url --all origin; git -C "$REPO" remote get-url --push --all origin)" || {
+    echo "$REPO has no origin remote. Use another folder." >&2
+    exit 1
+  }
+  while IFS= read -r url; do
     case "${url%.git}" in
       "${REMOTE%.git}" | git@github.com:jithin-sabu/purge-screenshots | ssh://git@github.com/jithin-sabu/purge-screenshots) ;;
       *) echo "$REPO pushes to $url, not to jithin-sabu/purge-screenshots. Point origin there or use another folder." >&2; exit 1 ;;
     esac
-  done
+  done <<<"$URLS"
   if [ -d "$REPO/.git/rebase-merge" ] || [ -d "$REPO/.git/rebase-apply" ]; then
     echo "$REPO is stuck in a rebase. Clear it with: $RESET_HINT" >&2
     exit 1
