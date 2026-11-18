@@ -966,6 +966,8 @@
 "Replay onboarding" = "Пройти знакомство заново";
 "Report a bug" = "Сообщить об ошибке";
 "Request a feature" = "Предложить функцию";
+"No GitHub account? Email %@" = "Нет аккаунта GitHub? Напишите на %@";
+"Copy email address" = "Скопировать адрес почты";
 "Rescan" = "Сканировать снова";
 "Reset to automatic" = "Вернуть автоматический выбор";
 "Restart Watcher" = "Перезапустить наблюдение";

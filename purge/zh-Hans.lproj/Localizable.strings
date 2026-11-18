@@ -519,6 +519,8 @@
 "Replay onboarding" = "重新查看初始引导";
 "Report a bug" = "报告问题";
 "Request a feature" = "建议功能";
+"No GitHub account? Email %@" = "没有 GitHub 账号？请发邮件至 %@";
+"Copy email address" = "复制邮箱地址";
 "Rescan" = "重新扫描";
 "Reset to automatic" = "恢复自动选择";
 "Restart Watcher" = "重新启动监测";
