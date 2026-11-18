@@ -562,7 +562,7 @@
 
 /* nvm-cache */
 "nvm Node.js Versions" = "nvm Node.js 版本";
-"Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on." = "nvm 管理的 Node.js 版本。可以安全删除不用的版本，但不要移除项目依赖的版本。";
+"Node.js versions managed by nvm. Each one also holds the global npm packages installed with it, so removing a version removes those too." = "nvm 管理的 Node.js 版本。每个版本里还装着随它安装的全局 npm 包，删除版本也会删除这些包。";
 
 /* volta-cache */
 "Volta Tool Cache" = "Volta 工具缓存";
@@ -1171,6 +1171,10 @@
 /* antigravity-browser-cache */
 "Antigravity Browser Cache" = "Antigravity 浏览器缓存";
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity 网页任务浏览器的网页与脚本缓存，加载页面时会重新填充。不会动登录信息、历史记录和扩展。";
+
+/* nvm-node-version */
+"nvm Node.js Version" = "nvm Node.js 版本";
+"An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back." = "nvm 安装的较旧 Node.js。没有别名、Purge 找到的 .nvmrc、全局包或 npm 配置在用它。每个主版本的最新版会保留。用 nvm install 可以装回来。";
 
 /* nvm-download-cache */
 "nvm Download Cache" = "nvm 下载缓存";
