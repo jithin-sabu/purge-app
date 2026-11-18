@@ -745,6 +745,89 @@ struct NvmrcLedgerTests {
         #expect(ledger.files() == [b, a])
     }
 
+    /// Fails the save for the files named in `failing`, as a full disk would.
+    private final class Writer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var names: Set<String> = []
+        var failing: Set<String> {
+            get { lock.lock(); defer { lock.unlock() }; return names }
+            set { lock.lock(); names = newValue; lock.unlock() }
+        }
+        func write(_ data: Data, _ url: URL) throws {
+            if failing.contains(url.lastPathComponent) { throw CocoaError(.fileWriteOutOfSpace) }
+            try data.write(to: url, options: .atomic)
+        }
+    }
+
+    private func ledger(_ folder: URL, _ writer: Writer) -> NvmrcLedger {
+        NvmrcLedger(fileURL: folder.appendingPathComponent(NvmrcLedger.fileName), write: { try writer.write($0, $1) })
+    }
+
+    private func exists(_ folder: URL, _ name: String) -> Bool {
+        FileManager.default.fileExists(atPath: folder.appendingPathComponent(name).path)
+    }
+
+    /// When only the list itself can't be saved, every path goes to the unsaved
+    /// file. After a restart the list still doesn't count, and the next walk
+    /// with Full Disk Access adds those paths back.
+    @Test
+    func aFailedSaveKeepsEveryPathAside() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (a, b) = try (pin(folder, "a"), pin(folder, "b"))
+        let writer = Writer()
+        let ledger = ledger(folder, writer)
+        record(ledger, [a], folder)
+        writer.failing = [NvmrcLedger.fileName]
+        record(ledger, [b], folder)
+        #expect(ledger.files() == nil)
+        #expect(exists(folder, NvmrcLedger.unsavedFileName))
+
+        writer.failing = []
+        let restarted = self.ledger(folder, writer)
+        #expect(restarted.files() == nil)
+        record(restarted, [], folder, fullAccess: false)
+        #expect(restarted.files() == nil)
+        #expect(self.ledger(folder).files() == nil)
+        record(restarted, [], folder)
+        #expect(restarted.files() == [a, b])
+        #expect(self.ledger(folder).files() == [a, b])
+        #expect(!exists(folder, NvmrcLedger.unsavedFileName))
+    }
+
+    /// When nothing can be written, the old list is moved aside rather than
+    /// removed. A walk after a restart that can't see a recorded project, say
+    /// on an unplugged drive, still keeps its pin, and the same launch keeps
+    /// the paths the failed walk found too.
+    @Test
+    func aListThatCantBeWrittenIsMovedAsideNotRemoved() throws {
+        let folder = try Nvm.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (a, b) = try (pin(folder, "a"), pin(folder, "b"))
+        let writer = Writer()
+        let ledger = ledger(folder, writer)
+        record(ledger, [a], folder)
+        writer.failing = [NvmrcLedger.fileName, NvmrcLedger.unsavedFileName]
+        record(ledger, [b], folder)
+        #expect(ledger.files() == nil)
+        #expect(!exists(folder, NvmrcLedger.fileName))
+        #expect(exists(folder, NvmrcLedger.unsavedFileName))
+        #expect(self.ledger(folder).files() == nil)
+
+        writer.failing = []
+        record(ledger, [], folder)
+        #expect(ledger.files() == [a, b])
+
+        // A restart before that walk: the old list came back from aside.
+        writer.failing = [NvmrcLedger.fileName, NvmrcLedger.unsavedFileName]
+        record(ledger, [], folder)
+        writer.failing = []
+        let restarted = self.ledger(folder, writer)
+        #expect(restarted.files() == nil)
+        record(restarted, [], folder)
+        #expect(restarted.files() == [a, b])
+    }
+
     /// Past the limit nothing is dropped. The list keeps every version instead,
     /// and a larger limit reads all of it back.
     @Test

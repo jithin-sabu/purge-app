@@ -586,18 +586,32 @@ nonisolated enum NvmNodeVersionPolicy {
 /// a walk's paths couldn't be saved.
 nonisolated final class NvmrcLedger: @unchecked Sendable {
     static let fileName = "nvmrc-files.json"
+    /// Where the paths go when the list can't be saved. While this file is
+    /// there the list doesn't count, even after a restart, and the next walk
+    /// adds its paths back in.
+    static let unsavedFileName = "nvmrc-files.unsaved.json"
     static let shared = NvmrcLedger(fileURL: AppSupportFolder.url().appendingPathComponent(fileName))
 
     private let fileURL: URL
+    private let unsavedURL: URL
     private let limit: Int
+    private let write: @Sendable (Data, URL) throws -> Void
     private let lock = NSLock()
     /// The list as last read or written, or `.some(nil)` when it can't be
     /// trusted. Only Purge writes the file.
     private var cached: Contents??
+    /// Paths a walk found that are on no list on disk yet.
+    private var unsaved: [String] = []
 
-    init(fileURL: URL, limit: Int = 5_000) {
+    init(
+        fileURL: URL,
+        limit: Int = 5_000,
+        write: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+    ) {
         self.fileURL = fileURL
+        unsavedURL = fileURL.deletingLastPathComponent().appendingPathComponent(Self.unsavedFileName)
         self.limit = limit
+        self.write = write
     }
 
     private struct Contents: Codable {
@@ -641,11 +655,12 @@ nonisolated final class NvmrcLedger: @unchecked Sendable {
     ) {
         lock.lock()
         defer { lock.unlock() }
-        let previous: Contents
+        var previous: Contents
         switch load() {
         case .saved(let saved): previous = saved
         case .missing, .unreadable: previous = Contents(files: [], fullAccess: false)
         }
+        previous.files += unsaved
         let foundSet = Set(found)
         let kept = previous.files.filter { file in
             if foundSet.contains(file) { return true }
@@ -666,22 +681,64 @@ nonisolated final class NvmrcLedger: @unchecked Sendable {
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try JSONEncoder().encode(merged).write(to: fileURL, options: .atomic)
+            try write(JSONEncoder().encode(merged), fileURL)
             cached = .some(merged)
+            unsaved = []
+            if !NvmNodeVersionPolicy.isMissing(unsavedURL.path) {
+                // When this fails the list stays untrusted after a restart,
+                // until a walk removes it.
+                try? FileManager.default.removeItem(at: unsavedURL)
+            }
         } catch {
             // The saved list lacks this walk's paths, so it can't be trusted, now
             // or after a restart. Until a walk saves again, nothing is offered.
-            try? FileManager.default.removeItem(at: fileURL)
+            unsaved = merged.files
             cached = .some(nil)
+            setAside(merged.files)
         }
     }
 
+    /// Keeps the paths where a restart can't trust them but the next walk
+    /// adds them back: all of them when they can be written, else the old list
+    /// moved aside, which needs no free space. An unsaved file already there
+    /// stays, since its being there is what keeps the list untrusted. Only when
+    /// none of that works is the old list removed.
+    private func setAside(_ files: [String]) {
+        if let data = try? JSONEncoder().encode(Contents(files: files, fullAccess: false)),
+           (try? write(data, unsavedURL)) != nil {
+            return
+        }
+        guard NvmNodeVersionPolicy.isMissing(unsavedURL.path) else { return }
+        if NvmNodeVersionPolicy.isMissing(fileURL.path) { return }
+        if rename(fileURL.path, unsavedURL.path) == 0 { return }
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    /// The saved list, with any paths set aside after a failed save added in.
+    /// Set-aside paths make the list untrusted until a walk saves again.
     private func load() -> Stored {
+        let saved = Self.read(fileURL)
+        let aside = Self.read(unsavedURL)
+        var files: [String]
+        switch saved {
+        case .saved(let contents):
+            if case .missing = aside { return saved }
+            files = contents.files
+        case .missing, .unreadable:
+            if case .missing = aside { return saved }
+            files = []
+        }
+        if case .saved(let contents) = aside { files += contents.files }
+        var seen = Set<String>()
+        return .saved(Contents(files: files.filter { seen.insert($0).inserted }, fullAccess: false))
+    }
+
+    private static func read(_ url: URL) -> Stored {
         let data: Data
         do {
-            data = try Data(contentsOf: fileURL)
+            data = try Data(contentsOf: url)
         } catch {
-            return NvmNodeVersionPolicy.isMissing(fileURL.path) ? .missing : .unreadable
+            return NvmNodeVersionPolicy.isMissing(url.path) ? .missing : .unreadable
         }
         guard let contents = try? JSONDecoder().decode(Contents.self, from: data) else { return .unreadable }
         return .saved(contents)
