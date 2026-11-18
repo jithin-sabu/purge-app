@@ -10,6 +10,7 @@ struct AboutView: View {
     @State private var iconTapCount = 0
     @State private var devModeFlash: String? = nil
     @State private var copiedEmailAddress = false
+    @State private var copiedResetWork: DispatchWorkItem?
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
@@ -230,23 +231,40 @@ struct AboutView: View {
     /// GitHub account get the address to write to instead (#401).
     private var emailFallbackLine: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
-            Text("No GitHub account? Email \(FeedbackLinks.emailAddress)")
+            Text(String(localized: "No GitHub account? Email \(FeedbackLinks.emailAddress)"))
                 .font(AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textSecondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(copiedEmailAddress ? String(localized: "Copied") : String(localized: "Copy")) {
-                FinderReveal.copyText(FeedbackLinks.emailAddress)
-                copiedEmailAddress = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    copiedEmailAddress = false
-                }
+                copyEmailAddress()
             }
             .buttonStyle(.purge(.secondary, size: .small))
             .accessibilityLabel(String(localized: "Copy email address"))
         }
         .padding(.horizontal, AppStyle.Spacing.medium)
+        .onDisappear { copiedResetWork?.cancel() }
+    }
+
+    /// Shows "Copied" only when the clipboard took the address, for two
+    /// seconds after the latest click, and tells VoiceOver too.
+    private func copyEmailAddress() {
+        guard FinderReveal.copyText(FeedbackLinks.emailAddress) else { return }
+        copiedEmailAddress = true
+        let announcer: NSObject = NSApp.keyWindow ?? NSApp
+        NSAccessibility.post(
+            element: announcer,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: String(localized: "Copied"),
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ]
+        )
+        copiedResetWork?.cancel()
+        let reset = DispatchWorkItem { copiedEmailAddress = false }
+        copiedResetWork = reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: reset)
     }
 
     private var footerSection: some View {

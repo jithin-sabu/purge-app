@@ -71,16 +71,51 @@ struct FeedbackLinksTests {
             contentsOf: repo.appendingPathComponent(".github/ISSUE_TEMPLATE/bug_report.yml"),
             encoding: .utf8
         )
-        let ids = Set(form.split(separator: "\n").compactMap { line -> String? in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("id:") else { return nil }
-            return trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
-        })
+        let ids = Self.fieldIDs(inIssueForm: form)
 
         #expect(ids.contains(FeedbackLinks.purgeVersionField))
         #expect(ids.contains(FeedbackLinks.macOSVersionField))
         #expect(FileManager.default.fileExists(
             atPath: repo.appendingPathComponent(".github/ISSUE_TEMPLATE/feature_request.yml").path
         ))
+    }
+
+    @Test
+    func fieldIDReaderSkipsMarkdownTextAndQuotes() {
+        let form = """
+        body:
+          - type: markdown
+            attributes:
+              value: |
+                id: purge-version
+          - type: input
+            id: "macos-version"
+          - type: textarea
+            id: 'logs'
+        """
+
+        #expect(Self.fieldIDs(inIssueForm: form) == ["macos-version", "logs"])
+    }
+
+    /// The `id` of each field in an issue form's `body`, read the way YAML
+    /// reads it: only an `id:` key of a body item counts, never text inside a
+    /// markdown block, and quotes around the value are dropped. Foundation has
+    /// no YAML parser, and the forms only use this plain block style.
+    static func fieldIDs(inIssueForm form: String) -> Set<String> {
+        var ids: Set<String> = []
+        var itemKeyIndent: Int?
+        var itemType: String?
+        for line in form.split(separator: "\n", omittingEmptySubsequences: false) {
+            let indent = line.prefix { $0 == " " }.count
+            let trimmed = line.drop { $0 == " " }
+            if trimmed.hasPrefix("- type:") {
+                itemKeyIndent = indent + 2
+                itemType = trimmed.dropFirst("- type:".count).trimmingCharacters(in: .whitespaces)
+            } else if indent == itemKeyIndent, itemType != "markdown", trimmed.hasPrefix("id:") {
+                let value = trimmed.dropFirst("id:".count).trimmingCharacters(in: .whitespaces)
+                ids.insert(value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
+            }
+        }
+        return ids
     }
 }
