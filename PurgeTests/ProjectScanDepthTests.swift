@@ -104,6 +104,10 @@ struct ProjectScanDepthTests {
             #expect(started.withLock { $0 })
             #expect(report.skippedItems.map(\.path) == [artifact.path])
             #expect(trash.trashedPaths.isEmpty)
+            try fm.removeItem(at: project.appendingPathComponent("package.json"))
+            #expect(ProjectActivityPolicy.artifactBelongsToActiveProject(artifact, access: .full))
+            try fm.removeItem(at: lock)
+            #expect(!ProjectActivityPolicy.artifactBelongsToActiveProject(artifact, access: .full))
         }
     }
 
