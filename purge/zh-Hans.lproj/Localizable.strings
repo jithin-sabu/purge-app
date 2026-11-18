@@ -193,7 +193,6 @@
 "Dart tool cache" = "Dart 工具缓存";
 "Date modified (newest first)" = "修改时间（从新到旧）";
 "Date modified (oldest first)" = "修改时间（从旧到新）";
-"Day" = "天";
 "Days" = "天";
 "Delete Selected" = "删除所选项目";
 "Delete anyway" = "仍然删除";
@@ -347,7 +346,6 @@
 "Measuring each app and its files…" = "正在计算各应用及其文件的大小…";
 "Measuring the Trash" = "正在计算废纸篓大小";
 "Missing reinstall instructions" = "缺少重新安装说明";
-"Month" = "个月";
 "Monthly" = "每月";
 "Months" = "个月";
 "Move %@ to Trash" = "将 %@ 移到废纸篓";
@@ -706,7 +704,6 @@
 "We are not sure what this is. We recommend leaving it alone." = "无法确定这是什么，建议保留。";
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "找不到用于重新安装此文件夹的说明文件。删除通常不会有问题，但以后重新安装时，下载的版本可能与之前不同。";
 "We could not identify this folder. We recommend leaving it alone." = "无法识别此文件夹，建议保留。";
-"Week" = "周";
 "Weekly" = "每周";
 "Weeks" = "周";
 "Welcome to" = "欢迎使用";

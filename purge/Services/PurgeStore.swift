@@ -2321,18 +2321,13 @@ final class PurgeStore: ObservableObject {
         largeFiles.contains(where: \.canRemoveDownload)
     }
 
-    /// Duplicate groups the current selection would wipe out completely — every
-    /// copy checked, nothing left behind.
+    /// Duplicate groups the files the Large Files sheet lists would wipe out
+    /// completely — every copy checked, nothing left behind. The sheet lists the
+    /// selection or the one file ⌘⌫ opened it for.
     ///
     /// Purge does not choose which copy survives (issue #17 is explicit that
     /// picking which user document dies is not the app's judgement to make), so
     /// this exists only to say plainly what the selection does before it happens.
-    var duplicateGroupsFullyConsumedBySelection: [DuplicateGroup] {
-        duplicateGroupsFullyConsumed(by: largeFileSelection.ids)
-    }
-
-    /// The same check for the files the Large Files sheet lists, which is the
-    /// selection or the one file ⌘⌫ opened it for.
     var duplicateGroupsFullyConsumedBySheet: [DuplicateGroup] {
         duplicateGroupsFullyConsumed(by: Set(largeFileDeletionSheetFiles.map(\.id)))
     }

@@ -45,14 +45,6 @@ enum CustomCleaningIntervalUnit: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var singularDisplayName: String {
-        switch self {
-        case .day: return String(localized: "Day")
-        case .week: return String(localized: "Week")
-        case .month: return String(localized: "Month")
-        }
-    }
-
     /// The whole "every X" phrase for this unit at the given amount, e.g. "Every day" or
     /// "Every 2 weeks". It is one string, not "Every" plus a unit, because some languages
     /// join the two: Chinese writes 每月, and gluing 每 to 月 left a stray space. Each unit

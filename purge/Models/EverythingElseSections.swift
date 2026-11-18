@@ -34,9 +34,6 @@ nonisolated struct EverythingElseItem: Identifiable, Equatable, Sendable {
 /// One bucket's card on the page: what you can do about the space, its total, and
 /// its rows biggest first, across every group in it.
 nonisolated struct EverythingElseSection: Identifiable, Equatable, Sendable {
-    /// Rows a card shows before "N more".
-    static let collapsedRowLimit = 4
-
     let bucket: EverythingElseBucket
     let bytes: Int64
     let items: [EverythingElseItem]

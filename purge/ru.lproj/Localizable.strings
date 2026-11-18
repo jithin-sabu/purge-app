@@ -360,7 +360,6 @@
 "Dart tool cache" = "Кэш инструментов Dart";
 "Date modified (newest first)" = "Дата изменения (сначала новые)";
 "Date modified (oldest first)" = "Дата изменения (сначала старые)";
-"Day" = "День";
 "Days" = "Дни";
 "Delete %lld Permanently" = "Удалить %lld навсегда";
 "Delete Selected" = "Удалить выбранное";
@@ -634,7 +633,6 @@
 "Model in Draw Things' models folder. It may be one you imported or trained, which can't be downloaded again. Draw Things may still list it until it checks its models folder." = "Модель в папке моделей Draw Things. Возможно, вы импортировали или обучили её, и скачать её снова нельзя. Draw Things может показывать её, пока не проверит папку моделей.";
 "Model weights outside any model store Purge knows. The folder they sit in names the app that downloaded them, and that app may still list the model as installed." = "Веса моделей за пределами хранилищ моделей, известных Purge. Папка, в которой они лежат, указывает на скачавшее их приложение, и это приложение может по-прежнему считать модель установленной.";
 "Models on disk" = "Модели на диске";
-"Month" = "Месяц";
 "Monthly" = "Ежемесячно";
 "Months" = "Месяцы";
 "More about %@" = "Подробнее о %@";
@@ -1303,7 +1301,6 @@
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "Не удалось найти файл с инструкциями по переустановке этой папки. Удалять, скорее всего, можно, но при переустановке могут скачаться немного другие версии, чем раньше.";
 "We could not identify this folder. We recommend leaving it alone." = "Не удалось определить эту папку. Рекомендуем её не трогать.";
 "Website Data" = "Данные веб-сайтов";
-"Week" = "Неделя";
 "Weekly" = "Раз в неделю";
 "Weeks" = "Недели";
 "Welcome to" = "Добро пожаловать в";
