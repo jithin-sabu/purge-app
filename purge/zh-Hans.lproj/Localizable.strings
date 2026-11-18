@@ -442,6 +442,13 @@
 "Preparing..." = "正在准备…";
 "Project" = "项目";
 "Project %@" = "项目 %@";
+
+/* Developer Projects review (#392) */
+"Build data modified %@" = "构建数据修改于 %@";
+"%@ · Modified %@" = "%@ · 修改于 %@";
+"Project details" = "项目详情";
+"Select cleanup item" = "选择清理项目";
+
 "Project, %@" = "项目，%@";
 "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age." = "这段时间内未使用的项目会显示在“开发项目”中，供你清理。编辑项目中的任意文件或使用 Git 都算使用过项目；正在使用的项目始终不会显示。选择“显示全部”可查看所有检测到的项目，不限使用时间。";
 "Protected App Removal" = "受保护应用移除";
@@ -1543,11 +1550,3 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge 已经会扫描你的个人文件夹。添加外置磁盘或其他文件夹，它也会一并被扫描。";
 "No folders added." = "尚未添加文件夹。";
 "Choose a drive or folder to scan too." = "选择一个也要扫描的磁盘或文件夹。";
-
-"Build data modified %@" = "构建数据修改于 %@";
-
-"%@ · Modified %@" = "%@ · 修改于 %@";
-
-"Project details" = "项目详情";
-
-"Select cleanup item" = "选择清理项目";

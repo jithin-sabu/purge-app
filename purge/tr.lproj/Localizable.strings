@@ -442,6 +442,13 @@
 "Preparing..." = "Hazırlanıyor...";
 "Project" = "Proje";
 "Project %@" = "Proje %@";
+
+/* Developer Projects review (#392) */
+"Build data modified %@" = "Derleme verileri %@ tarihinde değiştirildi";
+"%@ · Modified %@" = "%@ · Değiştirilme: %@";
+"Project details" = "Proje ayrıntıları";
+"Select cleanup item" = "Temizlenecek öğeyi seç";
+
 "Project, %@" = "Proje, %@";
 "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age." = "Bu süre içinde üzerinde çalışmadığınız projeler temizlik için Geliştirici Projeleri'nde görünür. Bir projede herhangi bir dosyayı düzenlemek veya git kullanmak o projede çalışmak sayılır ve şu anda kullanımda olan bir proje hiç görünmez. Yaşına bakmaksızın algılanan tüm projeleri görmek için Tümünü göster'i seçin.";
 "Protected App Removal" = "Korumalı Uygulama Kaldırma";
@@ -1543,11 +1550,3 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge ana klasörlerinizi zaten tarar. Onu da taramak için harici bir sürücü ya da başka bir klasör ekleyin.";
 "No folders added." = "Eklenmiş klasör yok.";
 "Choose a drive or folder to scan too." = "Taranacak bir sürücü ya da klasör seçin.";
-
-"Build data modified %@" = "Derleme verileri %@ tarihinde değiştirildi";
-
-"%@ · Modified %@" = "%@ · Değiştirilme: %@";
-
-"Project details" = "Proje ayrıntıları";
-
-"Select cleanup item" = "Temizlenecek öğeyi seç";

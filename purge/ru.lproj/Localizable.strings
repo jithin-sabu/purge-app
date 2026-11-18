@@ -803,6 +803,13 @@
 "Preparing..." = "Подготовка…";
 "Project" = "Проект";
 "Project %@" = "Проект %@";
+
+/* Developer Projects review (#392) */
+"Build data modified %@" = "Данные сборки изменены %@";
+"%@ · Modified %@" = "%@ · Изменено %@";
+"Project details" = "Сведения о проекте";
+"Select cleanup item" = "Выбрать для очистки";
+
 "Project, %@" = "Проект, %@";
 "Projects and tool folders mix caches with source code, installed packages, keys and settings. Dev Tools lists the parts that are safe to clean; the rest stays." = "В папках проектов и инструментов кэши соседствуют с исходным кодом, установленными пакетами, ключами и настройками. «Инструменты разработчика» показывают то, что безопасно очистить; остальное остаётся.";
 "Projects count as stale after" = "Срок устаревания проектов";
@@ -1502,11 +1509,3 @@
 "Purge already scans your home folders. Add an external drive or another folder to scan it too." = "Purge уже сканирует ваши домашние папки. Добавьте внешний диск или другую папку, чтобы сканировать и её.";
 "No folders added." = "Папки не добавлены.";
 "Choose a drive or folder to scan too." = "Выберите диск или папку, которые тоже нужно сканировать.";
-
-"Build data modified %@" = "Данные сборки изменены %@";
-
-"%@ · Modified %@" = "%@ · Изменено %@";
-
-"Project details" = "Сведения о проекте";
-
-"Select cleanup item" = "Выбрать для очистки";
