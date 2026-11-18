@@ -20,7 +20,11 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-MEDIA = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".tif", ".tiff", ".mov", ".mp4", ".m4v"}
+MEDIA = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".heic", ".heif", ".bmp", ".tif", ".tiff",
+    ".svg", ".pdf",
+    ".mov", ".mp4", ".m4v", ".webm",
+}
 
 # Images belong only where the app or the README uses them.
 MEDIA_FOLDERS = (
@@ -28,6 +32,7 @@ MEDIA_FOLDERS = (
     "purge/Assets.xcassets/",
     "purge/Resources/BrandIcons/",
     "purge.icon/",
+    "scripts/brand-icon-sources/",
 )
 
 MAX_MEDIA = 300 * 1024

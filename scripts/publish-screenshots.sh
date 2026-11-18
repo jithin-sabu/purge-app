@@ -61,12 +61,26 @@ for shot in "$@"; do
   NAMES+=("$name")
 done
 
+RESET_HINT="git -C \"$REPO\" rebase --abort; git -C \"$REPO\" reset --hard origin/main"
+NO_ACCESS_HINT="Without write access to jithin-sabu/purge-screenshots, drag the images into the PR description instead."
+
 if [ -d "$REPO/.git" ]; then
+  if [ -d "$REPO/.git/rebase-merge" ] || [ -d "$REPO/.git/rebase-apply" ]; then
+    echo "$REPO is stuck in a rebase. Clear it with: $RESET_HINT" >&2
+    exit 1
+  fi
   [ -z "$(git -C "$REPO" status --porcelain)" ] || { echo "$REPO has uncommitted changes. Sort them out first." >&2; exit 1; }
   git -C "$REPO" checkout -q main
-  git -C "$REPO" pull -q --ff-only origin main
+  git -C "$REPO" fetch -q origin main || { echo "Can't reach jithin-sabu/purge-screenshots. Nothing was published." >&2; exit 1; }
+  git -C "$REPO" merge -q --ff-only origin/main >/dev/null 2>&1 || true
+  if [ "$(git -C "$REPO" rev-parse main)" != "$(git -C "$REPO" rev-parse origin/main)" ]; then
+    # Most likely a run whose push failed. Those files never reached GitHub.
+    echo "Local main in $REPO has commits that are not on GitHub, so nothing in them was published." >&2
+    echo "Drop them with: git -C \"$REPO\" reset --hard origin/main" >&2
+    exit 1
+  fi
 else
-  git clone -q "$REMOTE" "$REPO"
+  git clone -q "$REMOTE" "$REPO" || { echo "Can't clone jithin-sabu/purge-screenshots. Nothing was published." >&2; exit 1; }
 fi
 
 mkdir -p "$REPO/$FOLDER"
@@ -89,12 +103,22 @@ for shot in "$@"; do
   echo "$FOLDER/$name: $(wc -c <"$shot" | tr -d ' ') bytes -> $(wc -c <"$REPO/$FOLDER/$name" | tr -d ' ') bytes" >&2
 done
 
+# Puts the screenshots repo back to GitHub's main, so a failed run leaves
+# nothing behind that blocks the next one. The source PNGs are untouched.
+give_up() {
+  git -C "$REPO" rebase --abort >/dev/null 2>&1 || true
+  git -C "$REPO" reset -q --hard origin/main
+  echo "$1 Nothing was published." >&2
+  exit 1
+}
+
 git -C "$REPO" add -- "$FOLDER"
 git -C "$REPO" commit -q -m "Add shots for $WHAT"
 if ! git -C "$REPO" push -q origin main; then
-  # Another session pushed first. Our files are new names, so a rebase is clean.
-  git -C "$REPO" pull -q --rebase origin main
-  git -C "$REPO" push -q origin main
+  # Another session may have pushed first. Different names rebase cleanly.
+  git -C "$REPO" fetch -q origin main || give_up "The push failed and GitHub can't be reached."
+  git -C "$REPO" rebase -q origin/main >/dev/null 2>&1 || give_up "Someone published a file with the same name meanwhile. Pick another name."
+  git -C "$REPO" push -q origin main || give_up "The push to jithin-sabu/purge-screenshots failed. $NO_ACCESS_HINT"
 fi
 
 SHA="$(git -C "$REPO" rev-parse HEAD)"

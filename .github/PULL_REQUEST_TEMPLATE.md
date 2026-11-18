@@ -16,7 +16,7 @@
 
 ## Screenshots
 
-<!-- For UI changes, before/after screenshots in dark mode. Don't commit them: run scripts/publish-screenshots.sh <issue> <shots> and paste the links it prints. Delete this section if not applicable. -->
+<!-- For UI changes, before/after screenshots in dark mode. Don't commit them, CI refuses images outside the app's own folders. With write access to jithin-sabu/purge-screenshots, run scripts/publish-screenshots.sh <issue> <shots> and paste the links it prints. Without it, drag the images into this description. Delete this section if not applicable. -->
 
 ## Checklist
 
