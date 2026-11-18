@@ -18,8 +18,9 @@ Purge is a macOS app in Swift and SwiftUI. It finds caches and junk and moves th
 | Unit tests | `xcodebuild -project purge.xcodeproj -scheme purge -destination 'platform=macOS' test` | No |
 | Design tokens | `node scripts/lint-design-tokens.mjs` | Yes |
 | Translations | `python3 scripts/check-localization.py` | Yes |
+| Repo weight | `python3 scripts/check-repo-weight.py` | Yes |
 
-Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux checks on every change. When you could not run the unit tests, say so in your reply and in the PR, and give the command.
+Cloud sessions run on Linux, so they can build no Swift code. Run the three Linux checks on every change. When you could not run the unit tests, say so in your reply and in the PR, and give the command.
 
 ## How a change gets made
 
@@ -27,7 +28,9 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux 
 - Make one fix or one feature per PR, on a branch off `main`. PRs are squash-merged.
 - Write the PR title as a Conventional Commit with the issue number, for example `feat: warn when Large Files items sync to iCloud (#25)`. Types in use are feat, fix, perf, docs, test, ci, refactor, and release.
 - Write commit bodies and PR descriptions in plain, short sentences, and give real numbers when you measured something.
-- For UI changes, add before and after screenshots in dark mode to `docs/screenshots/`. Light mode is not needed. Cover every scenario the change can produce and every screen it touches, including Cleanup History and any other place whose text changed.
+- For UI changes, take before and after screenshots in dark mode. Light mode is not needed. Cover every scenario the change can produce and every screen it touches, including Cleanup History and any other place whose text changed. Name each one `<name>-before-dark.png` or `<name>-after-dark.png`.
+- Never commit screenshots to this repo. Every file stays in the history and every clone downloads it, and 991 of them once added 163 MB in three months (#403). Run `scripts/publish-screenshots.sh <issue> <shots>` instead, or, without write access to the screenshots repo, drag the images into the PR description. The script converts them to lossless WebP, pushes them to `jithin-sabu/purge-screenshots`, and prints links pinned to that commit for the PR description. Images in this repo are only the app's own and the README and DMG art in `Assets/`. `scripts/check-repo-weight.py` enforces those folders, a 300 KB cap per image and a 1 MB cap per file. It doesn't read pixel sizes, so size README art at 2x the width it is shown at, by hand, and compress it. It checks only the final tree, so merge PRs with squash.
+- Keep merged branches. PRs from before #403 link their screenshots by branch name, so deleting a branch, or turning on delete-branch-on-merge, breaks those images.
 - Match the style of the file you edit.
 
 ## App rules

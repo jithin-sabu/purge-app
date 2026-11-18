@@ -26,6 +26,9 @@ jobs:
       - name: Check translations
         run: python3 scripts/check-localization.py
 
+      - name: Check repo weight
+        run: python3 scripts/check-repo-weight.py
+
       - name: Build (unsigned)
         run: |
           xcodebuild clean build \
