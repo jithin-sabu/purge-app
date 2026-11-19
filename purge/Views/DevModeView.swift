@@ -1443,6 +1443,9 @@ struct DevToolsView: View {
             let visibleIndices = sortedVisibleArtifactIndices(forGroup: currentGroupIndex)
             let artifacts = visibleIndices.map { store.projectGroups[currentGroupIndex].artifacts[$0] }
             let canExpand = artifacts.count > 1
+            let overriddenArtifact = artifacts.count == 1 ? artifacts.first {
+                store.userOverridePaths.contains($0.path.standardizedFileURL.path)
+            } : nil
             VStack(alignment: .leading, spacing: 0) {
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
                     DeveloperProjectHeader(
@@ -1458,6 +1461,9 @@ struct DevToolsView: View {
                         onToggleExpanded: {
                             keyboard.highlight(DevRowKey.project(group.id))
                             toggleProjectExpanded(group.id)
+                        },
+                        onResetToAutomatic: overriddenArtifact.map { artifact in
+                            { store.resetProjectArtifactToAutomatic(groupID: group.id, artifactID: artifact.id) }
                         }
                     )
                 }

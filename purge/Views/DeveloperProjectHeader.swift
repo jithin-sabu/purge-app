@@ -10,6 +10,7 @@ struct DeveloperProjectHeader: View {
     let selectionState: SelectAllTriState
     let onToggleSelection: () -> Void
     let onToggleExpanded: () -> Void
+    let onResetToAutomatic: (() -> Void)?
 
     @State private var showsDetails = false
 
@@ -178,6 +179,10 @@ struct DeveloperProjectHeader: View {
                     // Each folder is its own thing; a rule keeps them apart.
                     Divider()
                     folderDetail(artifact)
+                }
+                if let onResetToAutomatic {
+                    Button("Reset to automatic", action: onResetToAutomatic)
+                        .buttonStyle(.purge(.secondary, size: .small))
                 }
             }
             .padding(AppStyle.Spacing.large)
