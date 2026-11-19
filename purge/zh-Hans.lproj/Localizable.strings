@@ -338,7 +338,6 @@
 "Use Scan to look again" = "点按“扫描”重新查找";
 "macOS restore image. Only needed to set up a Mac, device or virtual machine. Safe to remove once setup is done." = "macOS 恢复映像。只在设置 Mac、设备或虚拟机时需要，设置完成后可以安全移除。";
 "Made with" = "用";
-"Manual category" = "手动分类";
 "Manual clean" = "手动清理";
 "Matched by app group" = "按应用组匹配";
 "Matched by bundle identifier" = "按应用标识符匹配";
@@ -527,7 +526,6 @@
 "No GitHub account? Email %@" = "没有 GitHub 账号？请发邮件至 %@";
 "Copy email address" = "复制邮箱地址";
 "Rescan" = "重新扫描";
-"Reset to automatic" = "恢复自动选择";
 "Restart Watcher" = "重新启动监测";
 "Restarting…" = "正在重新启动…";
 "Restore image" = "恢复映像";
@@ -722,9 +720,6 @@
 "Xcode can no longer run this device. %@" = "Xcode 已无法运行此设备。%@";
 "Yesterday" = "昨天";
 "You have unsaved code changes nearby" = "附近的代码有未保存的更改";
-"You marked this as Check First." = "你已将此项标记为先检查。";
-"You marked this as Not Sure." = "你已将此项标记为无法确定。";
-"You marked this as Safe to Clean." = "你已将此项标记为可安全清理。";
 "You're all clear" = "暂无需要清理的内容";
 "You're all clear." = "一切正常，暂无需要清理的内容。";
 "You're all set" = "准备就绪";

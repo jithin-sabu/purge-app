@@ -537,8 +537,6 @@ final class PurgeStore: ObservableObject {
     /// Second-step confirmation after the primary deletion sheet when the batch includes Not Sure items.
     @Published var showHighRiskDeletionSecondConfirm = false
 
-    /// Standardized paths with manual user categorizations. Mirrors `user_overrides.json`.
-    @Published private(set) var userOverridePaths: Set<String> = UserOverridesStore.allOverriddenPaths()
     /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
     /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
     @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
@@ -5872,20 +5870,6 @@ final class PurgeStore: ObservableObject {
         cacheItems = pruned(cacheItems)
     }
 
-    private func resolvedAutomaticSafety(for item: CacheItem) -> SafetyInfo {
-        if let key = item.definitionKey,
-           let record = ExplanationDatabase.record(forKey: key) {
-            return ExplanationDatabase.safetyInfo(from: record)
-        }
-        let primary = item.locations[0]
-        let fallback = appDisplayName(forBundleID: primary.folderName) ?? item.appName
-        return ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: primary.folderName,
-            friendlyHeadline: fallback,
-            path: primary.path
-        )
-    }
-
     private nonisolated static func worstReinstall(
         _ a: ReinstallSafetyStatus,
         _ b: ReinstallSafetyStatus
@@ -6199,11 +6183,7 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    // MARK: - Categorization (per-row reset, exclusions)
-
-    private func refreshUserOverridePaths() {
-        userOverridePaths = UserOverridesStore.allOverriddenPaths()
-    }
+    // MARK: - Exclusions
 
     /// Reads both exclusion lists again, and publishes only when one changed.
     private func refreshExclusionListsIfChanged() {
@@ -6423,80 +6403,6 @@ final class PurgeStore: ObservableObject {
         // A pair that just lost a member is no longer a duplicate.
         largeFileDuplicates.removeFiles(ids: removedIDs)
     }
-
-    /// Remove a single override and re-resolve the row using the automatic chain.
-    func resetCacheItemToAutomatic(id: String) {
-        guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
-        let item = cacheItems[index]
-        for location in item.locations {
-            UserOverridesStore.remove(path: location.path)
-        }
-        refreshUserOverridePaths()
-
-        let resolved = resolvedAutomaticSafety(for: item)
-
-        // A mid-scan flush republishes `cacheItems` from the staged buffer, and the
-        // pin keeps the more cautious level, so the staged row has to change too or
-        // the next flush brings the old level back (#378). Only a staged row with
-        // exactly the folders the row showed: one that also holds a folder still
-        // being sized keeps its level, which may come from that folder.
-        let shown = Set(item.paths.map { $0.standardizedFileURL.path })
-        stagedGeneralCacheItems = stagedGeneralCacheItems.map { staged in
-            guard Set(staged.paths.map { $0.standardizedFileURL.path }) == shown else { return staged }
-            var reset = staged
-            reset.safetyInfo = resolved
-            reset.appName = resolved.headline
-            return reset
-        }
-
-        withAnimation {
-            cacheItems[index].safetyInfo = resolved
-            cacheItems[index].appName = resolved.headline
-        }
-    }
-
-    func resetDevToolToAutomatic(id: String) {
-        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
-        let tool = devTools[index]
-        guard let primary = tool.primaryOverridePath else { return }
-        UserOverridesStore.remove(path: primary)
-        refreshUserOverridePaths()
-
-        let label = tool.toolName
-        let info = DevScanner.automaticSafetyInfo(
-            forDevToolLabel: label,
-            primaryPath: primary
-        )
-        withAnimation {
-            devTools[index].safetyInfo = info
-        }
-    }
-
-    func resetProjectArtifactToAutomatic(groupID: String, artifactID: String) {
-        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
-        resetProjectArtifactToAutomatic(groupIndex: indices.groupIndex, artifactIndex: indices.artifactIndex)
-    }
-
-    func resetProjectArtifactToAutomatic(groupIndex: Int, artifactIndex: Int) {
-        guard projectGroups.indices.contains(groupIndex),
-              projectGroups[groupIndex].artifacts.indices.contains(artifactIndex) else { return }
-        let artifact = projectGroups[groupIndex].artifacts[artifactIndex]
-        UserOverridesStore.remove(path: artifact.path)
-        refreshUserOverridePaths()
-
-        let info = SafetyInfo.forStaleProjectArtifact(
-            kind: artifact.kind,
-            path: artifact.path,
-            reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            checkFirstReason: artifact.checkFirstReason
-        )
-        var groups = projectGroups
-        groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
-        withAnimation {
-            projectGroups = groups
-        }
-    }
-
 }
 
 /// Where `measureBundlesAndRemovableTotals` has got to. Main-actor state shared

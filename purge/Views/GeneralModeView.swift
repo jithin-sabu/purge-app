@@ -381,17 +381,11 @@ struct AppCachesView: View {
                 detailCaption: secureRemovalCaption(for: item),
                 reinstallSafety: reinstallDisplay(for: item),
                 showUncommittedRepoChanges: item.gitStatus == .dirty,
-                onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
                 onExcludeFromScans: { store.excludeFromScans(item) },
                 revealLocations: {
                     item.locations.map {
                         ScanRowLocation(url: $0.path, sizeBytes: $0.sizeBytes)
                     }
-                },
-                // `standardizedPaths` is precomputed on the item; deriving it here
-                // meant a filesystem stat per location, per row, per render.
-                isUserOverride: item.standardizedPaths.contains {
-                    store.userOverridePaths.contains($0)
                 },
                 isMetadataPending: store.cacheItemHasPendingSize(item),
                 onHighlight: { [keyboard] in keyboard.highlight(itemID) }

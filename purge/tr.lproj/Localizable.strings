@@ -338,7 +338,6 @@
 "Use Scan to look again" = "Yeniden bakmak için Tara'yı kullanın";
 "macOS restore image. Only needed to set up a Mac, device or virtual machine. Safe to remove once setup is done." = "macOS geri yükleme görüntüsü. Yalnızca bir Mac, aygıt veya sanal makine kurmak için gerekir. Kurulum bittikten sonra kaldırmak güvenlidir.";
 "Made with" = "Şununla yapıldı:";
-"Manual category" = "Elle belirlenen kategori";
 "Manual clean" = "Elle temizlik";
 "Matched by app group" = "Uygulama grubuyla eşleşti";
 "Matched by bundle identifier" = "Paket tanımlayıcısıyla eşleşti";
@@ -526,7 +525,6 @@
 "No GitHub account? Email %@" = "GitHub hesabınız yok mu? %@ adresine e-posta gönderin";
 "Copy email address" = "E-posta adresini kopyala";
 "Rescan" = "Yeniden Tara";
-"Reset to automatic" = "Otomatiğe sıfırla";
 "Restart Watcher" = "İzleyiciyi Yeniden Başlat";
 "Restarting…" = "Yeniden başlatılıyor…";
 "Restore image" = "Geri yükleme görüntüsü";
@@ -722,9 +720,6 @@
 "Xcode can no longer run this device. %@" = "Xcode artık bu aygıtı çalıştıramıyor. %@";
 "Yesterday" = "Dün";
 "You have unsaved code changes nearby" = "Yakında kaydedilmemiş kod değişiklikleriniz var";
-"You marked this as Check First." = "Bunu Önce Kontrol Et olarak işaretlediniz.";
-"You marked this as Not Sure." = "Bunu Emin Değil olarak işaretlediniz.";
-"You marked this as Safe to Clean." = "Bunu Güvenle Temizlenebilir olarak işaretlediniz.";
 "You're all clear" = "Her şey temiz";
 "You're all clear." = "Her şey temiz.";
 "You're all set" = "Her şey hazır";

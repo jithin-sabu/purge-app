@@ -22,10 +22,6 @@ nonisolated struct DevTool: Identifiable, Hashable {
     /// check reads these per tool per render while a cleanup is running.
     let standardizedPaths: [String]
 
-    /// Path used as the user-override key. Defaults to the first declared path
-    /// because a tool entry typically resolves to a single canonical folder.
-    var primaryOverridePath: URL? { paths.first }
-
     var formattedSize: String {
         formatBytes(sizeBytes)
     }

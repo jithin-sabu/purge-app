@@ -79,7 +79,6 @@ struct CatalogIntegrityTests {
     func checkFirstLevelReachesSafetyInfo() {
         let info = SafetyInfo.forStaleProjectArtifact(
             kind: .unityLibrary,
-            path: URL(fileURLWithPath: "/tmp/does-not-exist/Library"),
             reinstallCommand: nil,
             level: .medium
         )
@@ -374,7 +373,7 @@ struct SharedFolderNameRoutingTests {
 /// Rooted under the real home directory, because `collectArtifacts` puts every path
 /// through `DeletionSafetyPolicy`, which correctly refuses anything under `/var` where
 /// the temporary directory lives. Removed again in `cleanUp`.
-private struct HomeScopedFixture {
+struct HomeScopedFixture {
     static let container = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".purge-test-fixtures", isDirectory: true)
 
