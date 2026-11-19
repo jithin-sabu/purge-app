@@ -226,6 +226,46 @@ struct GoModuleCacheScanPolicyTests {
         #expect(read?.offer == .nothing)
     }
 
+    /// `GOMODCACHE` naming Go's Safe build cache in another case is the same
+    /// folder on the Mac's disk. That row must not move it, and nothing in it
+    /// moves on its own either. Asked through `isOfferedForCleanup`, the gate
+    /// Clean Safe Items and scheduled cleans use, on the spelling only: the
+    /// real `~/Library/Caches` is read, never written.
+    @Test
+    func theSafeBuildCacheRowNeverTakesAModuleCacheInAnotherCase() {
+        let home = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+        let goBuild = home.appendingPathComponent("Library/Caches/go-build")
+        let context = GoModuleCacheScanPolicy.TestContext(
+            environment: ["GOMODCACHE": home.appendingPathComponent("Library/Caches/GO-BUILD").path, "GOENV": "off"],
+            home: home
+        )
+        GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            GoModuleCacheScanPolicy.refreshSnapshot()
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(goBuild))
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(goBuild.appendingPathComponent("0a")))
+            #expect(!DeletionSafetyPolicy.isOfferedForCleanup(goBuild))
+            // Folders beside it, and the folder above, which is emptied entry
+            // by entry, are not this rule's business.
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("Library/Caches/go-builder")))
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("Library/Caches")))
+        }
+    }
+
+    /// Inside a cache the row offers whole, nothing moves on its own except
+    /// Go's own downloads.
+    @Test
+    func nothingInsideTheCacheMovesOnItsOwn() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        let context = GoModuleCacheScanPolicy.TestContext(home: home)
+        try GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            try #require(GoModuleCacheScanPolicy.refreshSnapshot()?.isWholeCache == true)
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(root.appendingPathComponent("golang.org/x/text@v0.20.0")))
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(root.appendingPathComponent("cache")))
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(root.appendingPathComponent("cache/download/github.com")))
+        }
+    }
+
     /// Even where nothing may be offered, no row moves a folder that holds the
     /// configured cache, such as Go's Safe build cache with `GOMODCACHE`
     /// inside it.

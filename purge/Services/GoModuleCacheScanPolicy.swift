@@ -534,40 +534,56 @@ nonisolated enum GoModuleCacheScanPolicy {
         return url.standardizedFileURL.path == snapshot.root
     }
 
-    /// Checked before every move:
-    /// - A folder that holds the module cache is never moved whole, by any
-    ///   row, so a Safe row can't take the cache without its Check First.
+    /// Checked before every move. Paths are compared without case, since the
+    /// Mac's disk ignores it, so `GO-BUILD` and `go-build` are one folder.
+    /// - A folder that holds the configured cache is never moved whole, by
+    ///   any row, so a Safe row can't take the cache without its Check First.
     ///   Folders emptied entry by entry are judged by their entries.
+    /// - The cache itself and everything in it move only as this row's own
+    ///   target, spelled exactly as the scan found it, or as part of its
+    ///   `cache` while the row offers anything. No other row may move them.
     /// - The row's own target is moved only while the folder, read again from
     ///   disk with the scan's access, still offers it. So a `src` folder or
     ///   an exclusion added since the scan, or `GOMODCACHE` moved elsewhere,
     ///   stops the move.
-    /// The Dev Tools filter asks on the main thread on every scan flush and
-    /// takes the scan's answer for the second part.
+    /// All of this holds whether or not the folder passed the location
+    /// checks. The Dev Tools filter asks on the main thread on every scan
+    /// flush and takes the scan's answer for the last part.
     static func refusesDeletion(_ url: URL, reuseRecentRead: Bool = false) -> Bool {
         let current = Self.state
         guard let configured = current.configuredRoot else { return false }
         let path = url.standardizedFileURL.path
-        // Only a shorter path can hold the root, so most calls stop at the
-        // length test; this runs for every scanned item. It holds whether or
-        // not the folder passed the checks below.
-        if path.utf8.count < configured.utf8.count,
-           PathContainment.isInside(configured.lowercased(), path.lowercased()),
-           !DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
-            return true
+        let holdsRoot = isSameOrInsideIgnoringCase(configured, path)
+        let insideRoot = isSameOrInsideIgnoringCase(path, configured)
+        guard holdsRoot || insideRoot else { return false }
+        if !insideRoot {
+            return !DeletionSafetyPolicy.shouldDeleteContentsOnly(url)
         }
-        guard let snapshot = current.snapshot else { return false }
+
+        guard let snapshot = current.snapshot else { return true }
+        let cache = snapshot.root + "/cache"
         let target: Snapshot.Offer
         if path == snapshot.root {
             target = .wholeCache
-        } else if path == snapshot.root + "/cache" {
+        } else if path == cache {
             target = .downloadsOnly
         } else {
-            return false
+            // Go's own downloads below `cache`, which `evaluate` allows only
+            // while the row offers something. Anything else in the cache is
+            // never moved on its own.
+            return snapshot.offer == .nothing || !PathContainment.isInside(path, cache)
         }
         guard snapshot.offer == target else { return true }
         if reuseRecentRead { return false }
         return currentRead(insideHomeOnly: snapshot.limited) != snapshot
+    }
+
+    /// `path` is `root` or below it, ignoring case. Anchored, so most calls
+    /// stop at the first character that differs; this runs for every scanned
+    /// item.
+    private static func isSameOrInsideIgnoringCase(_ path: String, _ root: String) -> Bool {
+        guard let match = path.range(of: root, options: [.caseInsensitive, .anchored]) else { return false }
+        return match.upperBound == path.endIndex || path[match.upperBound] == "/"
     }
 
     // MARK: Before the move
