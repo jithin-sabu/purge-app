@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-19: Allowlisted rows followed a link to another folder
 
-**Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** PR for #422, not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+**Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** [#423](https://github.com/jithin-sabu/purge-app/pull/423), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
 
 ### What happened
 
