@@ -358,7 +358,9 @@ enum DeletionSafetyPolicy {
             "\(home)/.zsh_sessions",
             "\(home)/.zcompdump",
             "\(home)/.cache/go-build",
-            "\(home)/go/pkg/mod/cache",
+            // Go's module cache is not listed: where it is comes from
+            // `GOMODCACHE` or `GOPATH`, so `GoModuleCacheScanPolicy` allows it
+            // below, only where it found it (#397).
             // VS Code's and Cursor's `Cache`, `CachedData` and the Electron apps'
             // `Cache` and `Code Cache` are not listed here: a prefix would allow them
             // by name alone. `isWhitelistedApplicationSupportCachePath` allows them
@@ -502,6 +504,9 @@ enum DeletionSafetyPolicy {
         // flush, so it may reuse a read from the last few seconds. `FileDeleter`
         // asks off the main thread, so a move always reads the links again.
         if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // The Go module cache is moved whole only while it still holds nothing
+        // but modules. Same split as Playwright: a move reads the folder again.
+        if GoModuleCacheScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         // Recheck before a move in case the prek store was redirected since the scan.
         if prekStoreLinkRefusesDeletion(url) { return false }
         if prekToolsRefuseDeletion(url) { return false }
@@ -1595,6 +1600,13 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if gradleLeftover(at: path, home: home) != nil {
+            return .allow
+        }
+        // Shape only. Whether the folder still offers this path is checked by
+        // `GoModuleCacheScanPolicy.refusesDeletion` before every move. Its
+        // location was checked against both never-delete lists when it was
+        // read, and the rule itself refuses the exact paths below (#397).
+        if GoModuleCacheScanPolicy.isWhitelistedPath(path) {
             return .allow
         }
         // Above the never-delete guards on purpose: it is in `/var/folders`, which

@@ -16,6 +16,7 @@ on:
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
       - purge/Services/AgentWorktreeScanPolicy.swift
+      - purge/Services/GoModuleCacheScanPolicy.swift
       - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
@@ -31,6 +32,7 @@ on:
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
       - purge/Services/AgentWorktreeScanPolicy.swift
+      - purge/Services/GoModuleCacheScanPolicy.swift
       - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift

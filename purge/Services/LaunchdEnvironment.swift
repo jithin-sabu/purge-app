@@ -14,8 +14,9 @@ import os
 nonisolated enum LaunchdEnvironment {
     typealias Runner = @Sendable (_ executablePath: String, _ arguments: [String]) -> ProcessRunner.Output?
 
-    /// The names read. Only Ollama's store for now.
-    static let names = ["OLLAMA_MODELS"]
+    /// The names read: Ollama's store, and where Go keeps its module cache
+    /// (#397).
+    static let names = ["OLLAMA_MODELS", "GOMODCACHE", "GOPATH", "GOENV"]
 
     static let launchctlPath = "/bin/launchctl"
 

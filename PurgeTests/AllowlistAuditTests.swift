@@ -94,7 +94,7 @@ struct AllowlistNoLongerSafeTests {
 
     @Test(arguments: [
         "Maven Cache", "Gradle Cache", "NuGet Packages", "Cabal Packages",
-        "SBT Cache", "Unused Playwright Browsers",
+        "SBT Cache", "Unused Playwright Browsers", "Go Module Cache",
     ])
     func bigDownloadStoresAreCheckFirst(label: String) {
         let info = DevScanner.automaticSafetyInfo(forDevToolLabel: label, primaryPath: nil)
@@ -352,7 +352,7 @@ struct AllowlistExplanationDataTests {
         let path = AuditPaths.url("Library/Caches/go-build").standardizedFileURL.path
         #expect(DevScanner.claimedGlobalCachePaths().contains(path))
         #expect(AuditPaths.evaluate("Library/Caches/go-build") == .allow)
-        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Go Module Cache", primaryPath: nil)
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Go Build Cache", primaryPath: nil)
         #expect(info.level == .safe)
     }
 }

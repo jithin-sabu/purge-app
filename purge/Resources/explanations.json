@@ -1214,13 +1214,22 @@
   {
     "key": "go",
     "display_name": "Go Module Cache",
+    "tag": "medium",
+    "explanation": "Go modules your projects downloaded. The next build downloads them again and needs a connection. Edits made inside the cache are lost.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "go-build-cache",
+    "display_name": "Go Build Cache",
     "tag": "safe",
-    "explanation": "Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again.",
+    "explanation": "Compiled outputs Go keeps to speed up builds. Safe to delete; Go rebuilds them on your next build.",
     "bundle_ids": [],
     "aliases": [
       "go-build"
     ],
-    "kind": "packages"
+    "kind": "build"
   },
   {
     "key": "maven",

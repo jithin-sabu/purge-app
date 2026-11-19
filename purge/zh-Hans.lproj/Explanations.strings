@@ -386,7 +386,9 @@
 
 /* go */
 "Go Module Cache" = "Go 模块缓存";
-"Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again." = "缓存的 Go 软件包与构建输出。可以安全删除，再次构建 Go 项目时会重新下载。";
+"Go Build Cache" = "Go 构建缓存";
+"Go modules your projects downloaded. The next build downloads them again and needs a connection. Edits made inside the cache are lost." = "你的项目下载的 Go 模块。下次构建会重新下载，并且需要联网。在缓存里做的修改会丢失。";
+"Compiled outputs Go keeps to speed up builds. Safe to delete; Go rebuilds them on your next build." = "Go 为加快构建而保存的编译输出。可以安全删除，下次构建时 Go 会重新生成。";
 
 /* maven */
 "Maven Package Cache" = "Maven 软件包缓存";
