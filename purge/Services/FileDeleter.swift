@@ -579,8 +579,9 @@ nonisolated final class FileDeleter: Sendable {
                     // not empty them like that. The owner gets write permission
                     // first, as `go clean -modcache` does. A folder that can't be
                     // changed keeps the whole cache where it is (#397).
+                    var goModeChanges: GoModuleCacheScanPolicy.ModeChanges?
                     if GoModuleCacheScanPolicy.isWholeCacheRoot(url) {
-                        guard let madeWritable = GoModuleCacheScanPolicy.makeFoldersWritable(in: url) else {
+                        guard let changes = GoModuleCacheScanPolicy.makeFoldersWritable(in: url) else {
                             failedItems.append(FailedDeletionItem(
                                 path: url.path,
                                 displayName: friendlyTitle,
@@ -591,11 +592,12 @@ nonisolated final class FileDeleter: Sendable {
                         }
                         // The walk can take a while on a big cache. Something
                         // added meanwhile, such as a `src` folder, stops the move.
-                        // The folders just made writable were Go's read-only ones.
-                        let refused = GoModuleCacheScanPolicy.$foldersMadeWritable.withValue(madeWritable) {
+                        // The module folders just made writable were Go's.
+                        let refused = GoModuleCacheScanPolicy.$foldersMadeWritable.withValue(changes.goModules) {
                             GoModuleCacheScanPolicy.refusesDeletion(url)
                         }
                         guard !refused else {
+                            GoModuleCacheScanPolicy.restoreModes(changes)
                             skippedItems.append(SkippedDeletionItem(
                                 path: url.path,
                                 displayName: friendlyTitle,
@@ -604,6 +606,7 @@ nonisolated final class FileDeleter: Sendable {
                             ))
                             continue
                         }
+                        goModeChanges = changes
                     }
                     do {
                         try trash(url)
@@ -611,6 +614,9 @@ nonisolated final class FileDeleter: Sendable {
                         deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                         onProgress?(.itemDeleted(sizeBytes: size))
                     } catch {
+                        // Put Go's read-only mark back, so a Retry still
+                        // recognises the cache.
+                        if let goModeChanges { GoModuleCacheScanPolicy.restoreModes(goModeChanges) }
                         recordDeletionFailure(
                             path: url.path,
                             error: error,

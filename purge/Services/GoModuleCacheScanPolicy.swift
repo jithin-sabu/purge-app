@@ -73,10 +73,10 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// so the answer leaves this rule out.
     @TaskLocal private static var judgingOtherRules = false
 
-    /// The folders `makeFoldersWritable` just gave write permission, by inode
-    /// number, so any spelling of their path matches. They were read-only,
-    /// which is Go's evidence, so the check right before the move still
-    /// counts them as Go's.
+    /// The module folders `makeFoldersWritable` just gave write permission
+    /// while they still carried Go's read-only mark, by inode number, so any
+    /// spelling of their path matches. The check right before the move still
+    /// counts them as Go's. Other folders it changed are not in here.
     @TaskLocal static var foldersMadeWritable: Set<UInt64> = []
 
     static let label = "Go Module Cache"
@@ -416,7 +416,7 @@ nonisolated enum GoModuleCacheScanPolicy {
         } else if holdsOnlyModules(root, excludedPaths: excludedPaths) {
             offer = .wholeCache
         } else if !isRealFolder(cache.path + "/download")
-            || excludedPaths.contains(where: { PathContainment.isInside($0, cacheCanonical) }) {
+            || excludedPaths.contains(where: { PathContainment.isSameOrInside($0, cacheCanonical) }) {
             offer = .nothing
         } else {
             offer = .downloadsOnly
@@ -588,20 +588,36 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     // MARK: Before the move
 
+    /// What `makeFoldersWritable` changed, so a move that doesn't happen can
+    /// put it back.
+    struct ModeChanges: Sendable {
+        struct Change: Sendable {
+            let path: String
+            let mode: mode_t
+        }
+
+        /// Module folders that carried Go's read-only mark when the walk
+        /// reached them, by inode number.
+        var goModules: Set<UInt64> = []
+        /// Every folder changed, with its mode before.
+        var changes: [Change] = []
+    }
+
     /// Gives the owner write permission on every folder under `root` that
     /// lacks it, so the Trash can be emptied. Files are left alone: removing
     /// a file needs write permission on its folder, not on the file. Links are
-    /// never followed and other volumes never entered. Returns the inode
-    /// numbers of the folders it changed, all on the root's volume, or nil when any folder could not be read or changed; the
-    /// caller then leaves the cache where it is.
-    static func makeFoldersWritable(in root: URL) -> Set<UInt64>? {
+    /// never followed and other volumes never entered. Returns what it
+    /// changed, or nil when any folder could not be read or changed, after
+    /// putting back what it did change; the caller then leaves the cache
+    /// where it is.
+    static func makeFoldersWritable(in root: URL) -> ModeChanges? {
         let rootPath = root.standardizedFileURL.path
         var rootInfo = stat()
         guard lstat(rootPath, &rootInfo) == 0, (rootInfo.st_mode & S_IFMT) == S_IFDIR else { return nil }
         let device = rootInfo.st_dev
         let user = getuid()
         var allWritable = true
-        var changed: Set<UInt64> = []
+        var result = ModeChanges()
 
         func makeWritable(_ path: String, _ info: stat) {
             guard info.st_uid == user else {
@@ -611,8 +627,13 @@ nonisolated enum GoModuleCacheScanPolicy {
                 return
             }
             guard info.st_mode & S_IWUSR == 0 else { return }
-            if fchmodat(AT_FDCWD, path, (info.st_mode & 0o7777) | S_IWUSR, AT_SYMLINK_NOFOLLOW) == 0 {
-                changed.insert(UInt64(info.st_ino))
+            // Read before the change: the walk reaches a folder before what
+            // is in it, so its top still shows Go's mark or not.
+            let isGoModule = (path as NSString).lastPathComponent.contains("@v") && topIsReadOnly(path)
+            let mode = info.st_mode & 0o7777
+            if fchmodat(AT_FDCWD, path, mode | S_IWUSR, AT_SYMLINK_NOFOLLOW) == 0 {
+                result.changes.append(.init(path: path, mode: mode))
+                if isGoModule { result.goModules.insert(UInt64(info.st_ino)) }
             } else {
                 allWritable = false
                 log.error("Could not make a Go module folder writable: errno \(errno, privacy: .public)")
@@ -628,7 +649,10 @@ nonisolated enum GoModuleCacheScanPolicy {
                 allWritable = false
                 return true
             }
-        ) else { return nil }
+        ) else {
+            restoreModes(result)
+            return nil
+        }
         for case let url as URL in enumerator {
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
             var info = stat()
@@ -647,7 +671,33 @@ nonisolated enum GoModuleCacheScanPolicy {
             }
             makeWritable(url.path, info)
         }
-        return allWritable ? changed : nil
+        guard allWritable else {
+            restoreModes(result)
+            return nil
+        }
+        return result
+    }
+
+    /// Puts back the modes `makeFoldersWritable` changed, for a move that
+    /// didn't happen. Go's read-only mark is its evidence, so without this a
+    /// failed move would leave a cache Purge no longer recognises, and a
+    /// Retry would find nothing to offer.
+    static func restoreModes(_ changes: ModeChanges) {
+        for change in changes.changes.reversed()
+        where fchmodat(AT_FDCWD, change.path, change.mode, AT_SYMLINK_NOFOLLOW) != 0 {
+            log.error("Could not put back a Go module folder's mode: errno \(errno, privacy: .public)")
+        }
+    }
+
+    /// The folder and everything at its top lack owner write permission.
+    private static func topIsReadOnly(_ path: String) -> Bool {
+        var info = stat()
+        guard lstat(path, &info) == 0, info.st_mode & S_IWUSR == 0,
+              let names = try? FileManager.default.contentsOfDirectory(atPath: path) else { return false }
+        return names.allSatisfy { name in
+            var entry = stat()
+            return lstat(path + "/" + name, &entry) == 0 && entry.st_mode & S_IWUSR == 0
+        }
     }
 
     // MARK: Helpers

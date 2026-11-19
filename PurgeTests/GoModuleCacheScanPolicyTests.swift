@@ -228,27 +228,44 @@ struct GoModuleCacheScanPolicyTests {
 
     /// `GOMODCACHE` naming Go's Safe build cache in another case is the same
     /// folder on the Mac's disk. That row must not move it, and nothing in it
-    /// moves on its own either. Asked through `isOfferedForCleanup`, the gate
-    /// Clean Safe Items and scheduled cleans use, on the spelling only: the
-    /// real `~/Library/Caches` is read, never written.
+    /// moves on its own either. Judged on spelling alone: a limited read stops
+    /// at a root outside the test's home before touching the disk, so the real
+    /// home is never read. Its spelling is still used, because the folder
+    /// above, `~/Library/Caches`, is emptied entry by entry only there.
     @Test
-    func theSafeBuildCacheRowNeverTakesAModuleCacheInAnotherCase() {
-        let home = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
-        let goBuild = home.appendingPathComponent("Library/Caches/go-build")
+    func theSafeBuildCacheRowNeverTakesAModuleCacheInAnotherCase() throws {
+        let realHome = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+        let caches = realHome.appendingPathComponent("Library/Caches")
+        let goBuild = caches.appendingPathComponent("go-build")
+        let testHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-397-\(UUID().uuidString)", isDirectory: true)
         let context = GoModuleCacheScanPolicy.TestContext(
-            environment: ["GOMODCACHE": home.appendingPathComponent("Library/Caches/GO-BUILD").path, "GOENV": "off"],
-            home: home
+            environment: ["GOMODCACHE": caches.appendingPathComponent("GO-BUILD").path, "GOENV": "off"],
+            home: testHome
         )
         GoModuleCacheScanPolicy.$testContext.withValue(context) {
-            GoModuleCacheScanPolicy.refreshSnapshot()
+            #expect(GoModuleCacheScanPolicy.refreshSnapshot(insideHomeOnly: true) == nil)
+            #expect(GoModuleCacheScanPolicy.configuredRootPath == caches.appendingPathComponent("GO-BUILD").path)
             #expect(GoModuleCacheScanPolicy.refusesDeletion(goBuild))
             #expect(GoModuleCacheScanPolicy.refusesDeletion(goBuild.appendingPathComponent("0a")))
-            #expect(!DeletionSafetyPolicy.isOfferedForCleanup(goBuild))
             // Folders beside it, and the folder above, which is emptied entry
             // by entry, are not this rule's business.
-            #expect(!GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("Library/Caches/go-builder")))
-            #expect(!GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("Library/Caches")))
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(caches.appendingPathComponent("go-builder")))
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(caches))
         }
+    }
+
+    /// Excluding `cache` itself keeps the fallback from being offered.
+    @Test
+    func anExcludedCacheFolderOffersNothing() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("src"), withIntermediateDirectories: true)
+        let excluded = root.appendingPathComponent("cache").standardizedFileURL.resolvingSymlinksInPath().path
+        let read = GoModuleCacheScanPolicy.read(
+            environment: [:], home: home, excludedPaths: [excluded], insideHomeOnly: false
+        )
+        #expect(read?.offer == .nothing)
     }
 
     /// Inside a cache the row offers whole, nothing moves on its own except
@@ -646,6 +663,53 @@ struct GoModuleCacheScanPolicyTests {
         #expect(Self.mode(module.appendingPathComponent("go.mod")) == 0o444)
         try FileManager.default.removeItem(at: root)
         #expect(!FileManager.default.fileExists(atPath: root.path))
+    }
+
+    /// Only module folders that still carry Go's mark when the walk reaches
+    /// them count as Go's at the last check. A read-only folder named like a
+    /// module, with a writable file in it, doesn't.
+    @Test
+    func onlyGosModulesAreRecordedAsGos() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        let checkout = root.appendingPathComponent("example.com/billing@v1.0.0")
+        try Self.lay(root, folders: ["example.com/billing@v1.0.0"], files: ["example.com/billing@v1.0.0/main.go"])
+        chmod(checkout.path, 0o555)
+        let module = root.appendingPathComponent("golang.org/x/text@v0.20.0")
+        func inode(_ url: URL) -> UInt64 {
+            var info = stat()
+            lstat(url.path, &info)
+            return UInt64(info.st_ino)
+        }
+        let changes = try #require(GoModuleCacheScanPolicy.makeFoldersWritable(in: root))
+        #expect(changes.goModules.contains(inode(module)))
+        #expect(!changes.goModules.contains(inode(checkout)))
+        // And it can put every mode back.
+        GoModuleCacheScanPolicy.restoreModes(changes)
+        #expect(Self.mode(module) == 0o555)
+        #expect(Self.mode(checkout) == 0o555)
+    }
+
+    /// A Trash move that fails puts Go's read-only mark back, so a Retry still
+    /// recognises a cache whose downloads earlier Purge removed.
+    @Test
+    func aFailedMovePutsGosMarkBackForRetry() async throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        try FileManager.default.removeItem(at: root.appendingPathComponent("cache"))
+        let module = root.appendingPathComponent("golang.org/x/text@v0.20.0")
+        let context = GoModuleCacheScanPolicy.TestContext(home: home)
+        let trash = FakeTrash()
+        trash.failNextCalls(1)
+        let deleter = FileDeleter(home: home, trash: trash.trash, fullDiskAccessGranted: { true })
+        try await GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            try #require(GoModuleCacheScanPolicy.refreshSnapshot()?.isWholeCache == true)
+            let report = try await deleter.deleteItems(at: [root])
+            #expect(report.failedItems.count == 1)
+            #expect(Self.mode(module) == 0o555)
+            _ = await deleter.retryDeleteItem(at: root, displayName: nil, expectedSizeBytes: 0, route: .cache)
+            #expect(trash.trashedPaths == [root.standardizedFileURL.path])
+        }
     }
 
     @Test
