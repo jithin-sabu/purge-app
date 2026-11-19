@@ -234,8 +234,9 @@ nonisolated final class FileDeleter: Sendable {
     private let installLeftoverRule: @Sendable () -> Bool
 
     /// The last check before a Dev Tools row moves that reads what the list gate
-    /// can't afford on the main thread: for an nvm Node version, its configs,
-    /// `bin` links and `lsof` (#400). True lets the move go. Tests hand in a
+    /// can't afford on the main thread: for an nvm (#400) or Vite+ (#398) Node
+    /// version, its configs, `bin` links and `lsof`, and `lsof` for an
+    /// unfinished Vite+ install. True lets the move go. Tests hand in a
     /// fake, since the real one only knows the real home's `~/.nvm`.
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
@@ -255,7 +256,10 @@ nonisolated final class FileDeleter: Sendable {
         trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
         listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) },
         fullDiskAccessGranted: @escaping @Sendable () -> Bool = { PermissionChecker().hasFullDiskAccess() },
-        immediateMoveCheck: @escaping @Sendable (URL) -> Bool = { NvmNodeVersionPolicy.passesImmediateTrashBoundary($0) }
+        immediateMoveCheck: @escaping @Sendable (URL) -> Bool = {
+            NvmNodeVersionPolicy.passesImmediateTrashBoundary($0)
+                && VitePlusNodeVersionPolicy.passesImmediateTrashBoundary($0)
+        }
     ) {
         self.immediateMoveCheck = immediateMoveCheck
         self.simulatorRuntimeRemover = simulatorRuntimeRemover

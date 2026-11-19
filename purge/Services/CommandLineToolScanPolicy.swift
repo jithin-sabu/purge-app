@@ -63,7 +63,7 @@ nonisolated enum CommandLineToolScanPolicy {
         ".sdkman", ".nodenv", ".goenv", ".jenv", ".bun", ".deno", ".npm", ".npm-global",
         ".yarn", ".pnpm-store", ".gem", ".bundle", ".pub-cache", ".gradle", ".m2", ".ivy2",
         ".sbt", ".ghcup", ".cabal", ".stack", ".opam", ".elan", ".julia", ".juliaup",
-        ".dotnet", ".conda", ".nimble", ".wasmtime", ".wasmer",
+        ".dotnet", ".conda", ".nimble", ".wasmtime", ".wasmer", ".vite-plus",
         // Folders apps keep, some with a command-line tool inside.
         ".gemini", ".cursor", ".cursor-server", ".vscode", ".vscode-server", ".vscode-insiders",
         ".claude", ".codeium", ".windsurf", ".kiro", ".docker", ".orbstack", ".rd", ".colima",

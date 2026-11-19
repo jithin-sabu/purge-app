@@ -89,6 +89,7 @@
 "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "Algılanan tüm projeler, son kullanım tarihlerinden bağımsız olarak (şu anda kullanımda olanlar hariç) Geliştirici Projeleri'nde görünür. Son 6 ayda üzerinde çalışılan projeler \"Önce Kontrol Et\" olarak işaretlenir; bu yüzden Güvenli Öğeleri Temizle ve zamanlanmış temizlikler onları atlar.";
 "Android NDK %@" = "Android NDK %@";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
+"Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
 "Also in this cleanup" = "Bu temizlikte ayrıca";
 "Also select" = "Ayrıca seç";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ uygulamasını bir yönetici yüklediği için Çöp Sepeti'ne taşınabilmesi macOS'in izninizi almasını gerektirir.";

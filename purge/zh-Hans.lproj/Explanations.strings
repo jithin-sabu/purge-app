@@ -1214,3 +1214,11 @@
 /* swift-frontend-cache */
 "Swift Compiler Cache" = "Swift 编译器缓存";
 "Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them." = "Swift 编译器保留的已编译模型文件。可以安全删除，编译器下次需要时会重新生成。";
+
+/* vite-plus-node-version */
+"Vite+ Node.js Version" = "Vite+ Node.js 版本";
+"An older Node.js from Vite+. No default, pin Purge found, global tool or npm config uses it. The newest of each major stays. vp env install brings it back." = "Vite+ 安装的较旧 Node.js。没有默认版本、Purge 找到的版本固定、全局工具或 npm 配置在用它。每个主版本的最新版会保留。用 vp env install 可以装回来。";
+
+/* vite-plus-node-install-leftovers */
+"Unfinished Vite+ Node Downloads" = "未完成的 Vite+ Node 下载";
+"Folders a stopped Vite+ install left while downloading Node.js. Only folders untouched for a day are listed. Installed versions stay." = "Vite+ 下载 Node.js 时中途停止的安装留下的文件夹。只列出一天内未改动的文件夹。已安装的版本会保留。";
