@@ -5,8 +5,13 @@ import Testing
 /// Purge 1.0 and 1.1 saved safety levels set by hand in `user_overrides.json`,
 /// keyed by exact path. Purge no longer reads that file (#415). An old Safe entry
 /// outranked every automatic rule, so a Check First folder could reach Clean Safe
-/// Items and scheduled cleans. Each test writes a Safe entry for the paths it
-/// checks, as Purge 1.1 did, and expects the automatic level.
+/// Items and scheduled cleans.
+///
+/// `noAppCodeReadsTheFile` is the check that fails if a read comes back. The level
+/// tests below write a Safe entry, as Purge 1.1 did, and expect the automatic
+/// level. They could not have caught the old reads on their own: the old store
+/// read the file once, when the test host started with the file absent, and kept
+/// that empty result.
 ///
 /// The file is in the test run's own support folder (`AppSupportFolder`), never
 /// the user's. Serialized, because the tests share that one file.
@@ -36,6 +41,35 @@ struct OldSafetyLabelTests {
         try? FileManager.default.removeItem(at: fileURL)
     }
 
+    private static var repoRoot: URL {
+        // PurgeTests/OldSafetyLabelTests.swift sits one folder under the root.
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    /// Only `FirstRunGate` may name the file, to tell an existing install from a
+    /// new one by what is in the support folder. It never opens it. On `main`
+    /// before #415 this failed on `UserOverridesStore.swift`.
+    @Test func noAppCodeReadsTheFile() throws {
+        let appFolder = Self.repoRoot.appendingPathComponent("purge", isDirectory: true)
+        let files = try #require(FileManager.default.enumerator(at: appFolder, includingPropertiesForKeys: nil))
+        var named: [String: [String]] = [:]
+        var swiftFiles = 0
+        for case let url as URL in files where url.pathExtension == "swift" {
+            swiftFiles += 1
+            let source = try String(contentsOf: url, encoding: .utf8)
+            for line in source.split(separator: "\n") {
+                let code = line.trimmingCharacters(in: .whitespaces)
+                guard !code.hasPrefix("//") else { continue }
+                if code.contains("user_overrides") || code.contains("UserOverride") {
+                    named[url.lastPathComponent, default: []].append(code)
+                }
+            }
+        }
+        // Shows the walk found the app's sources, so an empty result means something.
+        #expect(swiftFiles > 100)
+        #expect(named == ["FirstRunGate.swift": ["\"user_overrides.json\","]])
+    }
+
     @Test("a Unity Library folder labelled Safe stays Check First")
     func unityLibraryStaysCheckFirst() throws {
         let fixture = try HomeScopedFixture(
@@ -52,16 +86,19 @@ struct OldSafetyLabelTests {
         #expect(row.safetyInfo.level == .medium)
     }
 
+    nonisolated private static func newArtifactPath() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("node_modules", isDirectory: true)
+    }
+
     /// A project folder for the store. The path does not exist, so the clean
     /// can't reach it, but the candidate list still counts it by level.
-    private func projectArtifact(reason: ProjectCheckFirstReason?) -> ProjectCacheArtifact {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("purge-test-\(UUID().uuidString)", isDirectory: true)
-        let path = root.appendingPathComponent("node_modules", isDirectory: true)
-        return ProjectCacheArtifact(
+    private func projectArtifact(reason: ProjectCheckFirstReason?, at path: URL = newArtifactPath()) -> ProjectCacheArtifact {
+        ProjectCacheArtifact(
             kind: .nodeModules,
             path: path,
-            projectRoot: root,
+            projectRoot: path.deletingLastPathComponent(),
             sizeBytes: 1024,
             lastModified: .distantPast,
             isSelected: false,
@@ -93,9 +130,11 @@ struct OldSafetyLabelTests {
     func heldProjectStaysOutOfSafeClean(reason: ProjectCheckFirstReason) throws {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        let artifact = projectArtifact(reason: reason)
-        try Self.writeOldSafeLabels(for: [artifact.path])
+        // The label is on disk before the level is worked out.
+        let path = Self.newArtifactPath()
+        try Self.writeOldSafeLabels(for: [path])
         defer { Self.removeOldLabels() }
+        let artifact = projectArtifact(reason: reason, at: path)
 
         #expect(artifact.safetyInfo.level == .medium)
         #expect(SafetyInfo(

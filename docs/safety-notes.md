@@ -42,14 +42,23 @@ catalog, `explanations.json`, the tier list and the Check First holds.
 default. The "Manual category" badge and the reset buttons are gone. The file
 stays on disk unread, so the fix adds no new delete path.
 
+This works both ways. An old Check First or Not Sure label no longer holds back
+a folder the automatic chain rates Safe, so Clean Safe Items and scheduled
+cleans can now take it without a prompt. Such a folder holds only data its app
+rebuilds, and it goes to the Trash. Exclude from Scans is the way to keep one.
+
 ### What would have caught it earlier
 
-A test that writes an old label and checks the level, not only the code that
-writes labels. [`PurgeTests/OldSafetyLabelTests.swift`](../PurgeTests/OldSafetyLabelTests.swift)
-writes a Safe entry, as Purge 1.1 did, and expects a Unity `Library` folder, a
-project held at Check First, an unknown cache folder, a merged App Caches row
-and a Check First dev tool to keep their automatic level, and the held project
-to stay out of `manualSafeCleanupCandidates()`.
+A check that nothing still reads a file once the code that writes it is gone.
+`noAppCodeReadsTheFile` in
+[`PurgeTests/OldSafetyLabelTests.swift`](../PurgeTests/OldSafetyLabelTests.swift)
+fails when any app source other than `FirstRunGate` names the file, so it fails
+on the code before this fix. The same file writes a Safe entry, as Purge 1.1
+did, and expects a Unity `Library` folder, a project held at Check First, an
+unknown cache folder, a merged App Caches row and a Check First dev tool to keep
+their automatic level. Those level tests alone would not have caught it: the
+old store read the file once, when the test host started with no file, and
+kept that empty result.
 
 ## 2026-11-17: Large Files offered single Ollama blobs from a store Purge didn't know
 
