@@ -453,6 +453,14 @@ enum DeletionSafetyPolicy {
             // packages are links into it. `~/.local/share/uv` holds the tools from
             // `uv tool install` and uv's Python versions, and is not listed.
             "\(home)/.cache/uv",
+            // opencode's cache (#399): the provider and plugin packages it installs,
+            // the tools it downloads into `bin`, and its model list. opencode gets
+            // all of it again by itself. Check First by its explanation: a running
+            // session loads its packages from here, and `bin` holds downloaded tools.
+            // `~/.local/share/opencode` holds sessions, snapshots and `auth.json`, and
+            // `~/.config/opencode` the settings. Neither is listed. Refused when
+            // reached through a link; see `opencodeCacheLinkRefusesDeletion`.
+            "\(home)/.cache/opencode",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
@@ -510,6 +518,8 @@ enum DeletionSafetyPolicy {
         // Recheck before a move in case the prek store was redirected since the scan.
         if prekStoreLinkRefusesDeletion(url) { return false }
         if prekToolsRefuseDeletion(url) { return false }
+        // Recheck before a move in case `~/.cache` became a link since the scan.
+        if opencodeCacheLinkRefusesDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }
@@ -546,6 +556,18 @@ enum DeletionSafetyPolicy {
     nonisolated static func prekStoreLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
         guard PathContainment.isInside(url.standardizedFileURL.path, "\(home)/.cache/prek") else { return false }
         return PathContainment.containsSymlinkComponent(url, home: home)
+    }
+
+    /// The same gap as prek's store, for opencode's cache (#399). If `~/.cache` or
+    /// `~/.cache/opencode` were a link to `~/Developer`, the row would name
+    /// `~/.cache/opencode` while the move took `~/Developer/opencode`, which could
+    /// be a clone of opencode's repository. A link anywhere from home down to the
+    /// cache folder refuses the folder and everything in it. Links inside the
+    /// folder don't count: they move to the Trash as links.
+    nonisolated static func opencodeCacheLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        let root = "\(home)/.cache/opencode"
+        guard PathContainment.isSameOrInside(url.standardizedFileURL.path, root) else { return false }
+        return PathContainment.containsSymlinkComponent(URL(fileURLWithPath: root, isDirectory: true), home: home)
     }
 
     /// Installed prek hooks can retain absolute paths to managed Rust tools.

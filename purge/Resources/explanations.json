@@ -3543,6 +3543,15 @@
     "kind": "ai"
   },
   {
+    "key": "opencode-cache",
+    "display_name": "opencode Cache",
+    "tag": "medium",
+    "explanation": "Packages, tools and the model list opencode downloaded. Clean while opencode is idle. It gets them again when needed. Sessions and logins stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "ai"
+  },
+  {
     "key": "antigravity-browser-cache",
     "display_name": "Antigravity Browser Cache",
     "tag": "safe",

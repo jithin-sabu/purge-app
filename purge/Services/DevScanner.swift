@@ -86,6 +86,7 @@ nonisolated final class DevScanner {
         "Conda Package Cache": "conda-packages",
         "Dart Analysis Cache": "dart-analysis-cache",
         "Hermes Agent Cache": "hermes-agent-cache",
+        "opencode Cache": "opencode-cache",
         "Antigravity Browser Cache": "antigravity-browser-cache",
         "Bun Cache": "bun-cache",
         "nvm Download Cache": "nvm-download-cache",
@@ -797,6 +798,11 @@ nonisolated final class DevScanner {
             // here. Config, API keys, sessions and memories elsewhere in ~/.hermes are
             // never listed.
             ("Hermes Agent Cache", [home.appendingPathComponent(".hermes/cache", isDirectory: true)]),
+            // Check First: a running opencode session loads its provider and plugin
+            // packages from here, and `bin` holds the tools it downloaded (#399).
+            // Sessions, snapshots and logins are in `~/.local/share/opencode`, which
+            // is never listed.
+            ("opencode Cache", [home.appendingPathComponent(".cache/opencode", isDirectory: true)]),
             ("Conda Package Cache", [
                 ".conda/pkgs", "anaconda3/pkgs", "miniconda3/pkgs", "miniforge3/pkgs",
                 "mambaforge/pkgs", "opt/anaconda3/pkgs", "opt/miniconda3/pkgs"
