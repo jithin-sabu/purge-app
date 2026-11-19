@@ -804,6 +804,12 @@
 "Preparing..." = "Подготовка…";
 "Project" = "Проект";
 "Project %@" = "Проект %@";
+
+/* Developer Projects review (#392) */
+"%@ · Modified %@" = "%@ · Изменено %@";
+"Project details" = "Сведения о проекте";
+"Select cleanup item" = "Выбрать для очистки";
+
 "Project, %@" = "Проект, %@";
 "Projects and tool folders mix caches with source code, installed packages, keys and settings. Dev Tools lists the parts that are safe to clean; the rest stays." = "В папках проектов и инструментов кэши соседствуют с исходным кодом, установленными пакетами, ключами и настройками. «Инструменты разработчика» показывают то, что безопасно очистить; остальное остаётся.";
 "Projects count as stale after" = "Срок устаревания проектов";

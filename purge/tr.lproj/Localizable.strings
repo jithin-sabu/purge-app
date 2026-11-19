@@ -443,6 +443,12 @@
 "Preparing..." = "Hazırlanıyor...";
 "Project" = "Proje";
 "Project %@" = "Proje %@";
+
+/* Developer Projects review (#392) */
+"%@ · Modified %@" = "%@ · Değiştirilme: %@";
+"Project details" = "Proje ayrıntıları";
+"Select cleanup item" = "Temizlenecek öğeyi seç";
+
 "Project, %@" = "Proje, %@";
 "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age." = "Bu süre içinde üzerinde çalışmadığınız projeler temizlik için Geliştirici Projeleri'nde görünür. Bir projede herhangi bir dosyayı düzenlemek veya git kullanmak o projede çalışmak sayılır ve şu anda kullanımda olan bir proje hiç görünmez. Yaşına bakmaksızın algılanan tüm projeleri görmek için Tümünü göster'i seçin.";
 "Protected App Removal" = "Korumalı Uygulama Kaldırma";

@@ -622,7 +622,8 @@ enum DeletionSafetyPolicy {
             displayName: group.displayName,
             rootPath: group.rootPath,
             inferredTypes: group.inferredTypes,
-            artifacts: artifacts
+            artifacts: artifacts,
+            repositoryRoot: group.repositoryRoot
         )
     }
 

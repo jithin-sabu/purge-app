@@ -365,10 +365,12 @@ nonisolated struct SavedProjectGroup: Codable, Equatable, Sendable {
     var rootPath: URL
     var inferredTypes: [String]
     var artifacts: [Artifact]
+    var repositoryRoot: URL?
 
     init(_ group: ProjectGroup) {
         displayName = group.displayName
         rootPath = group.rootPath
+        repositoryRoot = group.repositoryRoot
         inferredTypes = group.inferredTypes.map(\.rawValue)
         artifacts = group.artifacts.map { artifact in
             Artifact(
@@ -410,7 +412,8 @@ nonisolated struct SavedProjectGroup: Codable, Equatable, Sendable {
             displayName: displayName,
             rootPath: rootPath,
             inferredTypes: inferredTypes.compactMap(ProjectType.init(rawValue:)),
-            artifacts: rebuilt
+            artifacts: rebuilt,
+            repositoryRoot: repositoryRoot
         )
     }
 

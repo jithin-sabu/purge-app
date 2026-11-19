@@ -134,6 +134,34 @@ struct ProjectAddedFolderTests {
         #expect(listed.allSatisfy { $0.safetyInfo.level == .safe && $0.checkFirstReason == nil })
     }
 
+    @Test("Project card repositories stay within the applicable scan folder")
+    func cardRepositoryStopsAtScanBoundary() throws {
+        let drive = try Drive()
+        defer { drive.remove() }
+        try drive.write("Home/.git/HEAD")
+        try drive.write("Home/Mono/.git/HEAD")
+        try drive.write("Home/LooseApp/package.json")
+        try drive.write("Home/Mono/apps/Web/package.json")
+        try drive.write("Home/Mono/apps/Owned/.git/HEAD")
+
+        func repositoryPath(_ relative: String) -> String? {
+            DevScanner.projectRepositoryRoot(for: drive.url(relative), home: drive.url("Home"))?.standardizedFileURL.path
+        }
+
+        let mono = drive.url("Home/Mono").standardizedFileURL.path
+        #expect(repositoryPath("Home/LooseApp") == nil)
+        #expect(repositoryPath("Home/Mono/apps/Web") == mono)
+
+        ScanFolders.$snapshotOverride.withValue(.init(walked: [mono], saved: [mono])) {
+            #expect(repositoryPath("Home/Mono/apps/Web") == mono)
+        }
+        let apps = drive.url("Home/Mono/apps").standardizedFileURL.path
+        ScanFolders.$snapshotOverride.withValue(.init(walked: [apps], saved: [apps])) {
+            #expect(repositoryPath("Home/Mono/apps/Web") == nil)
+            #expect(repositoryPath("Home/Mono/apps/Owned") == drive.url("Home/Mono/apps/Owned").standardizedFileURL.path)
+        }
+    }
+
     @Test("On an added folder, a project inside an app bundle is refused and never walked into")
     func appBundleOnADrive() throws {
         let drive = try Drive()
