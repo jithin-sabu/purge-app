@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-19: Old manual safety labels outranked Check First
 
-**Found internally** while reviewing contributor PR [#414](https://github.com/jithin-sabu/purge-app/pull/414) ([#415](https://github.com/jithin-sabu/purge-app/issues/415)), no report. **Fixed:** not shipped yet. **Affected:** every release up to v1.16.2, on Macs where someone set a level by hand in Purge 1.0 or 1.1.
+**Found internally** while reviewing contributor PR [#414](https://github.com/jithin-sabu/purge-app/pull/414) ([#415](https://github.com/jithin-sabu/purge-app/issues/415)), no report. **Fixed:** [#416](https://github.com/jithin-sabu/purge-app/pull/416), not shipped yet. **Affected:** every release up to v1.16.2, on Macs where someone set a level by hand in Purge 1.0 or 1.1.
 
 ### What happened
 
