@@ -144,6 +144,44 @@ struct OldSafetyLabelTests {
         #expect(store.manualSafeCleanupCandidates().isEmpty)
     }
 
+    /// The same hold, through the project scan. The label is on disk before the
+    /// scan works out the level.
+    @Test("a scanned project held at Check First and labelled Safe stays Check First")
+    func scannedHeldProjectStaysCheckFirst() throws {
+        let now = Date()
+        let fixture = try ActivityFixture(
+            files: ["package.json", "package-lock.json", "src/app.js", "node_modules/pkg/index.js"]
+        )
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: now.addingTimeInterval(-400 * 86_400))
+        try Self.writeOldSafeLabels(for: [fixture.url("node_modules")])
+        defer { Self.removeOldLabels() }
+
+        func scan(_ filter: DevScanner.ProjectListingFilter) -> ProjectGroup? {
+            DevScanner.sizeProjectGroup(rootURL: fixture.root, types: [.node], access: .full, filter: filter).0
+        }
+        // Too big to check: the walk stops at once.
+        let tooBig = try #require(scan(DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.sixMonths.rawValue, now: now, live: .none, activityEntryLimit: 0
+        )))
+        // Used recently, listed because of Show all.
+        try fixture.setDate(now, of: "src/app.js")
+        let recent = try #require(scan(DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.showAll.rawValue, now: now, live: .none
+        )))
+
+        for group in [tooBig, recent] {
+            #expect(!group.artifacts.isEmpty)
+            #expect(group.artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason != nil })
+            let scans = FakeScans()
+            defer { scans.cleanUp() }
+            scans.hasAccess = true
+            let store = scans.makeStore()
+            store.projectGroups = [group]
+            #expect(store.manualSafeCleanupCandidates().isEmpty)
+        }
+    }
+
     /// Shows the empty list above comes from the level, not from the folder
     /// being out of reach.
     @Test("the same project not held is a Clean Safe Items candidate")
