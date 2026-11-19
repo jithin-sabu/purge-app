@@ -358,7 +358,9 @@ enum DeletionSafetyPolicy {
             "\(home)/.zsh_sessions",
             "\(home)/.zcompdump",
             "\(home)/.cache/go-build",
-            "\(home)/go/pkg/mod/cache",
+            // Go's module cache is not listed: where it is comes from
+            // `GOMODCACHE` or `GOPATH`, so `GoModuleCacheScanPolicy` allows it
+            // below, only where it found it (#397).
             // VS Code's and Cursor's `Cache`, `CachedData` and the Electron apps'
             // `Cache` and `Code Cache` are not listed here: a prefix would allow them
             // by name alone. `isWhitelistedApplicationSupportCachePath` allows them
@@ -1600,10 +1602,10 @@ enum DeletionSafetyPolicy {
         if gradleLeftover(at: path, home: home) != nil {
             return .allow
         }
-        // Shape only. Whether the whole folder still holds nothing but modules
-        // is checked by `GoModuleCacheScanPolicy.refusesDeletion` before every
-        // move. Its location was checked against the never-delete list when it
-        // was read (#397).
+        // Shape only. Whether the folder still offers this path is checked by
+        // `GoModuleCacheScanPolicy.refusesDeletion` before every move. Its
+        // location was checked against both never-delete lists when it was
+        // read, and the rule itself refuses the exact paths below (#397).
         if GoModuleCacheScanPolicy.isWhitelistedPath(path) {
             return .allow
         }

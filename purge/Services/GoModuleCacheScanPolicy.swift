@@ -14,38 +14,64 @@ import os
 /// Purge's environment is read from launchd and then from Go's own env file
 /// (what `go env -w` writes), since Purge never sees a shell profile.
 ///
-/// The whole folder is offered only when it looks like a module cache and
-/// nothing else: `cache/download` inside it, and every other entry a folder
-/// named after a module path's first element, which always has a dot
-/// (`github.com`, `golang.org`). So `GOMODCACHE` naming `GOPATH`, with the
-/// user's `src` in it, is never offered whole. Otherwise only `cache` is.
+/// The whole folder is offered only with positive evidence that everything in
+/// it is Go's: `cache/download`, and below every other entry only folders that
+/// lead down to unpacked modules (`<path>@<version>`). A file, a link, a hidden
+/// entry or a version-control folder on the way means the folder holds more,
+/// such as the user's own checkouts under `github.com/me/repo`, and then only
+/// `cache` is offered.
 ///
 /// Go makes each unpacked module folder read-only. Moved to the Trash like
 /// that, the Trash could not be emptied, so right before the move Purge gives
 /// the owner write permission on each folder, as `go clean -modcache` does.
 nonisolated enum GoModuleCacheScanPolicy {
-    /// The cache Purge last found, and whether it is offered whole.
+    /// The cache Purge last found, and what its row offers.
     struct Snapshot: Equatable, Sendable {
+        enum Offer: Equatable, Sendable {
+            /// The whole folder: everything in it is Go's.
+            case wholeCache
+            /// Only `<root>/cache`: the folder holds something else too.
+            case downloadsOnly
+            /// Nothing: an exclusion sits inside `cache`, or another rule
+            /// already offers a folder that holds the cache.
+            case nothing
+        }
+
         var root: String
-        var isWholeCache: Bool
+        var offer: Offer
+        /// Read by a scan without Full Disk Access, which never looks inside
+        /// a protected folder or outside home. A move reads it the same way.
+        var limited: Bool
+
+        var isWholeCache: Bool { offer == .wholeCache }
     }
 
     /// The environment and home a test reads from instead of the real ones,
-    /// with its own snapshot.
+    /// with its own snapshot. The environment can change, as `GOMODCACHE` can
+    /// between a scan and a clean.
     final class TestContext: @unchecked Sendable {
-        let environment: [String: String]
         let home: URL
         let excludedPaths: Set<String>
         fileprivate let stored = OSAllocatedUnfairLock<Snapshot?>(initialState: nil)
+        private let environmentStore: OSAllocatedUnfairLock<[String: String]>
 
         init(environment: [String: String] = [:], home: URL, excludedPaths: Set<String> = []) {
-            self.environment = environment
+            self.environmentStore = OSAllocatedUnfairLock(initialState: environment)
             self.home = home
             self.excludedPaths = excludedPaths
+        }
+
+        var environment: [String: String] {
+            get { environmentStore.withLock { $0 } }
+            set { environmentStore.withLock { $0 = newValue } }
         }
     }
 
     @TaskLocal static var testContext: TestContext?
+
+    /// Set while `read` asks `evaluate` whether another rule offers a folder,
+    /// so the answer leaves this rule out.
+    @TaskLocal private static var judgingOtherRules = false
 
     static let label = "Go Module Cache"
     static let explanationKey = "go"
@@ -116,26 +142,53 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     // MARK: Judging the folder
 
+    /// System locations no module cache is offered from. `/System` and
+    /// `/private` also catch another spelling of a folder elsewhere:
+    /// `/System/Volumes/Data/Users/...` is the home folder, and
+    /// `/private/var/...` is `/var`, reached without any link.
+    static let refusedSystemPrefixes = ["/System", "/private", "/Library", "/usr", "/bin", "/sbin", "/etc", "/var", "/cores", "/dev"]
+
+    /// Whether `path` is somewhere the row may never sit, by its spelling
+    /// alone: home or above it, a never-delete folder or one of the exact
+    /// folders `evaluate` refuses, iCloud Drive or a cloud-storage folder, or
+    /// a system location. Compared without case, since the Mac's disk ignores
+    /// it, so `~/pictures` is `~/Pictures`. On a disk that minds case, this
+    /// only refuses more.
+    static func isRefusedSpelling(
+        _ path: String,
+        home: String,
+        systemPrefixes: [String] = refusedSystemPrefixes
+    ) -> Bool {
+        let path = path.lowercased()
+        let home = home.lowercased()
+        guard path.hasPrefix("/"), path != "/", !PathContainment.isSameOrInside(home, path) else { return true }
+        let inHome = PathContainment.isInside(path, home)
+        let homeRefused = (DeletionSafetyPolicy.neverDeletePrefixes(home: home)
+            .filter { PathContainment.isSameOrInside($0.lowercased(), home) }
+            + ["\(home)/library/mobile documents", "\(home)/library/cloudstorage"])
+            .map { $0.lowercased() }
+        if homeRefused.contains(where: { PathContainment.isSameOrInside(path, $0) }) { return true }
+        if DeletionSafetyPolicy.neverDeleteExactPaths(home: home).contains(where: { $0.lowercased() == path }) {
+            return true
+        }
+        // A test's home sits under `/var`, so inside home only home's own
+        // entries apply.
+        if inHome { return false }
+        let systemRefused = (systemPrefixes + DeletionSafetyPolicy.neverDeletePrefixes(home: home)).map { $0.lowercased() }
+        return systemRefused.contains { PathContainment.isSameOrInside(path, $0) }
+    }
+
     /// Whether `root` is somewhere a Go module cache may be offered from at
-    /// all: a real local folder with `cache/download` in it, reached through
-    /// no link, not `/`, home or above it, not under a never-delete location,
-    /// and not in a folder a sync service keeps, where a move to the Trash is a
-    /// delete on every device.
+    /// all: an allowed spelling (`isRefusedSpelling`), a real local folder
+    /// with `cache/download` in it reached through no link, and not in a
+    /// folder iCloud or another sync service keeps, where a move to the Trash
+    /// is a delete on every device.
     static func acceptsLocation(_ root: URL, home: URL) -> Bool {
         let path = root.standardizedFileURL.path
         let homePath = home.standardizedFileURL.path
-        guard path.hasPrefix("/"), path != "/", !PathContainment.isSameOrInside(homePath, path) else { return false }
+        guard !isRefusedSpelling(path, home: homePath) else { return false }
 
-        let inHome = PathContainment.isInside(path, homePath)
-        // `evaluate` reaches its shape rules before the never-delete list, so
-        // this rule checks the list itself. A test's home sits under `/var`,
-        // so inside home only the home folder's own entries apply.
-        let refused = DeletionSafetyPolicy.neverDeletePrefixes(home: homePath)
-            .filter { !inHome || PathContainment.isSameOrInside($0, homePath) }
-            + ["\(homePath)/Library/Mobile Documents", "\(homePath)/Library/CloudStorage"]
-        if refused.contains(where: { PathContainment.isSameOrInside(path, $0) }) { return false }
-
-        if inHome {
+        if PathContainment.isInside(path, homePath) {
             if PathContainment.containsSymlinkComponent(root, home: homePath) { return false }
         } else if containsLinkFromRoot(path) {
             return false
@@ -145,43 +198,113 @@ nonisolated enum GoModuleCacheScanPolicy {
         }
         guard AppFolders.isOnLocalDisk(root) else { return false }
 
+        // iCloud Desktop & Documents leaves no marker file, so ask each folder
+        // whether iCloud keeps it, from the cache up to home.
         var folder = root.standardizedFileURL
         while folder.path != "/" {
             if AppFolders.isSyncedByAnotherService(folder) { return false }
+            if PathContainment.isSameOrInside(folder.path, homePath),
+               (try? folder.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true {
+                return false
+            }
             folder.deleteLastPathComponent()
         }
         return true
     }
 
-    /// Whether everything in `root` is Go's: `cache`, and folders named after
-    /// a module path's first element, which always has a dot. `.DS_Store` is
-    /// Finder's. A link, a file, a hidden entry or a name like `src` means the
-    /// folder holds more than modules. A folder the user excluded inside it
-    /// keeps the whole folder from being offered too.
+    /// Whether everything in `root` is Go's: `cache`, and below every other
+    /// entry only folders leading down to unpacked modules. The first element
+    /// of a module path always has a dot (`github.com`), no element starts
+    /// with one, and Go's module zips hold no version-control folder. So a
+    /// file, a link, a hidden entry or a `.git` on the way down means the
+    /// folder holds more than modules, such as the user's checkouts. A folder
+    /// the user excluded inside it keeps the whole folder from being offered.
     static func holdsOnlyModules(_ root: URL, excludedPaths: Set<String>) -> Bool {
         let canonical = root.standardizedFileURL.resolvingSymlinksInPath().path
         if excludedPaths.contains(where: { PathContainment.isInside($0, canonical) }) { return false }
-
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: keys,
-            options: []
-        ) else { return false }
+        guard let entries = entries(of: root) else { return false }
         for entry in entries {
-            let name = entry.lastPathComponent
-            if name == ".DS_Store" { continue }
-            let values = try? entry.resourceValues(forKeys: Set(keys))
-            guard values?.isSymbolicLink != true, values?.isDirectory == true else { return false }
+            let name = entry.url.lastPathComponent
+            if name == ".DS_Store", !entry.isFolder { continue }
+            guard entry.isFolder else { return false }
             if name == "cache" { continue }
             guard !name.hasPrefix("."), name.contains(".") else { return false }
+            // A one-element module path, such as `example.com@v1.0.0`.
+            if name.contains("@v") {
+                guard isUnpackedModule(entry.url) else { return false }
+                continue
+            }
+            guard !name.contains("@"), leadsOnlyToModules(entry.url, depth: 1) else { return false }
         }
         return true
     }
 
+    /// Go's module paths are short. A deeper tree is not one.
+    private static let maxModulePathDepth = 16
+
+    private static let versionControlFolders: Set<String> = [".git", ".hg", ".svn", ".bzr", "_darcs", ".jj"]
+
+    private static func leadsOnlyToModules(_ folder: URL, depth: Int) -> Bool {
+        guard depth <= maxModulePathDepth, let entries = entries(of: folder) else { return false }
+        for entry in entries {
+            let name = entry.url.lastPathComponent
+            if name == ".DS_Store", !entry.isFolder { continue }
+            guard entry.isFolder, !name.hasPrefix(".") else { return false }
+            if name.contains("@v") {
+                guard isUnpackedModule(entry.url) else { return false }
+            } else if !leadsOnlyToModules(entry.url, depth: depth + 1) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// An unpacked module folder, `<last element>@<version>`. Go's zips never
+    /// hold a version-control folder, so one at its top is someone's checkout.
+    private static func isUnpackedModule(_ folder: URL) -> Bool {
+        guard let entries = entries(of: folder) else { return false }
+        return !entries.contains { versionControlFolders.contains($0.url.lastPathComponent) }
+    }
+
+    private struct Entry {
+        let url: URL
+        /// A real folder, never a link to one.
+        let isFolder: Bool
+    }
+
+    private static func entries(of folder: URL) -> [Entry]? {
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: keys,
+            options: []
+        ) else { return nil }
+        return urls.map { url in
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            return Entry(url: url, isFolder: values?.isSymbolicLink != true && values?.isDirectory == true)
+        }
+    }
+
+    /// Whether a rule other than this one already offers `root` or a folder
+    /// above it, such as `~/Library/Caches` or Go's build cache. A Safe row
+    /// there could move the module cache without its Check First, so the
+    /// module cache gets no row of its own, and `refusesDeletion` keeps the
+    /// other row from moving a folder that holds it.
+    static func isInsideAnotherOfferedFolder(_ root: URL) -> Bool {
+        $judgingOtherRules.withValue(true) {
+            var folder = root.standardizedFileURL
+            while folder.path != "/" {
+                if DeletionSafetyPolicy.evaluate(folder) == .allow { return true }
+                folder.deleteLastPathComponent()
+            }
+            return false
+        }
+    }
+
     /// Reads the folder from disk. Nil when there is no folder Purge may offer
     /// anything from. `insideHomeOnly` is for a scan without Full Disk Access,
-    /// which must not read a drive outside home.
+    /// which reads nothing outside home and nothing in a protected folder,
+    /// such as Documents, before it knows it may.
     static func read(
         environment: [String: String],
         home: URL,
@@ -190,9 +313,25 @@ nonisolated enum GoModuleCacheScanPolicy {
     ) -> Snapshot? {
         guard let root = configuredRoot(environment: environment, home: home) else { return nil }
         let homePath = home.standardizedFileURL.path
-        if insideHomeOnly, !PathContainment.isInside(root.path, homePath) { return nil }
+        if insideHomeOnly {
+            guard PathContainment.isInside(root.path, homePath),
+                  ProtectedLocations.isReadable(root, access: .limited, home: home) else { return nil }
+        }
         guard acceptsLocation(root, home: home) else { return nil }
-        return Snapshot(root: root.path, isWholeCache: holdsOnlyModules(root, excludedPaths: excludedPaths))
+
+        let offer: Snapshot.Offer
+        let cache = root.appendingPathComponent("cache", isDirectory: true)
+        let cacheCanonical = cache.standardizedFileURL.resolvingSymlinksInPath().path
+        if isInsideAnotherOfferedFolder(root) {
+            offer = .nothing
+        } else if holdsOnlyModules(root, excludedPaths: excludedPaths) {
+            offer = .wholeCache
+        } else if excludedPaths.contains(where: { PathContainment.isInside($0, cacheCanonical) }) {
+            offer = .nothing
+        } else {
+            offer = .downloadsOnly
+        }
+        return Snapshot(root: root.path, offer: offer, limited: insideHomeOnly)
     }
 
     // MARK: Snapshot
@@ -212,22 +351,12 @@ nonisolated enum GoModuleCacheScanPolicy {
     static func refreshSnapshot(insideHomeOnly: Bool = false) -> Snapshot? {
         let read: Snapshot?
         if let testContext {
-            read = Self.read(
-                environment: testContext.environment,
-                home: testContext.home,
-                excludedPaths: testContext.excludedPaths,
-                insideHomeOnly: insideHomeOnly
-            )
+            read = currentRead(insideHomeOnly: insideHomeOnly)
             testContext.stored.withLock { $0 = read }
         } else {
             guard !RemovedAppHandoff.runsInTestHost else { return snapshot }
             LaunchdEnvironment.refresh()
-            read = Self.read(
-                environment: liveEnvironment,
-                home: FileManager.default.homeDirectoryForCurrentUser,
-                excludedPaths: ExcludedPathsStore.allExcludedPaths(),
-                insideHomeOnly: insideHomeOnly
-            )
+            read = currentRead(insideHomeOnly: insideHomeOnly)
             let changed = store.withLock { stored -> Bool in
                 defer { stored = read }
                 return stored != read
@@ -240,6 +369,24 @@ nonisolated enum GoModuleCacheScanPolicy {
         return read
     }
 
+    /// `read` with the test's values or the real ones.
+    private static func currentRead(insideHomeOnly: Bool) -> Snapshot? {
+        if let testContext {
+            return read(
+                environment: testContext.environment,
+                home: testContext.home,
+                excludedPaths: testContext.excludedPaths,
+                insideHomeOnly: insideHomeOnly
+            )
+        }
+        return read(
+            environment: liveEnvironment,
+            home: FileManager.default.homeDirectoryForCurrentUser,
+            excludedPaths: ExcludedPathsStore.allExcludedPaths(),
+            insideHomeOnly: insideHomeOnly
+        )
+    }
+
     /// Purge's own environment, with the Go names filled in from launchd.
     static var liveEnvironment: [String: String] {
         LaunchdEnvironment.merged(into: ProcessInfo.processInfo.environment)
@@ -249,22 +396,27 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     // MARK: Row and gates
 
-    /// The paths the Go Module Cache row offers: the whole folder when it
-    /// holds only modules, else its `cache`. Never both, so nothing is counted
-    /// twice. With no folder read, `~/go/pkg/mod/cache` as before.
+    /// The path the Go Module Cache row offers, if any: the whole folder, or
+    /// its `cache`. Never both, so nothing is counted twice.
     static func rowPaths(home: URL) -> [URL] {
-        guard let snapshot else {
-            return [home.appendingPathComponent("go/pkg/mod/cache", isDirectory: true)]
-        }
+        guard let snapshot else { return [] }
         let root = URL(fileURLWithPath: snapshot.root, isDirectory: true)
-        return snapshot.isWholeCache ? [root] : [root.appendingPathComponent("cache", isDirectory: true)]
+        switch snapshot.offer {
+        case .wholeCache: return [root]
+        case .downloadsOnly: return [root.appendingPathComponent("cache", isDirectory: true)]
+        case .nothing: return []
+        }
     }
 
     /// Shape only, for `evaluate`: the folder itself when it was found to hold
-    /// only modules, and its `cache` and below. Never one module folder on its
-    /// own, and never the folders above it.
-    static func isWhitelistedPath(_ path: String) -> Bool {
-        guard let snapshot else { return false }
+    /// only modules, and its `cache` and below when anything is offered.
+    /// Never one module folder on its own, never the folders above it, and
+    /// never one of the exact folders `evaluate` refuses, whatever was read.
+    static func isWhitelistedPath(_ path: String, home: String = DeletionSafetyPolicy.cachedHomePath) -> Bool {
+        guard !judgingOtherRules, let snapshot, snapshot.offer != .nothing else { return false }
+        if DeletionSafetyPolicy.neverDeleteExactPaths(home: home).contains(where: { $0.lowercased() == path.lowercased() }) {
+            return false
+        }
         if path == snapshot.root { return snapshot.isWholeCache }
         return PathContainment.isSameOrInside(path, snapshot.root + "/cache")
     }
@@ -275,34 +427,37 @@ nonisolated enum GoModuleCacheScanPolicy {
         return url.standardizedFileURL.path == snapshot.root
     }
 
-    /// Checked before every move of the whole folder. Off the main thread the
-    /// folder is found and judged again from disk, so a `src` folder added
-    /// since the scan, or `GOMODCACHE` moved elsewhere, stops the move. The
-    /// Dev Tools filter asks on the main thread on every scan flush and takes
-    /// the scan's answer.
+    /// Checked before every move:
+    /// - A folder that holds the module cache is never moved whole, by any
+    ///   row, so a Safe row can't take the cache without its Check First.
+    ///   Folders emptied entry by entry are judged by their entries.
+    /// - The row's own target is moved only while the folder, read again from
+    ///   disk with the scan's access, still offers it. So a `src` folder or
+    ///   an exclusion added since the scan, or `GOMODCACHE` moved elsewhere,
+    ///   stops the move.
+    /// The Dev Tools filter asks on the main thread on every scan flush and
+    /// takes the scan's answer for the second part.
     static func refusesDeletion(_ url: URL, reuseRecentRead: Bool = false) -> Bool {
         guard let snapshot else { return false }
         let path = url.standardizedFileURL.path
-        guard path == snapshot.root else { return false }
-        guard snapshot.isWholeCache else { return true }
-        if reuseRecentRead { return false }
-        let current: Snapshot?
-        if let testContext {
-            current = read(
-                environment: testContext.environment,
-                home: testContext.home,
-                excludedPaths: testContext.excludedPaths,
-                insideHomeOnly: false
-            )
-        } else {
-            current = read(
-                environment: liveEnvironment,
-                home: FileManager.default.homeDirectoryForCurrentUser,
-                excludedPaths: ExcludedPathsStore.allExcludedPaths(),
-                insideHomeOnly: false
-            )
+        // Only a shorter path can hold the root, so most calls stop at the
+        // length test; this runs for every scanned item.
+        if path.utf8.count < snapshot.root.utf8.count,
+           PathContainment.isInside(snapshot.root.lowercased(), path.lowercased()),
+           !DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
+            return true
         }
-        return current != snapshot
+        let target: Snapshot.Offer
+        if path == snapshot.root {
+            target = .wholeCache
+        } else if path == snapshot.root + "/cache" {
+            target = .downloadsOnly
+        } else {
+            return false
+        }
+        guard snapshot.offer == target else { return true }
+        if reuseRecentRead { return false }
+        return currentRead(insideHomeOnly: snapshot.limited) != snapshot
     }
 
     // MARK: Before the move

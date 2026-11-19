@@ -1215,7 +1215,7 @@
     "key": "go",
     "display_name": "Go Module Cache",
     "tag": "medium",
-    "explanation": "Go modules your projects downloaded. Nothing is lost, but the next build downloads them all again and needs a connection.",
+    "explanation": "Go modules your projects downloaded. The next build downloads them again and needs a connection. Edits made inside the cache are lost.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"

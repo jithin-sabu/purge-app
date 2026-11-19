@@ -290,7 +290,7 @@
 
 "Go Module Cache" = "Go Modül Önbelleği";
 "Go Build Cache" = "Go Derleme Önbelleği";
-"Go modules your projects downloaded. Nothing is lost, but the next build downloads them all again and needs a connection." = "Projelerinizin indirdiği Go modülleri. Hiçbir şey kaybolmaz ancak bir sonraki derleme hepsini yeniden indirir ve bağlantı gerektirir.";
+"Go modules your projects downloaded. The next build downloads them again and needs a connection. Edits made inside the cache are lost." = "Projelerinizin indirdiği Go modülleri. Bir sonraki derleme bunları yeniden indirir ve bağlantı gerektirir. Önbelleğin içinde yapılan değişiklikler kaybolur.";
 "Compiled outputs Go keeps to speed up builds. Safe to delete; Go rebuilds them on your next build." = "Go'nun derlemeleri hızlandırmak için sakladığı derleme çıktıları. Silmek güvenlidir; Go bir sonraki derlemede bunları yeniden oluşturur.";
 
 "Maven Package Cache" = "Maven Paket Önbelleği";

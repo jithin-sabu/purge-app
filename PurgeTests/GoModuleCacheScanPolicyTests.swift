@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 import Testing
 @testable import Purge
 
@@ -155,7 +156,7 @@ struct GoModuleCacheScanPolicyTests {
         let (home, root) = try Self.makeHome()
         defer { Self.cleanUp(home) }
         let read = GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false)
-        #expect(read == .init(root: root.standardizedFileURL.path, isWholeCache: true))
+        #expect(read == .init(root: root.standardizedFileURL.path, offer: .wholeCache, limited: false))
     }
 
     /// `GOMODCACHE` naming `GOPATH` would take the user's code in `src`.
@@ -239,11 +240,147 @@ struct GoModuleCacheScanPolicyTests {
         #expect(!GoModuleCacheScanPolicy.acceptsLocation(root, home: home))
     }
 
+    /// By spelling alone, so the test fails if the list is dropped, whether or
+    /// not the folders exist.
+    @Test(arguments: [
+        "/usr/local/gomod", "/Library/gomod", "/private/var/gomod", "/private/etc/gomod",
+        // The home folder and its Pictures under another spelling, reached
+        // through no link.
+        "/System/Volumes/Data/Users/someone/gomod", "/System/Volumes/Data/Users/someone/Pictures/gomod",
+        // Case differs from the real folder.
+        "/Users/someone/pictures/gomod", "/Users/someone/Library/mobile documents/gomod",
+        // Exact folders `evaluate` refuses, which hold the user's files.
+        "/Users/someone/Downloads", "/Users/someone/Documents", "/Users/someone/library",
+        "/Users/someone", "/Users", "/",
+    ])
+    func refusedSpellings(path: String) {
+        #expect(GoModuleCacheScanPolicy.isRefusedSpelling(path, home: "/Users/someone"))
+    }
+
     @Test
-    func aSystemFolderOutsideHomeIsRefused() {
-        let home = URL(fileURLWithPath: "/Users/someone")
-        #expect(!GoModuleCacheScanPolicy.acceptsLocation(URL(fileURLWithPath: "/usr/local/gomod"), home: home))
-        #expect(!GoModuleCacheScanPolicy.acceptsLocation(URL(fileURLWithPath: "/Library/gomod"), home: home))
+    func ordinaryPlacesAreNotRefusedBySpelling() {
+        #expect(!GoModuleCacheScanPolicy.isRefusedSpelling("/Users/someone/go/pkg/mod", home: "/Users/someone"))
+        #expect(!GoModuleCacheScanPolicy.isRefusedSpelling("/Users/someone/Documents/go/pkg/mod", home: "/Users/someone"))
+        #expect(!GoModuleCacheScanPolicy.isRefusedSpelling("/Volumes/Fast/gomod", home: "/Users/someone"))
+        // The system list is what refuses a folder outside home.
+        #expect(!GoModuleCacheScanPolicy.isRefusedSpelling("/opt/gomod", home: "/Users/someone", systemPrefixes: []))
+        #expect(GoModuleCacheScanPolicy.isRefusedSpelling("/opt/gomod", home: "/Users/someone", systemPrefixes: ["/opt"]))
+    }
+
+    /// `GOMODCACHE` naming Downloads, with Go's folders in it, never offers
+    /// Downloads itself.
+    @Test
+    func anExactNeverDeleteFolderIsNotRead() throws {
+        let (home, _) = try Self.makeHome(cacheAt: "Downloads")
+        defer { Self.cleanUp(home) }
+        let downloads = home.appendingPathComponent("Downloads").path
+        #expect(GoModuleCacheScanPolicy.read(
+            environment: ["GOMODCACHE": downloads], home: home, excludedPaths: [], insideHomeOnly: false
+        ) == nil)
+    }
+
+    @Test
+    func aDifferentlyCasedProtectedFolderIsRefused() throws {
+        let (home, _) = try Self.makeHome(cacheAt: "Pictures/gomod")
+        defer { Self.cleanUp(home) }
+        #expect(!GoModuleCacheScanPolicy.acceptsLocation(home.appendingPathComponent("pictures/gomod"), home: home))
+    }
+
+    /// A scan without Full Disk Access reads nothing in Documents, which would
+    /// make macOS ask, so it finds no cache there.
+    @Test
+    func aLimitedScanSkipsAProtectedFolder() throws {
+        let (home, root) = try Self.makeHome(cacheAt: "Documents/go/pkg/mod")
+        defer { Self.cleanUp(home) }
+        let limited = GoModuleCacheScanPolicy.read(
+            environment: ["GOPATH": home.appendingPathComponent("Documents/go").path],
+            home: home, excludedPaths: [], insideHomeOnly: true
+        )
+        #expect(limited == nil)
+        let full = GoModuleCacheScanPolicy.read(
+            environment: ["GOPATH": home.appendingPathComponent("Documents/go").path],
+            home: home, excludedPaths: [], insideHomeOnly: false
+        )
+        #expect(full?.root == root.standardizedFileURL.path)
+    }
+
+    // MARK: Evidence below the top
+
+    /// A folder of the user's own repos, laid out by host, gains Go's
+    /// `cache/download` after one `go mod download`. It must not be offered whole.
+    @Test(arguments: [
+        ["folders": "github.com/me/repo/.git", "files": ""],
+        ["folders": "github.com/me/repo", "files": "github.com/me/repo/main.go"],
+        ["folders": "github.com/me/tool@v1.0.0/.git", "files": ""],
+        ["folders": "github.com/me/.hidden", "files": ""],
+    ])
+    func checkoutsBelowTheTopOfferOnlyTheDownloads(layout: [String: String]) throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        try Self.lay(
+            root,
+            folders: [layout["folders"]!],
+            files: layout["files"]!.isEmpty ? [] : [layout["files"]!]
+        )
+        let read = GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false)
+        #expect(read?.offer == .downloadsOnly)
+    }
+
+    @Test
+    func aOneElementModuleCountsAsGos() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        try Self.lay(root, folders: ["example.com@v1.0.0"], files: ["example.com@v1.0.0/go.mod"])
+        #expect(GoModuleCacheScanPolicy.holdsOnlyModules(root, excludedPaths: []))
+    }
+
+    /// An exclusion inside `cache` keeps the fallback from being offered too.
+    @Test
+    func anExclusionInsideTheDownloadsOffersNothing() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        let excluded = root.appendingPathComponent("cache/download/github.com")
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        let read = GoModuleCacheScanPolicy.read(
+            environment: [:], home: home, excludedPaths: [excluded], insideHomeOnly: false
+        )
+        #expect(read?.offer == .nothing)
+        let context = GoModuleCacheScanPolicy.TestContext(home: home, excludedPaths: [excluded])
+        GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            GoModuleCacheScanPolicy.refreshSnapshot()
+            #expect(GoModuleCacheScanPolicy.rowPaths(home: home).isEmpty)
+            #expect(!GoModuleCacheScanPolicy.isWhitelistedPath(root.appendingPathComponent("cache").path))
+        }
+    }
+
+    // MARK: Other rows
+
+    /// A cache inside a folder another rule offers, such as Go's build cache
+    /// in `~/Library/Caches`, gets no row: that row is Safe. Judged by
+    /// `evaluate` on the spelling only.
+    @Test
+    func aCacheInsideAnotherOfferedFolderIsNoticed() {
+        let home = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+        #expect(GoModuleCacheScanPolicy.isInsideAnotherOfferedFolder(
+            home.appendingPathComponent("Library/Caches/go-build/gomod")
+        ))
+        #expect(!GoModuleCacheScanPolicy.isInsideAnotherOfferedFolder(home.appendingPathComponent("go/pkg/mod")))
+    }
+
+    /// No row may move a folder that holds the module cache, such as Go's
+    /// build cache with `GOMODCACHE` inside it.
+    @Test
+    func aFolderHoldingTheCacheIsNeverMoved() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        let context = GoModuleCacheScanPolicy.TestContext(home: home)
+        try GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            try #require(GoModuleCacheScanPolicy.refreshSnapshot()?.isWholeCache == true)
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(root.deletingLastPathComponent()))
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("go")))
+            // A folder beside it is not this rule's business.
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("go/bin")))
+        }
     }
 
     @Test
@@ -308,7 +445,7 @@ struct GoModuleCacheScanPolicyTests {
         GoModuleCacheScanPolicy.$testContext.withValue(context) {
             GoModuleCacheScanPolicy.refreshSnapshot()
             let cache = root.appendingPathComponent("cache", isDirectory: true)
-            #expect(GoModuleCacheScanPolicy.rowPaths(home: home).map(\.path) == [cache.path])
+            #expect(GoModuleCacheScanPolicy.rowPaths(home: home).map(\.path) == [cache.standardizedFileURL.path])
             #expect(!GoModuleCacheScanPolicy.isWhitelistedPath(root.standardizedFileURL.path))
             #expect(GoModuleCacheScanPolicy.refusesDeletion(root))
         }
@@ -357,8 +494,19 @@ struct GoModuleCacheScanPolicyTests {
         let (home, root) = try Self.makeHome()
         defer { Self.cleanUp(home) }
         let context = GoModuleCacheScanPolicy.TestContext(home: home)
+        let module = root.appendingPathComponent("golang.org/x/text@v0.20.0")
+        // Read when the Trash is asked, since the real one moves the folder:
+        // a change made after that would be too late.
+        let modeAtMove = OSAllocatedUnfairLock<mode_t?>(initialState: nil)
         let trash = FakeTrash()
-        let deleter = FileDeleter(home: home, trash: trash.trash, fullDiskAccessGranted: { true })
+        let deleter = FileDeleter(
+            home: home,
+            trash: { url in
+                modeAtMove.withLock { $0 = Self.mode(module) }
+                try trash.trash(url)
+            },
+            fullDiskAccessGranted: { true }
+        )
         try await GoModuleCacheScanPolicy.$testContext.withValue(context) {
             try #require(GoModuleCacheScanPolicy.refreshSnapshot()?.isWholeCache == true)
             let report = try await deleter.deleteItems(
@@ -368,7 +516,31 @@ struct GoModuleCacheScanPolicyTests {
             #expect(report.failedItems.isEmpty)
             #expect(trash.trashedPaths == [root.standardizedFileURL.path])
         }
-        #expect(Self.mode(root.appendingPathComponent("golang.org/x/text@v0.20.0")) == 0o755)
+        #expect(modeAtMove.withLock { $0 } == 0o755)
+        #expect(Self.mode(module) == 0o755)
+    }
+
+    /// `GOMODCACHE` moved after the scan: the old `cache` stays, through the
+    /// clean and through Retry.
+    @Test
+    func anOldCacheStaysAfterGoModCacheMoves() async throws {
+        let (home, oldRoot) = try Self.makeHome(cacheAt: "old/mod")
+        defer { Self.cleanUp(home) }
+        try FileManager.default.createDirectory(at: oldRoot.appendingPathComponent("src"), withIntermediateDirectories: true)
+        let newRoot = home.appendingPathComponent("new/mod", isDirectory: true)
+        try Self.lay(newRoot, folders: ["cache/download"])
+        let context = GoModuleCacheScanPolicy.TestContext(environment: ["GOMODCACHE": oldRoot.path], home: home)
+        let trash = FakeTrash()
+        let deleter = FileDeleter(home: home, trash: trash.trash, fullDiskAccessGranted: { true })
+        let oldCache = oldRoot.appendingPathComponent("cache", isDirectory: true)
+        try await GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            try #require(GoModuleCacheScanPolicy.refreshSnapshot()?.offer == .downloadsOnly)
+            #expect(GoModuleCacheScanPolicy.rowPaths(home: home).map(\.path) == [oldCache.standardizedFileURL.path])
+            context.environment = ["GOMODCACHE": newRoot.path]
+            _ = try await deleter.deleteItems(at: [oldCache])
+            _ = await deleter.retryDeleteItem(at: oldCache, displayName: nil, expectedSizeBytes: 0, route: .cache)
+        }
+        #expect(trash.trashedPaths.isEmpty)
     }
 
     @Test

@@ -579,15 +579,27 @@ nonisolated final class FileDeleter: Sendable {
                     // not empty them like that. The owner gets write permission
                     // first, as `go clean -modcache` does. A folder that can't be
                     // changed keeps the whole cache where it is (#397).
-                    if GoModuleCacheScanPolicy.isWholeCacheRoot(url),
-                       !GoModuleCacheScanPolicy.makeFoldersWritable(in: url) {
-                        failedItems.append(FailedDeletionItem(
-                            path: url.path,
-                            displayName: friendlyTitle,
-                            reason: .unknown,
-                            sizeBytes: size
-                        ))
-                        continue
+                    if GoModuleCacheScanPolicy.isWholeCacheRoot(url) {
+                        guard GoModuleCacheScanPolicy.makeFoldersWritable(in: url) else {
+                            failedItems.append(FailedDeletionItem(
+                                path: url.path,
+                                displayName: friendlyTitle,
+                                reason: .unknown,
+                                sizeBytes: size
+                            ))
+                            continue
+                        }
+                        // The walk can take a while on a big cache. Something
+                        // added meanwhile, such as a `src` folder, stops the move.
+                        guard !GoModuleCacheScanPolicy.refusesDeletion(url) else {
+                            skippedItems.append(SkippedDeletionItem(
+                                path: url.path,
+                                displayName: friendlyTitle,
+                                reason: "This file was skipped for safety",
+                                isUserVisible: true
+                            ))
+                            continue
+                        }
                     }
                     do {
                         try trash(url)
