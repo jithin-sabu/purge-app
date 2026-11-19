@@ -86,6 +86,7 @@ nonisolated final class DevScanner {
         "Conda Package Cache": "conda-packages",
         "Dart Analysis Cache": "dart-analysis-cache",
         "Hermes Agent Cache": "hermes-agent-cache",
+        "opencode Cache": "opencode-cache",
         "Antigravity Browser Cache": "antigravity-browser-cache",
         "Bun Cache": "bun-cache",
         "nvm Download Cache": "nvm-download-cache",
@@ -101,15 +102,14 @@ nonisolated final class DevScanner {
         Self.automaticSafetyInfo(forDevToolLabel: toolLabel, primaryPath: primaryPath)
     }
 
-    /// Shared automatic safety resolution for global dev tool rows (scan + reset).
+    /// Shared automatic safety resolution for global dev tool rows.
     nonisolated static func automaticSafetyInfo(forDevToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
         // One row per NDK version. Each label is its own definition key, so the
         // rows stay apart, and the headline names the version (#324).
         if let version = OldToolVersionScanPolicy.ndkVersion(inLabel: toolLabel) {
             let base = SafetyInfo.fromExplanationDatabase(
                 key: OldToolVersionScanPolicy.ndkExplanationKey,
-                friendlyFallback: toolLabel,
-                path: primaryPath
+                friendlyFallback: toolLabel
             )
             return SafetyInfo(
                 level: base.level,
@@ -123,8 +123,7 @@ nonisolated final class DevScanner {
         if let version = NvmNodeVersionPolicy.version(inLabel: toolLabel) {
             let base = SafetyInfo.fromExplanationDatabase(
                 key: NvmNodeVersionPolicy.explanationKey,
-                friendlyFallback: toolLabel,
-                path: primaryPath
+                friendlyFallback: toolLabel
             )
             return SafetyInfo(
                 level: base.level,
@@ -138,10 +137,8 @@ nonisolated final class DevScanner {
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
                 key: key,
-                friendlyFallback: toolLabel,
-                path: path
+                friendlyFallback: toolLabel
             )
-            if UserOverridesStore.read(path: path) != nil { return base }
             if folderContainsXCArchive(at: path) { return base }
             return SafetyInfo(
                 level: .safe,
@@ -153,8 +150,7 @@ nonisolated final class DevScanner {
         }
         return SafetyInfo.fromExplanationDatabase(
             key: key,
-            friendlyFallback: toolLabel,
-            path: primaryPath
+            friendlyFallback: toolLabel
         )
     }
 
@@ -802,6 +798,11 @@ nonisolated final class DevScanner {
             // here. Config, API keys, sessions and memories elsewhere in ~/.hermes are
             // never listed.
             ("Hermes Agent Cache", [home.appendingPathComponent(".hermes/cache", isDirectory: true)]),
+            // Check First: a running opencode session loads its provider and plugin
+            // packages from here, and `bin` holds the tools it downloaded (#399).
+            // Sessions, snapshots and logins are in `~/.local/share/opencode`, which
+            // is never listed.
+            ("opencode Cache", [home.appendingPathComponent(".cache/opencode", isDirectory: true)]),
             ("Conda Package Cache", [
                 ".conda/pkgs", "anaconda3/pkgs", "miniconda3/pkgs", "miniforge3/pkgs",
                 "mambaforge/pkgs", "opt/anaconda3/pkgs", "opt/miniconda3/pkgs"
@@ -1751,7 +1752,7 @@ nonisolated final class DevScanner {
                     isSelected: false,
                     safetyInfo: reason == nil
                         ? row.safetyInfo
-                        : row.safetyInfo.heldAtCheckFirst(path: row.path),
+                        : row.safetyInfo.heldAtCheckFirst(),
                     reinstallSafety: row.reinstallSafety,
                     gitStatus: .unknown,
                     checkFirstReason: reason
@@ -1815,7 +1816,6 @@ nonisolated final class DevScanner {
             let reinstall = Self.reinstallCommand(rule: rule, root: root)
             let safety = SafetyInfo.forStaleProjectArtifact(
                 kind: rule.kind,
-                path: url,
                 reinstallCommand: reinstall,
                 level: rule.level
             )

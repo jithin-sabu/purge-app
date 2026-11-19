@@ -832,6 +832,7 @@ struct EverythingElseCacheAuditTests {
     @Test(arguments: [
         ("Dart Analysis Cache", SafetyLevel.safe),
         ("Hermes Agent Cache", .medium),
+        ("opencode Cache", .medium),
         ("Antigravity Browser Cache", .safe),
         ("Gradle Cache", .medium),
     ])
@@ -1092,6 +1093,7 @@ struct DotCacheLinkTests {
             ".cache/node/corepack", ".cache/act", ".cache/rebar3", ".cache/bazel", ".cache/go-build",
             ".cache/pre-commit", ".cache/prek/repos", ".cache/prek/hooks", ".cache/prek/tools", ".cache/prek/cache",
             ".cache/prisma", ".cache/puppeteer", ".cache/giget", ".cache/firebase/emulators", ".cache/uv",
+            ".cache/opencode",
         ] {
             #expect(entries.contains(expected), "\(expected)")
         }
@@ -1220,6 +1222,123 @@ struct DotCacheLinkTests {
             #expect(!Self.refuses(path, home: home), "\(path)")
         }
         #expect(!DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(elsewhere.appendingPathComponent(".cache/uv"), home: home.path))
+    }
+}
+
+// MARK: - opencode's cache
+
+@Suite("opencode cache (#399): offered, never Safe")
+struct OpencodeCacheTests {
+    /// The current layout (`npm`, `bin`, `models.json`) and the older one
+    /// (`packages`, `bun.lock`), plus a model list write that didn't finish.
+    @Test(arguments: [
+        ".cache/opencode",
+        ".cache/opencode/npm/@ai-sdk/anthropic@latest/1/node_modules/@ai-sdk/anthropic/package.json",
+        ".cache/opencode/packages/opencode-anthropic-auth@latest",
+        ".cache/opencode/bin/rg",
+        ".cache/opencode/models.json",
+        ".cache/opencode/models.json.1a2b3c.tmp",
+        ".cache/opencode/bun.lock",
+    ])
+    func cacheIsOffered(relative: String) {
+        #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+    }
+
+    /// The Dev Tools scan lists the folder, so it is a row and not only allowed.
+    /// A throwaway home, so the row list reads no real folder.
+    @Test
+    func devToolsScanListsTheFolder() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("opencode-audit-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let claimed = DevScanner.claimedGlobalCachePaths(home: home)
+        #expect(claimed.contains(home.appendingPathComponent(".cache/opencode").standardizedFileURL.path))
+    }
+
+    /// A running session loads its provider and plugin packages from the cache,
+    /// and `bin` holds tools opencode downloaded, so Clean Safe Items and
+    /// scheduled cleans must not take the folder.
+    @Test
+    func rowIsNeverSafe() {
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "opencode Cache", primaryPath: nil).level == .medium)
+        #expect(bundledLevel("opencode-cache") == .medium)
+    }
+
+    /// No alias, so a folder that is only named `opencode` somewhere else is not
+    /// this row.
+    @Test
+    func nameAloneMatchesNothing() {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "opencode") == nil)
+    }
+
+    /// Sessions, undo snapshots, logins, settings and the install itself.
+    @Test(arguments: [
+        ".local/share/opencode",
+        ".local/share/opencode/auth.json",
+        ".local/share/opencode/opencode.db",
+        ".local/share/opencode/snapshot",
+        ".local/share/opencode/storage",
+        ".local/share/opencode/log",
+        ".local/state/opencode",
+        ".config/opencode",
+        ".config/opencode/opencode.json",
+        ".opencode",
+        ".opencode/bin/opencode",
+        ".cache",
+    ])
+    func dataSettingsAndInstallStayOut(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+
+    /// The allowlist accepts `.cache/opencode` by its text. With `~/.cache` or the
+    /// folder itself a link to `~/Developer`, a move would take
+    /// `~/Developer/opencode`, so only this recheck catches it.
+    @Test(arguments: ["none", ".cache", ".cache/opencode"])
+    func cacheReachedThroughALinkIsRefused(link: String) throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("opencode-link-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let cache = home.appendingPathComponent(".cache/opencode", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        switch link {
+        case ".cache":
+            try fm.createDirectory(at: elsewhere.appendingPathComponent("opencode/bin", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createDirectory(at: home, withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: home.appendingPathComponent(".cache"), withDestinationURL: elsewhere)
+        case ".cache/opencode":
+            try fm.createDirectory(at: elsewhere.appendingPathComponent("bin", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createDirectory(at: home.appendingPathComponent(".cache", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: cache, withDestinationURL: elsewhere)
+        default:
+            try fm.createDirectory(at: cache.appendingPathComponent("bin", isDirectory: true), withIntermediateDirectories: true)
+        }
+        for url in [cache, cache.appendingPathComponent("bin", isDirectory: true)] {
+            #expect(fm.fileExists(atPath: url.path))
+            #expect(DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(url, home: home.path) == (link != "none"), "\(url.path)")
+        }
+    }
+
+    /// A link inside the cache moves to the Trash as a link, so it refuses
+    /// nothing, and the guard refuses no unlinked folder beside it.
+    @Test
+    func linkGuardCoversOnlyTheWayDownToTheCache() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("opencode-inner-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let cache = home.appendingPathComponent(".cache/opencode", isDirectory: true)
+        try fm.createDirectory(at: cache.appendingPathComponent("npm", isDirectory: true), withIntermediateDirectories: true)
+        let inner = cache.appendingPathComponent("npm/link")
+        try fm.createSymbolicLink(at: inner, withDestinationURL: base)
+        #expect(!DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(cache, home: home.path))
+        #expect(!DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(inner, home: home.path))
+
+        let other = home.appendingPathComponent(".cache-link", isDirectory: false)
+        try fm.createSymbolicLink(at: other, withDestinationURL: base)
+        for url in [other, home.appendingPathComponent(".cache/uv"), home.appendingPathComponent(".cache/opencode-old")] {
+            #expect(!DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(url, home: home.path), "\(url.path)")
+        }
     }
 }
 

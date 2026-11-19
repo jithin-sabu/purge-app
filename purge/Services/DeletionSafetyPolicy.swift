@@ -453,6 +453,14 @@ enum DeletionSafetyPolicy {
             // packages are links into it. `~/.local/share/uv` holds the tools from
             // `uv tool install` and uv's Python versions, and is not listed.
             "\(home)/.cache/uv",
+            // opencode's cache (#399): the provider and plugin packages it installs,
+            // the tools it downloads into `bin`, and its model list. opencode gets
+            // all of it again by itself. Check First by its explanation: a running
+            // session loads its packages from here, and `bin` holds downloaded tools.
+            // `~/.local/share/opencode` holds sessions, snapshots and `auth.json`, and
+            // `~/.config/opencode` the settings. Neither is listed. Refused when
+            // reached through a link; see `dotCacheLinkRefusesDeletion`.
+            "\(home)/.cache/opencode",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
@@ -576,7 +584,8 @@ enum DeletionSafetyPolicy {
 
     /// The allowlist compares path text. If `~/.cache`, a cache folder in it, or a
     /// folder between the two were a link to `~/Developer`, the row would name
-    /// `~/.cache/uv` while the move took `~/Developer/uv` (#420). A link anywhere
+    /// `~/.cache/uv` while the move took `~/Developer/uv` (#420), or
+    /// `~/Developer/opencode`, which could be a clone of that repository. A link anywhere
     /// from home down to the entry's folder refuses the folder and everything in
     /// it. Links inside the folder don't count: they move to the Trash as links.
     ///

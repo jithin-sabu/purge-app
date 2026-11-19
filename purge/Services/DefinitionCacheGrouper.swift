@@ -56,17 +56,8 @@ enum DefinitionCacheGrouper {
     }
 
     private nonisolated static func mergedSafetyInfo(key: String, members: [CacheItem]) -> SafetyInfo {
-        var infos: [SafetyInfo] = []
-        for member in members {
-            for loc in member.locations {
-                let fallback = member.appName
-                if let pathOverride = UserOverridesStore.read(path: loc.path) {
-                    infos.append(UserOverridesStore.safetyInfo(from: pathOverride, friendlyHeadline: fallback))
-                } else {
-                    infos.append(member.safetyInfo)
-                }
-            }
-        }
+        // One per folder, as the scan judged it.
+        let infos = members.flatMap { member in member.locations.map { _ in member.safetyInfo } }
 
         if let record = ExplanationDatabase.record(forKey: key) {
             let bundled = ExplanationDatabase.safetyInfo(from: record)
@@ -75,7 +66,7 @@ enum DefinitionCacheGrouper {
             }
             let level = infos.map(\.level).max(by: { $0.sortOrder < $1.sortOrder }) ?? bundled.level
             let primary = infos.first { $0.level == level } ?? bundled
-            if primary.level == bundled.level && UserOverridesStore.read(path: members[0].path) == nil {
+            if primary.level == bundled.level {
                 return bundled
             }
             return SafetyInfo(

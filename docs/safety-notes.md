@@ -58,6 +58,55 @@ now builds a temporary home and checks each entry with `~/.cache` linked, the
 cache folder linked, a folder on the way linked, nothing linked, and a link
 inside the folder.
 
+## 2026-11-19: Old manual safety labels outranked Check First
+
+**Found internally** while reviewing contributor PR [#414](https://github.com/jithin-sabu/purge-app/pull/414) ([#415](https://github.com/jithin-sabu/purge-app/issues/415)), no report. **Fixed:** [#416](https://github.com/jithin-sabu/purge-app/pull/416), not shipped yet. **Affected:** every release up to v1.16.2, on Macs where someone set a level by hand in Purge 1.0 or 1.1.
+
+### What happened
+
+Purge 1.0 and 1.1 let you set an item's safety level by hand. Purge saved each
+choice by exact path in `user_overrides.json`. The screens stopped offering
+this on 2026-06-19, and #288 removed the code that wrote the file, but Purge
+kept reading it. An entry there beat every automatic rule. An old Safe entry on
+a Unity or Unreal folder, or on a project used in the last 6 months, made it
+Safe to Clean, so Clean Safe Items and scheduled cleans took it.
+
+The "Reset to automatic" button made this worse for project folders. It worked
+out the level again without the catalog's tier, so the level fell back to Safe,
+and resetting an old label on a Unity `Library` folder made it Safe to Clean.
+
+### Who was affected
+
+Nobody reported a loss. It took a label set by hand in May or June 2026 on a
+folder that is Check First today. A Unity or Unreal folder taken this way went
+to the Trash and could be put back, and the editor rebuilds it, slowly.
+
+### What changed
+
+Purge no longer reads `user_overrides.json`. Each level comes only from the
+catalog, `explanations.json`, the tier list and the Check First holds.
+`SafetyInfo.forStaleProjectArtifact` needs the catalog's level, with no
+default. The "Manual category" badge and the reset buttons are gone. The file
+stays on disk unread, so the fix adds no new delete path.
+
+This works both ways. An old Check First or Not Sure label no longer holds back
+a folder the automatic chain rates Safe, so Clean Safe Items and scheduled
+cleans can now take it without a prompt. Such a folder holds only data its app
+rebuilds, and it goes to the Trash. Exclude from Scans is the way to keep one.
+
+### What would have caught it earlier
+
+A check that nothing still reads a file once the code that writes it is gone.
+`noAppCodeReadsTheFile` in
+[`PurgeTests/OldSafetyLabelTests.swift`](../PurgeTests/OldSafetyLabelTests.swift)
+fails when any app source other than `FirstRunGate` names the file, so it fails
+on the code before this fix. The same file writes a Safe entry, as Purge 1.1
+did, and expects a Unity `Library` folder, a project held at Check First, an
+unknown cache folder, a merged App Caches row and a Check First dev tool to keep
+their automatic level. Those level tests alone would not have caught it: the
+old store read the file once, when the test host started with no file, and
+kept that empty result.
+
 ## 2026-11-17: Large Files offered single Ollama blobs from a store Purge didn't know
 
 **Found internally** while testing [#318](https://github.com/jithin-sabu/purge-app/issues/318) ([#395](https://github.com/jithin-sabu/purge-app/issues/395)), no report. **Fixed:** [#396](https://github.com/jithin-sabu/purge-app/pull/396), not shipped yet. **Affected:** every release up to v1.16.2.
@@ -420,6 +469,7 @@ Show all still lists every project, but folders of a project worked on in the
 last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
 them. Each artifact keeps the reason it is Check First, so Reset to automatic
 lands on Check First again. A path the user marked Safe by hand stays Safe.
+(Both later changed: #415 removed the reset and stopped reading those labels.)
 
 A closed project card used to show only the name and size, so a project held at
 Check First looked the same as a Safe one. The card header now shows the
@@ -433,8 +483,10 @@ reads the setting from a fresh `ThrowawayDefaults` and expects 180 days, and
 checks that a project edited today is not listed. In the same file,
 `entryLimitIsTooBigToCheck` and `tooBigProjectIsCheckFirst` cover the cut-off
 walk, `sameNameFolderIsWalked` the skipped folder names,
-`showAllRecentProjectIsCheckFirst` Show all, and `RecentProjectResetTests` the
-reset path. Recategorize had no caller and was removed in #184. The earlier tests
+`showAllRecentProjectIsCheckFirst` Show all. `RecentProjectResetTests` covered
+the reset path until #415 removed it, and
+[`PurgeTests/OldSafetyLabelTests.swift`](../PurgeTests/OldSafetyLabelTests.swift)
+now checks that an old Safe label leaves a held project Check First. Recategorize had no caller and was removed in #184. The earlier tests
 always passed the age in directly, so none of them read the setting the way the
 scanner does.
 

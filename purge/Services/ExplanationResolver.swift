@@ -1,7 +1,10 @@
 import Foundation
 
-/// Ordered resolution: user override -> bundled DB -> tier list -> unknown.
-/// User overrides are keyed by exact path and trump every automatic source.
+/// Ordered resolution: bundled DB -> tier list -> unknown.
+///
+/// Safety levels set by hand in Purge 1.0 and 1.1 are left in `user_overrides.json`
+/// but never read (#415). An old Safe label outranked every automatic rule, so it
+/// could take a Check First folder into Clean Safe Items and scheduled cleans.
 ///
 /// Guesses left in `ai_cache.json` by the removed AI classifier are deliberately not
 /// read. They outranked the reviewed list, so a guess could mark a folder Safe that
@@ -10,19 +13,14 @@ enum ExplanationResolver {
     nonisolated static let unsureExplanation = String(localized: "We could not identify this folder. We recommend leaving it alone.")
 
     /// Resolution order:
-    /// 1. `user_overrides.json` keyed by exact path (when provided)
-    /// 2. Bundled `explanations.json`
-    /// 3. `SafetyTierList`
-    /// 4. Return unknown
+    /// 1. Bundled `explanations.json`
+    /// 2. `SafetyTierList`
+    /// 3. Return unknown
     nonisolated static func initialSafetyForCacheFolder(
         folderName: String,
         friendlyHeadline: String,
         path: URL? = nil
     ) -> SafetyInfo {
-        if let path,
-           let override = UserOverridesStore.read(path: path) {
-            return UserOverridesStore.safetyInfo(from: override, friendlyHeadline: friendlyHeadline)
-        }
         if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName) {
             return ExplanationDatabase.safetyInfo(from: record)
         }

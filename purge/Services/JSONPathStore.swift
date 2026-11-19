@@ -1,8 +1,7 @@
 import Foundation
 
 /// Entries keyed by path, kept as one JSON file in Purge's Application Support
-/// folder and cached after the first read. The exclusion list and the safety
-/// overrides each keep one (#185).
+/// folder and cached after the first read. The exclusion lists each keep one (#185).
 nonisolated final class JSONPathStore<Entry: Codable & Sendable>: @unchecked Sendable {
     private let fileName: String
     /// Re-keys what was read from disk. Stores whose keys never change spelling
