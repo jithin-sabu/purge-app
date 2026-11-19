@@ -240,6 +240,19 @@ nonisolated final class FileDeleter: Sendable {
     /// fake, since the real one only knows the real home's `~/.nvm`.
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
+    /// The move check every real clean uses: nvm's rules, then Vite+'s. Tests
+    /// pass a throwaway home and fake reads to prove both halves run.
+    static func defaultImmediateMoveCheck(
+        home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
+        nvm: NvmNodeVersionPolicy.Context? = nil,
+        vitePlus: VitePlusNodeVersionPolicy.Context? = nil
+    ) -> @Sendable (URL) -> Bool {
+        { url in
+            NvmNodeVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: nvm)
+                && VitePlusNodeVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: vitePlus)
+        }
+    }
+
     /// Whether Purge has Full Disk Access. A clean asks once at the start, to read
     /// the added folders the way the scan did, and again after a permission
     /// error, since it changes how that error reads (#299). Tests hand in a
@@ -256,10 +269,7 @@ nonisolated final class FileDeleter: Sendable {
         trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
         listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) },
         fullDiskAccessGranted: @escaping @Sendable () -> Bool = { PermissionChecker().hasFullDiskAccess() },
-        immediateMoveCheck: @escaping @Sendable (URL) -> Bool = {
-            NvmNodeVersionPolicy.passesImmediateTrashBoundary($0)
-                && VitePlusNodeVersionPolicy.passesImmediateTrashBoundary($0)
-        }
+        immediateMoveCheck: @escaping @Sendable (URL) -> Bool = FileDeleter.defaultImmediateMoveCheck()
     ) {
         self.immediateMoveCheck = immediateMoveCheck
         self.simulatorRuntimeRemover = simulatorRuntimeRemover

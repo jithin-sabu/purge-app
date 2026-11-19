@@ -185,9 +185,7 @@ nonisolated enum VitePlusNodeVersionPolicy {
             case .quick:
                 break
             case .scan, .move:
-                guard let named = NvmNodeVersionPolicy.isNamedByReferenceFile(
-                        path, home: home, versionsRoot: root, mayRead: context.mayRead
-                      ), !named,
+                guard let named = isNamedByReferenceFile(path, home: home, context: context), !named,
                       let linked = NvmNodeVersionPolicy.isLinkedFromBinFolder(
                         path, home: home, linkFolders: context.linkFolders, mayRead: context.mayRead
                       ), !linked else { return false }
@@ -199,6 +197,25 @@ nonisolated enum VitePlusNodeVersionPolicy {
         case .move:
             return OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free
         }
+    }
+
+    /// Whether a config file names the version through either data folder.
+    /// One data folder may be a link to the other, so a path written through
+    /// `~/.vite-plus` can lead to the folder judged under `~/.local/share`.
+    /// Nil when a file can't be read, or when a data folder is itself a link:
+    /// then a config may name the version by a spelling Purge doesn't search.
+    static func isNamedByReferenceFile(_ path: String, home: String, context: Context) -> Bool? {
+        for root in dataRoots {
+            var info = stat()
+            if lstat("\(home)/\(root)", &info) == 0, (info.st_mode & S_IFMT) == S_IFLNK { return nil }
+        }
+        for root in dataRoots {
+            guard let named = NvmNodeVersionPolicy.isNamedByReferenceFile(
+                path, home: home, versionsRoot: "\(root)/\(versionsFolder)", mayRead: context.mayRead
+            ) else { return nil }
+            if named { return true }
+        }
+        return false
     }
 
     /// `FileDeleter`'s last check before it moves a Vite+ version or leftover:
@@ -217,6 +234,7 @@ nonisolated enum VitePlusNodeVersionPolicy {
 
     private static let recentLock = NSLock()
     private nonisolated(unsafe) static var recent: [String: (at: Date, kept: Set<String>?)] = [:]
+    private nonisolated(unsafe) static var recentPins: [String: (at: Date, values: [String]?)] = [:]
 
     /// `keptVersions`, from a read in the last `NvmNodeVersionPolicy.recentReadLifetime`
     /// seconds when there is one. Only the main-thread gate uses it.
@@ -224,21 +242,48 @@ nonisolated enum VitePlusNodeVersionPolicy {
         recentLock.lock()
         let cached = recent[root]
         recentLock.unlock()
-        if let cached, now.timeIntervalSince(cached.at) < NvmNodeVersionPolicy.recentReadLifetime, now >= cached.at {
+        if let cached, isRecent(cached.at, now: now) {
             return cached.kept
         }
-        let kept = keptVersions(in: root, home: home, context: context)
+        let kept = keptVersions(in: root, home: home, context: context, values: recentPinValues(home: home, context: context, now: now))
         recentLock.lock()
         recent[root] = (now, kept)
         recentLock.unlock()
         return kept
     }
 
+    /// `pinValues`, shared by both data folders' reads, so the pin files are
+    /// read once for both.
+    static func recentPinValues(home: String, context: Context, now: Date = Date()) -> [String]? {
+        recentLock.lock()
+        let cached = recentPins[home]
+        recentLock.unlock()
+        if let cached, isRecent(cached.at, now: now) {
+            return cached.values
+        }
+        let values = pinValues(home: home, context: context)
+        recentLock.lock()
+        recentPins[home] = (now, values)
+        recentLock.unlock()
+        return values
+    }
+
+    private static func isRecent(_ at: Date, now: Date) -> Bool {
+        now.timeIntervalSince(at) < NvmNodeVersionPolicy.recentReadLifetime && now >= at
+    }
+
     /// The version folders in `root` nothing may remove now. Nil, which keeps
-    /// every version, when a source can't be read or understood.
-    static func keptVersions(in root: String, home: String, context: Context) -> Set<String>? {
-        guard let installed = installedVersions(in: root),
-              let values = pinValues(home: home, context: context) else { return nil }
+    /// every version, when a source can't be read or understood. `values` are
+    /// the pin values when the caller has read them already.
+    static func keptVersions(
+        in root: String, home: String, context: Context, values given: [String]?? = .none
+    ) -> Set<String>? {
+        let values: [String]?
+        switch given {
+        case .some(let read): values = read
+        case .none: values = pinValues(home: home, context: context)
+        }
+        guard let installed = installedVersions(in: root), let values else { return nil }
         // Vite+ counts a folder as installed only once it holds `bin/node`, so
         // the newest by that count is kept too.
         let withNode = installed.filter { OldToolVersionScanPolicy.isRegularFile("\(root)/\($0)/bin/node") }
@@ -313,7 +358,7 @@ nonisolated enum VitePlusNodeVersionPolicy {
     static func pinValues(home: String, context: Context) -> [String]? {
         var values: [String] = []
         for file in configFiles {
-            guard let config = jsonObject("\(home)/\(file)", context: context) else { return nil }
+            guard let config = jsonObject("\(home)/\(file)", home: home, context: context) else { return nil }
             if let value = config?["defaultNodeVersion"] {
                 guard let text = value as? String else { return nil }
                 values.append(text)
@@ -327,25 +372,21 @@ nonisolated enum VitePlusNodeVersionPolicy {
             }
         }
         for root in dataRoots {
-            guard let bins = jsonFiles(in: "\(home)/\(root)/bins", scoped: false, context: context),
-                  let packages = jsonFiles(in: "\(home)/\(root)/packages", scoped: true, context: context)
+            guard let bins = jsonFiles(in: "\(home)/\(root)/bins", home: home, scoped: false, context: context),
+                  let packages = jsonFiles(in: "\(home)/\(root)/packages", home: home, scoped: true, context: context)
             else { return nil }
+            // Vite+ requires both fields, so a record without one is not one
+            // Purge understands.
             for file in bins {
-                guard let object = jsonObject(file, context: context), let object else { return nil }
-                if let value = object["nodeVersion"] {
-                    guard let text = value as? String else { return nil }
-                    values.append(text)
-                }
+                guard let object = jsonObject(file, home: home, context: context), let object,
+                      let text = object["nodeVersion"] as? String else { return nil }
+                values.append(text)
             }
             for file in packages {
-                guard let object = jsonObject(file, context: context), let object else { return nil }
-                if let platform = object["platform"] {
-                    guard let platform = platform as? [String: Any] else { return nil }
-                    if let value = platform["node"] {
-                        guard let text = value as? String else { return nil }
-                        values.append(text)
-                    }
-                }
+                guard let object = jsonObject(file, home: home, context: context), let object,
+                      let platform = object["platform"] as? [String: Any],
+                      let text = platform["node"] as? String else { return nil }
+                values.append(text)
             }
         }
         guard let recorded = context.pinFiles() else { return nil }
@@ -366,8 +407,13 @@ nonisolated enum VitePlusNodeVersionPolicy {
         }
         switch URL(fileURLWithPath: file).lastPathComponent {
         case ".node-version":
-            // Vite+ reads only the first line.
-            return [firstLine(text)]
+            // Vite+ reads only the first line, and a blank one pins nothing
+            // (`parse_node_version_content` in `crates/vp_js_runtime/src/dev_engines.rs`).
+            // Other readers take the first line with text, so that one counts too.
+            let firstWithText = text.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty }
+            return [firstLine(text)] + (firstWithText.map { [$0] } ?? [])
         case ".nvmrc":
             let lines = text.split(whereSeparator: \.isNewline)
             guard lines.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return [] }
@@ -411,10 +457,10 @@ nonisolated enum VitePlusNodeVersionPolicy {
 
     /// The JSON object in `file`: `.some(nil)` when there is no file, nil when
     /// it can't be read or isn't an object.
-    static func jsonObject(_ file: String, context: Context) -> [String: Any]?? {
+    static func jsonObject(_ file: String, home: String, context: Context) -> [String: Any]?? {
         guard context.mayRead(file) else { return nil }
         guard let data = FileManager.default.contents(atPath: file) else {
-            return NvmNodeVersionPolicy.isMissing(file) ? .some(nil) : nil
+            return isAbsent(file, home: home) ? .some(nil) : nil
         }
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
         return .some(object)
@@ -422,25 +468,41 @@ nonisolated enum VitePlusNodeVersionPolicy {
 
     /// The `.json` files in `folder`, and in its `@scope` folders when `scoped`.
     /// Empty when the folder is missing. Nil when it can't be listed.
-    static func jsonFiles(in folder: String, scoped: Bool, context: Context) -> [String]? {
+    ///
+    /// Vite+ keeps one record per global tool: `bins/<command>.json`
+    /// (`BinConfig::path` in `crates/vp_global_cli/src/commands/env/bin_config.rs`)
+    /// and `packages/<name>.json` or `packages/@scope/<name>.json`
+    /// (`PackageMetadata::metadata_path` in `package_metadata.rs`). The other
+    /// folders there, `packages/<name>/<id>` and `packages/@scope/<name>/<id>`,
+    /// are the installs themselves, which run on the Node version their record
+    /// names. An `@scope` entry that isn't a real folder is a layout Purge
+    /// doesn't know, and keeps every version.
+    static func jsonFiles(in folder: String, home: String, scoped: Bool, context: Context) -> [String]? {
         guard context.mayRead(folder) else { return nil }
         let names: [String]
         do {
             names = try FileManager.default.contentsOfDirectory(atPath: folder)
         } catch {
-            return NvmNodeVersionPolicy.isMissing(folder) ? [] : nil
+            return isAbsent(folder, home: home) ? [] : nil
         }
         var files: [String] = []
         for name in names where !name.hasPrefix(".") {
             let entry = "\(folder)/\(name)"
             if name.hasSuffix(".json") {
                 files.append(entry)
-            } else if scoped, name.hasPrefix("@"), OldToolVersionScanPolicy.isRealFolder(entry) {
-                guard let nested = jsonFiles(in: entry, scoped: false, context: context) else { return nil }
+            } else if scoped, name.hasPrefix("@") {
+                guard OldToolVersionScanPolicy.isRealFolder(entry),
+                      let nested = jsonFiles(in: entry, home: home, scoped: false, context: context) else { return nil }
                 files += nested
             }
         }
         return files
+    }
+
+    /// Whether nothing is at `path` for sure: missing, and not behind a link
+    /// that may lead to a drive that is only unplugged (`NvmNodeVersionPolicy.isGone`).
+    static func isAbsent(_ path: String, home: String) -> Bool {
+        NvmNodeVersionPolicy.isMissing(path) && NvmNodeVersionPolicy.isGone(path, home: home) == true
     }
 
     // MARK: Leftovers

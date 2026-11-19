@@ -179,12 +179,41 @@ struct VitePlusNodeVersionShapeTests {
     }
 
     @Test
-    func theLedgerSetsAsideIntoItsOwnFile() {
-        let folder = URL(fileURLWithPath: "/tmp/x")
-        #expect(NvmrcLedger.fileName != "node-pin-files.json")
-        // Each list derives its unsaved name from its own, so nvm's is unchanged.
-        #expect("\(folder.appendingPathComponent(NvmrcLedger.fileName).deletingPathExtension().lastPathComponent).unsaved.json"
-            == NvmrcLedger.unsavedFileName)
+    func aFailedSaveSetsAsideIntoItsOwnFile() throws {
+        let folder = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let ledger = NvmrcLedger(
+            fileURL: folder.appendingPathComponent("node-pin-files.json"),
+            write: { data, url in
+                if url.lastPathComponent == "node-pin-files.json" { throw CocoaError(.fileWriteOutOfSpace) }
+                try data.write(to: url, options: .atomic)
+            }
+        )
+        ledger.record(["/Users/me/code/app/.node-version"], home: "/Users/me", fullAccess: true, mayRead: { _ in true })
+        #expect(ledger.files() == nil)
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("node-pin-files.unsaved.json").path))
+        // nvm's own set-aside file, which would make nvm's list untrusted, is never written.
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent(NvmrcLedger.unsavedFileName).path))
+    }
+
+    @Test
+    func theDefaultMoveCheckRunsNvmAndVitePlus() throws {
+        let home = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try VP.install(home, VP.new, "22.0.0", "22.9.0")
+        for version in ["v20.0.0", "v20.9.0"] {
+            try VP.write("x", home, "\(NvmNodeVersionPolicy.versionsRoot)/\(version)/bin/node")
+        }
+        let nvm = NvmNodeVersionPolicy.Context(nvmrcFiles: { [] }, mayRead: { _ in true }, openFiles: { "" }, linkFolders: [])
+        let check = FileDeleter.defaultImmediateMoveCheck(home: home.path, nvm: nvm, vitePlus: VP.context())
+        func path(_ relative: String) -> URL { home.appendingPathComponent(relative) }
+        #expect(check(path("\(VP.node(VP.new))/22.0.0")))
+        #expect(!check(path("\(VP.node(VP.new))/22.9.0")), "the newest of its major stays")
+        #expect(check(path("\(NvmNodeVersionPolicy.versionsRoot)/v20.0.0")))
+        #expect(!check(path("\(NvmNodeVersionPolicy.versionsRoot)/v20.9.0")), "nvm's half runs too")
+        #expect(check(path("Library/Caches/something")))
+        let busy = FileDeleter.defaultImmediateMoveCheck(home: home.path, nvm: nvm, vitePlus: VP.context(lsof: nil))
+        #expect(!busy(path("\(VP.node(VP.new))/22.0.0")))
     }
 
     @Test
@@ -297,12 +326,65 @@ struct VitePlusNodeVersionKeepTests {
         let home = try VP.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
         try VP.install(home, VP.new, "22.0.0", "22.9.0")
-        try VP.write("\n22.0.0\n", home, "code/app/.node-version")
+        try VP.write(" \n\n", home, "code/app/.node-version")
         try VP.write(#"{"name":"app"}"#, home, "code/app/package.json")
-        // Vite+ reads only the first line of `.node-version`.
         #expect(VP.offered(home, VP.context(pins: VP.pins(home, project: "code/app"))) == [
             "\(VP.node(VP.new))/22.0.0",
         ])
+    }
+
+    @Test
+    func aVersionBelowABlankFirstLineStays() throws {
+        let home = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try VP.install(home, VP.new, "22.0.0", "22.9.0")
+        // Vite+ reads only the first line, but other readers take this one.
+        try VP.write("\n  22.0.0\n", home, "code/app/.node-version")
+        #expect(VP.offered(home, VP.context(pins: VP.pins(home, project: "code/app"))).isEmpty)
+    }
+
+    @Test(arguments: [".config", ".local", ".vite-plus"])
+    func aFolderLinkedToAnUnpluggedDriveKeepsEveryVersion(linked: String) throws {
+        let home = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        // Whichever data folder is left holds the versions.
+        try VP.install(home, linked == ".local" ? VP.old : VP.new, "22.0.0", "22.9.0")
+        try VP.link(home, linked, to: "/Volumes/Purge Test Unplugged \(UUID().uuidString)/\(linked)")
+        #expect(VP.offered(home).isEmpty, "\(linked)")
+    }
+
+    @Test(arguments: [
+        (".vite-plus/bins/tsc.json", #"{"name":"tsc"}"#),
+        (".vite-plus/packages/tool.json", #"{"name":"tool"}"#),
+        (".vite-plus/packages/@scope", "not a folder"),
+    ])
+    func aToolRecordPurgeDoesNotKnowKeepsEveryVersion(file: String, text: String) throws {
+        let home = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try VP.install(home, VP.new, "22.0.0", "22.9.0")
+        try VP.write(text, home, file)
+        #expect(VP.offered(home).isEmpty, "\(file)")
+    }
+
+    @Test
+    func aConfigNamingTheOtherDataFolderKeepsTheVersion() throws {
+        let home = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try VP.install(home, VP.new, "22.0.0", "22.9.0")
+        try VP.write("/Users/me/.vite-plus/js_runtime/node/22.0.0/bin/node", home, "Library/LaunchAgents/com.me.mcp.plist")
+        #expect(VP.offered(home).isEmpty)
+        #expect(!VP.movable(home, "\(VP.node(VP.new))/22.0.0"))
+    }
+
+    @Test
+    func aDataFolderThatIsALinkKeepsEveryVersionFromTheScan() throws {
+        let home = try VP.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try VP.install(home, VP.new, "22.0.0", "22.9.0")
+        // A config may name a version through the link, a spelling Purge can't list.
+        try VP.link(home, VP.old, to: home.appendingPathComponent(VP.new).path)
+        #expect(!Set(VP.offered(home)).contains("\(VP.node(VP.new))/22.0.0"))
+        #expect(!VP.movable(home, "\(VP.node(VP.new))/22.0.0"))
     }
 
     @Test(arguments: [
