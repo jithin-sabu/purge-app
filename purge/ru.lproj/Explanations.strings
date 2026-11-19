@@ -610,3 +610,7 @@
 "the index adobe uses to track media cache files. safe to clean. rebuilds alongside the cache." = "Индекс, с помощью которого Adobe отслеживает файлы медиакэша. Очищать безопасно: он создастся заново вместе с кэшем.";
 "tox Environments" = "Окружения tox";
 "uv Package Cache" = "Кэш пакетов uv";
+"Vite+ Node.js Version" = "Версия Node.js в Vite+";
+"An older Node.js from Vite+. No default, pin Purge found, global tool or npm config uses it. The newest of each major stays. vp env install brings it back." = "Более старая версия Node.js из Vite+. Её не использует ни версия по умолчанию, ни найденная Purge закреплённая версия, ни глобальный инструмент, ни конфиг npm. Самая новая версия каждой основной ветки остаётся. Вернуть её можно командой vp env install.";
+"Unfinished Vite+ Node Downloads" = "Незавершённые загрузки Node в Vite+";
+"Folders a stopped Vite+ install left while downloading Node.js. Only folders untouched for a day are listed. Installed versions stay." = "Папки, оставшиеся от прерванной установки Vite+ во время загрузки Node.js. В список попадают только папки, которых не касались сутки. Установленные версии остаются.";

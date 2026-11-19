@@ -12,6 +12,7 @@ on:
       - purge/Services/DeletionSafetyPolicy.swift
       - purge/Services/OldToolVersionScanPolicy.swift
       - purge/Services/NvmNodeVersionPolicy.swift
+      - purge/Services/VitePlusNodeVersionPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
@@ -28,6 +29,7 @@ on:
       - purge/Services/DeletionSafetyPolicy.swift
       - purge/Services/OldToolVersionScanPolicy.swift
       - purge/Services/NvmNodeVersionPolicy.swift
+      - purge/Services/VitePlusNodeVersionPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift

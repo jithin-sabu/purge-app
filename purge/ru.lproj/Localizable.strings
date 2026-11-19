@@ -195,6 +195,7 @@
 "An unused leftover Chromium framework in %@. Relaunch the browser to clean versions still loaded; relaunching also removes old ones." = "Неиспользуемый фреймворк Chromium, оставшийся в %@. Перезапустите браузер, чтобы очистить ещё загруженные версии; перезапуск также удалит старые.";
 "Android NDK %@" = "Android NDK %@";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
+"Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
 "Angular cache" = "Кэш Angular";
 "Another app you still have installed uses this too, so Purge kept it." = "Это использует и другое приложение, которое у вас всё ещё установлено, поэтому Purge оставил это.";
 "Another copy of Purge is on this Mac, so they stay." = "На этом Mac есть ещё одна копия Purge, поэтому они остаются.";

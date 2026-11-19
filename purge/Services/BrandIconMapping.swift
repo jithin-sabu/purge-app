@@ -125,6 +125,7 @@ enum BrandIconMapping {
         "orphaned-editor-workspace-storage": "cursor",
         "cursor-agent-leftover": "cursor",
         "cursor-agent-install-leftovers": "cursor",
+        "vite-plus-node-install-leftovers": "vite",
         "claude-code-downloads": "anthropic",
         "android-system-images": "androidstudio",
         "old-figma-profiles": "figma",
@@ -254,6 +255,10 @@ enum BrandIconMapping {
         // Each nvm Node row's key is its label, `nvm Node.js <version>` (#400).
         if NvmNodeVersionPolicy.version(inLabel: key) != nil {
             return "nodedotjs"
+        }
+        // Each Vite+ Node row's key is its label, `Vite+ Node.js <version>` (#398).
+        if VitePlusNodeVersionPolicy.version(inLabel: key) != nil {
+            return "vite"
         }
         return nil
     }

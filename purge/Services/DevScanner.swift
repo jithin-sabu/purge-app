@@ -73,6 +73,7 @@ nonisolated final class DevScanner {
         "Old Claude Code Downloads": "claude-code-downloads",
         "Unused Android System Images": "android-system-images",
         "Old Figma Profiles": "old-figma-profiles",
+        "Unfinished Vite+ Node Downloads": "vite-plus-node-install-leftovers",
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
         "prek Cache": "prek-cache",
@@ -131,6 +132,20 @@ nonisolated final class DevScanner {
                 explanation: base.explanation,
                 recoverySteps: base.recoverySteps,
                 reinstallCommand: "nvm install \(version)"
+            )
+        }
+        // One row per Vite+ Node version, named like the nvm rows (#398).
+        if let version = VitePlusNodeVersionPolicy.version(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: VitePlusNodeVersionPolicy.explanationKey,
+                friendlyFallback: toolLabel
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Node.js \(version) (Vite+)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: "vp env install \(version)"
             )
         }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
@@ -1230,6 +1245,14 @@ nonisolated final class DevScanner {
         if roots == nil {
             NvmrcLedger.shared.record(
                 NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: discoveredRoots.map(\.0)),
+                home: home.standardizedFileURL.path,
+                fullAccess: access == .full,
+                mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }
+            )
+            // Vite+ reads `.node-version`, `package.json` and `.nvmrc` the same
+            // way, and keeps the Node versions they pin (#398).
+            VitePlusNodeVersionPolicy.ledger.record(
+                VitePlusNodeVersionPolicy.pinFiles(inProjectRoots: discoveredRoots.map(\.0)),
                 home: home.standardizedFileURL.path,
                 fullAccess: access == .full,
                 mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }

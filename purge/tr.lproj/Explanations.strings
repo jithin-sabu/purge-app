@@ -910,3 +910,7 @@
 
 "Swift Compiler Cache" = "Swift Derleyici Önbelleği";
 "Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them." = "Swift derleyicisinin tuttuğu derlenmiş model dosyaları. Silmek güvenlidir; derleyici bir sonraki ihtiyaç duyduğunda yeniden oluşturulurlar.";
+"Vite+ Node.js Version" = "Vite+ Node.js Sürümü";
+"An older Node.js from Vite+. No default, pin Purge found, global tool or npm config uses it. The newest of each major stays. vp env install brings it back." = "Vite+'tan daha eski bir Node.js. Hiçbir varsayılan, Purge'ün bulduğu sürüm sabitlemesi, global araç veya npm yapılandırması onu kullanmıyor. Her ana sürümün en yenisi kalır. vp env install onu geri getirir.";
+"Unfinished Vite+ Node Downloads" = "Yarım Kalmış Vite+ Node İndirmeleri";
+"Folders a stopped Vite+ install left while downloading Node.js. Only folders untouched for a day are listed. Installed versions stay." = "Node.js indirilirken durdurulan bir Vite+ kurulumunun bıraktığı klasörler. Yalnızca bir gündür dokunulmamış klasörler listelenir. Yüklü sürümler kalır.";

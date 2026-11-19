@@ -4,7 +4,8 @@ import Foundation
 /// Old tool versions kept next to the one in use (#324): Cursor's unfinished
 /// agent-CLI installs, old Claude Code downloads, Android NDK versions, Android
 /// system images no emulator uses, Figma profiles Figma has migrated away
-/// from, and Node.js versions nvm keeps that nothing uses (#400).
+/// from, and Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
+/// uses, with the folders an unfinished Vite+ install leaves.
 ///
 /// Every row is Check First. These are installed tools and profiles, not data an
 /// app rebuilds by itself, and whether one is unused depends on the disk at the
@@ -29,6 +30,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case figmaProfile
         /// `~/.nvm/versions/node/v<version>` (#400), judged by `NvmNodeVersionPolicy`.
         case nvmNodeVersion
+        /// `<Vite+ data>/js_runtime/node/<version>` (#398), judged by `VitePlusNodeVersionPolicy`.
+        case vitePlusNodeVersion
+        /// `<Vite+ data>/js_runtime/.tmp*` (#398), judged by `VitePlusNodeVersionPolicy`.
+        case vitePlusInstallLeftover
     }
 
     // MARK: Rows
@@ -106,7 +111,11 @@ nonisolated enum OldToolVersionScanPolicy {
            NvmNodeVersionPolicy.versionNumber(ofFolderName: name) != nil {
             return .nvmNodeVersion
         }
-        return nil
+        switch VitePlusNodeVersionPolicy.kind(of: path, home: home) {
+        case .version: return .vitePlusNodeVersion
+        case .installLeftover: return .vitePlusInstallLeftover
+        case nil: return nil
+        }
     }
 
     static func isWhitelistedPath(_ path: String, home: String) -> Bool {
@@ -203,7 +212,8 @@ nonisolated enum OldToolVersionScanPolicy {
         home: String = DeletionSafetyPolicy.cachedHomePath,
         now: Date = Date(),
         android: AndroidContext? = nil,
-        nvm: NvmNodeVersionPolicy.Context? = nil
+        nvm: NvmNodeVersionPolicy.Context? = nil,
+        vitePlus: VitePlusNodeVersionPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
@@ -211,13 +221,15 @@ nonisolated enum OldToolVersionScanPolicy {
             path, kind: kind, home: home, now: now,
             android: android ?? .current(home: home),
             nvm: nvm,
+            vitePlus: vitePlus,
             nvmCheck: .quick
         )
     }
 
-    /// `nvmCheck` says how far an nvm version is judged: `refusesDeletion` may run
-    /// on the main thread, so it takes `.quick`, and `FileDeleter` runs the rest
-    /// right before the move (`NvmNodeVersionPolicy.passesImmediateTrashBoundary`).
+    /// `nvmCheck` says how far an nvm or Vite+ (#398) entry is judged:
+    /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
+    /// `FileDeleter` runs the rest right before the move
+    /// (`passesImmediateTrashBoundary` in each policy).
     static func isOffered(
         _ path: String,
         kind: Kind,
@@ -225,6 +237,7 @@ nonisolated enum OldToolVersionScanPolicy {
         now: Date,
         android: AndroidContext,
         nvm: NvmNodeVersionPolicy.Context? = nil,
+        vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -270,6 +283,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case .nvmNodeVersion:
             // Built here, not before: it probes Full Disk Access, which no other row needs.
             return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm ?? .current(home: home), check: nvmCheck)
+        case .vitePlusNodeVersion, .vitePlusInstallLeftover:
+            return VitePlusNodeVersionPolicy.isOffered(
+                path, home: home, now: now, context: vitePlus ?? .current(home: home), check: nvmCheck
+            )
         }
     }
 
@@ -529,11 +546,13 @@ nonisolated enum OldToolVersionScanPolicy {
         home: URL,
         now: Date = Date(),
         android: AndroidContext? = nil,
-        nvm: NvmNodeVersionPolicy.Context? = nil
+        nvm: NvmNodeVersionPolicy.Context? = nil,
+        vitePlus: VitePlusNodeVersionPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
         let nvm = nvm ?? .current(home: homePath)
+        let vitePlus = vitePlus ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -548,7 +567,7 @@ nonisolated enum OldToolVersionScanPolicy {
             }
             return found.filter { path in
                 guard let kind = kind(of: path, home: homePath) else { return false }
-                return isOffered(path, kind: kind, home: homePath, now: now, android: android, nvm: nvm)
+                return isOffered(path, kind: kind, home: homePath, now: now, android: android, nvm: nvm, vitePlus: vitePlus)
             }
             .sorted { isLower($0, than: $1) }
         }
@@ -574,6 +593,22 @@ nonisolated enum OldToolVersionScanPolicy {
                 add(NvmNodeVersionPolicy.labelPrefix + number, [version])
             }
         }
+        // The same for Vite+, from both of its data folders (#398). A version in
+        // both shares one row, and each folder passes the gate by itself.
+        var vitePlusVersions: [String: [String]] = [:]
+        var vitePlusLeftovers: [String] = []
+        for root in VitePlusNodeVersionPolicy.dataRoots {
+            for version in offered(in: "\(homePath)/\(root)/\(VitePlusNodeVersionPolicy.versionsFolder)") {
+                vitePlusVersions[URL(fileURLWithPath: version).lastPathComponent, default: []].append(version)
+            }
+            vitePlusLeftovers += offered(
+                in: "\(homePath)/\(root)/\(VitePlusNodeVersionPolicy.runtimeFolder)", includeHidden: true
+            )
+        }
+        for name in vitePlusVersions.keys.sorted(by: { isLower($0, than: $1) }) {
+            add(VitePlusNodeVersionPolicy.labelPrefix + name, vitePlusVersions[name] ?? [])
+        }
+        add(VitePlusNodeVersionPolicy.leftoversLabel, vitePlusLeftovers)
         return rows
     }
 }

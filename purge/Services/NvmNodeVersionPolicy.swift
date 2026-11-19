@@ -256,31 +256,55 @@ nonisolated enum NvmNodeVersionPolicy {
     static func nvmrcPin(
         _ file: String, home: String, installed: [String], aliasRoot: String, context: Context
     ) -> Set<String>? {
-        guard context.mayRead(file) else { return nil }
+        switch readPinFile(file, home: home, mayRead: context.mayRead) {
+        case .absent:
+            return []
+        case .unknown:
+            return nil
+        case .text(let text):
+            guard let line = nvmrcVersionLine(text) else { return nil }
+            return resolve(line, installed: installed, aliasRoot: aliasRoot)
+        }
+    }
+
+    /// What reading a recorded pin file found.
+    nonisolated enum PinFileRead: Equatable, Sendable {
+        /// No file there, or a folder by that name, which pins nothing.
+        case absent
+        case text(String)
+        /// Purge can't tell, which keeps every version.
+        case unknown
+    }
+
+    /// Reads a pin file a version manager would read, such as `.nvmrc`. Absent
+    /// when nothing is there, which is most recorded paths. Unknown when macOS
+    /// would ask about reading it, it may be on a drive that is only unplugged,
+    /// or it can't be read. A link is followed when its target may be read.
+    static func readPinFile(_ file: String, home: String, mayRead: (String) -> Bool) -> PinFileRead {
+        guard mayRead(file) else { return .unknown }
         var info = stat()
         guard lstat(file, &info) == 0 else {
-            guard errno == ENOENT || errno == ENOTDIR else { return nil }
-            return isGone(file, home: home) == true ? [] : nil
+            guard errno == ENOENT || errno == ENOTDIR else { return .unknown }
+            return isGone(file, home: home) == true ? .absent : .unknown
         }
         switch info.st_mode & S_IFMT {
         case S_IFREG:
             break
         case S_IFDIR:
-            // nvm reads only a file.
-            return []
+            // Version managers read only a file.
+            return .absent
         case S_IFLNK:
-            // nvm follows a link. Its target must be readable without a prompt.
-            guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: file) else { return nil }
+            // They follow a link. Its target must be readable without a prompt.
+            guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: file) else { return .unknown }
             let folder = URL(fileURLWithPath: file).deletingLastPathComponent()
             let resolved = URL(fileURLWithPath: target, relativeTo: folder).standardizedFileURL.path
-            guard context.mayRead(resolved),
-                  context.mayRead(URL(fileURLWithPath: resolved).resolvingSymlinksInPath().path) else { return nil }
+            guard mayRead(resolved),
+                  mayRead(URL(fileURLWithPath: resolved).resolvingSymlinksInPath().path) else { return .unknown }
         default:
-            return nil
+            return .unknown
         }
-        guard let text = readText(file),
-              let line = nvmrcVersionLine(text) else { return nil }
-        return resolve(line, installed: installed, aliasRoot: aliasRoot)
+        guard let text = readText(file) else { return .unknown }
+        return .text(text)
     }
 
     /// The `v<version>` folders in `root`, hidden names left out. Empty when nvm
@@ -402,8 +426,14 @@ nonisolated enum NvmNodeVersionPolicy {
     /// Whether the version holds a global package or a command its Node didn't
     /// ship. True when either folder can't be read.
     static func hasGlobalPackages(_ versionPath: String) -> Bool {
-        guard let number = versionNumber(ofFolderName: URL(fileURLWithPath: versionPath).lastPathComponent),
-              let major = Int(major(of: number)) else { return true }
+        let number = versionNumber(ofFolderName: URL(fileURLWithPath: versionPath).lastPathComponent)
+        return hasGlobalPackages(versionPath, major: number.flatMap { Int(major(of: $0)) })
+    }
+
+    /// `hasGlobalPackages` for a version of Node `major`, whatever its folder is
+    /// called. True when `major` is nil, which keeps the version.
+    static func hasGlobalPackages(_ versionPath: String, major: Int?) -> Bool {
+        guard let major else { return true }
         let shipped = bundled(major: major)
         func extras(in folder: String, bundled: Set<String>) -> Bool {
             do {
@@ -457,10 +487,18 @@ nonisolated enum NvmNodeVersionPolicy {
     /// a folder is there but can't be listed, or a link leads somewhere macOS
     /// would ask about reading.
     static func isLinkedFromBinFolder(_ versionPath: String, home: String, context: Context) -> Bool? {
+        isLinkedFromBinFolder(versionPath, home: home, linkFolders: context.linkFolders, mayRead: context.mayRead)
+    }
+
+    /// `isLinkedFromBinFolder` for any Node version, with the `bin` folders and
+    /// the read check passed in. Vite+ uses it too (#398).
+    static func isLinkedFromBinFolder(
+        _ versionPath: String, home: String, linkFolders: [String], mayRead: (String) -> Bool
+    ) -> Bool? {
         let spellings = OldToolVersionScanPolicy.comparableSpellings(of: versionPath)
-        for relative in context.linkFolders {
+        for relative in linkFolders {
             let folder = relative.hasPrefix("/") ? relative : "\(home)/\(relative)"
-            guard context.mayRead(folder) else { return nil }
+            guard mayRead(folder) else { return nil }
             let names: [String]
             do {
                 names = try FileManager.default.contentsOfDirectory(atPath: folder)
@@ -479,7 +517,7 @@ nonisolated enum NvmNodeVersionPolicy {
                 if pointsIn(resolved.lowercased()) { return true }
                 // Following the target's own links reads it, which macOS may ask
                 // about. Such a target isn't followed, and keeps every version.
-                guard context.mayRead(resolved) else { return nil }
+                guard mayRead(resolved) else { return nil }
                 if OldToolVersionScanPolicy.comparableSpellings(of: resolved).contains(where: pointsIn) {
                     return true
                 }
@@ -491,10 +529,18 @@ nonisolated enum NvmNodeVersionPolicy {
     /// Whether a LaunchAgent or an MCP config names a path inside the version. Nil
     /// when one is there but can't be read.
     static func isNamedByReferenceFile(_ versionPath: String, home: String, context: Context) -> Bool? {
+        isNamedByReferenceFile(versionPath, home: home, versionsRoot: versionsRoot, mayRead: context.mayRead)
+    }
+
+    /// `isNamedByReferenceFile` for a version in `versionsRoot`, relative to
+    /// home. Vite+ uses it too (#398).
+    static func isNamedByReferenceFile(
+        _ versionPath: String, home: String, versionsRoot: String, mayRead: (String) -> Bool
+    ) -> Bool? {
         let name = URL(fileURLWithPath: versionPath).lastPathComponent
         var files = referenceFiles.map { "\(home)/\($0)" }
         let agents = "\(home)/\(launchAgents)"
-        guard context.mayRead(agents) else { return nil }
+        guard mayRead(agents) else { return nil }
         do {
             files += try FileManager.default.contentsOfDirectory(atPath: agents)
                 .filter { $0.hasSuffix(".plist") }
@@ -503,13 +549,13 @@ nonisolated enum NvmNodeVersionPolicy {
             guard isMissing(agents) else { return nil }
         }
         for file in files {
-            guard context.mayRead(file) else { return nil }
+            guard mayRead(file) else { return nil }
             guard let data = FileManager.default.contents(atPath: file) else {
                 if isMissing(file) { continue }
                 return nil
             }
             guard let text = searchableText(data) else { return nil }
-            if names(text, versionFolder: name) { return true }
+            if names(text, versionFolder: name, in: versionsRoot) { return true }
         }
         return false
     }
@@ -517,7 +563,7 @@ nonisolated enum NvmNodeVersionPolicy {
     /// Whether `text` names a path in the version folder `name`. JSON may write
     /// `/` as `\/`, and the Mac's disk ignores case, so both count. A longer
     /// version (`v20.1.10` for `v20.1.1`) doesn't.
-    static func names(_ text: String, versionFolder name: String) -> Bool {
+    static func names(_ text: String, versionFolder name: String, in versionsRoot: String = NvmNodeVersionPolicy.versionsRoot) -> Bool {
         let haystack = text.lowercased()
         let escapedRoot = versionsRoot.replacingOccurrences(of: "/", with: "\\/")
         for needle in ["\(versionsRoot)/\(name)", "\(escapedRoot)\\/\(name)"].map({ $0.lowercased() }) {
@@ -574,7 +620,8 @@ nonisolated enum NvmNodeVersionPolicy {
 }
 
 /// The `.nvmrc` paths nvm reads for the projects Dev Projects scans found
-/// (#400), kept in `nvmrc-files.json` beside Purge's other files. The Dev Tools
+/// (#400), kept in `nvmrc-files.json` beside Purge's other files. Vite+ keeps
+/// its own list of pin files the same way, in `node-pin-files.json` (#398). The Dev Tools
 /// scan runs before the project walk, so the list from earlier walks is what it
 /// reads. Each walk adds its paths and keeps the rest, so a narrower walk, such
 /// as one without Full Disk Access, never drops a pin. A path leaves the list
@@ -609,7 +656,9 @@ nonisolated final class NvmrcLedger: @unchecked Sendable {
         write: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
     ) {
         self.fileURL = fileURL
-        unsavedURL = fileURL.deletingLastPathComponent().appendingPathComponent(Self.unsavedFileName)
+        // `nvmrc-files.json` → `nvmrc-files.unsaved.json`, so each list sets aside its own.
+        let stem = fileURL.deletingPathExtension().lastPathComponent
+        unsavedURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(stem).unsaved.json")
         self.limit = limit
         self.write = write
     }

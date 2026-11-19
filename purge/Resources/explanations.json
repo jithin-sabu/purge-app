@@ -3579,6 +3579,24 @@
     "kind": "packages"
   },
   {
+    "key": "vite-plus-node-version",
+    "display_name": "Vite+ Node.js Version",
+    "tag": "medium",
+    "explanation": "An older Node.js from Vite+. No default, pin Purge found, global tool or npm config uses it. The newest of each major stays. vp env install brings it back.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "vite-plus-node-install-leftovers",
+    "display_name": "Unfinished Vite+ Node Downloads",
+    "tag": "medium",
+    "explanation": "Folders a stopped Vite+ install left while downloading Node.js. Only folders untouched for a day are listed. Installed versions stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
     "key": "giget-cache",
     "display_name": "giget Template Cache",
     "tag": "safe",
