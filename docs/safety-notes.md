@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-19: Rows under `~/.cache` followed a link to another folder
 
-**Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** the pull request for [#420](https://github.com/jithin-sabu/purge-app/issues/420), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+**Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** [#421](https://github.com/jithin-sabu/purge-app/pull/421), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
 
 ### What happened
 
