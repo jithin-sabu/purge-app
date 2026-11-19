@@ -1110,13 +1110,9 @@ nonisolated final class FileDeleter: Sendable {
     }
 
     /// Returns the simulator UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
+    /// The link guard asks the same rule, so it lives in the policy (#422).
     private static func coreSimulatorDeviceUDID(from url: URL) -> String? {
-        let std = url.standardizedFileURL
-        let name = std.lastPathComponent
-        guard UUID(uuidString: name) != nil else { return nil }
-        guard std.deletingLastPathComponent().lastPathComponent == "Devices" else { return nil }
-        guard std.path.contains("CoreSimulator/Devices") else { return nil }
-        return name
+        DeletionSafetyPolicy.simulatorDeviceUDID(from: url)
     }
 
     /// Deleting a large device is real disk work, so this is generous — but still bounded, so a

@@ -1342,6 +1342,296 @@ struct OpencodeCacheTests {
     }
 }
 
+// MARK: - Allowlisted rows reached through a link (#422)
+
+/// The allowlist accepts `.gradle/caches` by its text. With `~/.gradle` a link
+/// to `~/Developer`, a move would take `~/Developer/caches`, so only
+/// `allowlistLinkRefusesDeletion` catches it. Every test builds its own home.
+@Suite("Allowlisted rows reached through a link (#422)")
+struct AllowlistLinkTests {
+    /// A temporary home, with a `Developer` folder beside it for links to point at.
+    private static func makeHome() throws -> (base: URL, home: URL, elsewhere: URL) {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("allowlist-link-\(UUID().uuidString)", isDirectory: true)
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        try fm.createDirectory(at: home, withIntermediateDirectories: true)
+        try fm.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        return (base, home, elsewhere)
+    }
+
+    /// Every allowlist entry, relative to home.
+    private static func entries(_ home: URL) -> [String] {
+        DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home.path).map { String($0.dropFirst(home.path.count + 1)) }
+    }
+
+    private static func refuses(_ relative: String, home: URL) -> Bool {
+        DeletionSafetyPolicy.allowlistLinkRefusesDeletion(home.appendingPathComponent(relative), home: home.path)
+    }
+
+    private static func makeFolder(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    /// Where `relative` lands when `link`, a folder at or above it, points at `target`.
+    private static func behind(_ relative: String, link: String, target: URL) -> URL {
+        let rest = relative.dropFirst(link.count).drop { $0 == "/" }
+        return rest.isEmpty ? target : target.appendingPathComponent(String(rest), isDirectory: true)
+    }
+
+    /// The guard starts from the list itself, so a new entry is covered the day
+    /// it is added.
+    @Test
+    func everyEntryIsFoundByItsText() {
+        let home = "/Users/someone"
+        let entries = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home)
+        #expect(entries.count > 80)
+        for entry in entries {
+            #expect(DeletionSafetyPolicy.allowlistEntry(containing: entry, home: home) == entry, "\(entry)")
+            #expect(DeletionSafetyPolicy.allowlistEntry(containing: "\(entry)/a/b", home: home) == entry, "\(entry)")
+            #expect(DeletionSafetyPolicy.allowlistEntry(containing: "\(entry)-old", home: home) == nil, "\(entry)")
+        }
+        for other in [
+            home, "\(home)/", "\(home)/.gradle", "\(home)/.gradle/jdks", "\(home)/Library", "\(home)/Library/CachesX/a",
+            "\(home)/.cache/unknown", "\(home)2/.npm", "/Users/other/.npm", "/Library/Caches/a", "",
+        ] {
+            #expect(DeletionSafetyPolicy.allowlistEntry(containing: other, home: home) == nil, "\(other)")
+        }
+    }
+
+    /// `~/.gradle`, `~/Library` or `~/Movies` as a link: the move would take the
+    /// folder behind it.
+    @Test
+    func everyEntryIsRefusedWhenItsFirstFolderIsALink() throws {
+        let fm = FileManager.default
+        let byFirstFolder = Dictionary(grouping: Self.entries(URL(fileURLWithPath: "/Users/someone"))) {
+            String($0.split(separator: "/")[0])
+        }
+        #expect(byFirstFolder.count > 30)
+        for (first, entries) in byFirstFolder {
+            let (base, home, elsewhere) = try Self.makeHome()
+            defer { try? fm.removeItem(at: base) }
+            try fm.createSymbolicLink(at: home.appendingPathComponent(first), withDestinationURL: elsewhere)
+            for relative in entries {
+                // The folder a move would really take.
+                let behind = Self.behind(relative, link: first, target: elsewhere)
+                try Self.makeFolder(behind.appendingPathComponent("inner", isDirectory: true))
+                for path in [relative, "\(relative)/inner", "\(relative)/inner/deeper"] {
+                    #expect(Self.refuses(path, home: home), "\(path)")
+                }
+                #expect(fm.fileExists(atPath: home.appendingPathComponent("\(relative)/inner").path))
+            }
+        }
+    }
+
+    /// `~/.npm` or `DerivedData` as a link: its own row would only move the
+    /// link, and a row inside it would take what is behind.
+    @Test
+    func everyEntryIsRefusedWhenItsOwnFolderIsALink() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        for (index, relative) in Self.entries(home).enumerated() {
+            let entry = home.appendingPathComponent(relative)
+            let behind = elsewhere.appendingPathComponent("target-\(index)", isDirectory: true)
+            try Self.makeFolder(behind.appendingPathComponent("inner", isDirectory: true))
+            try Self.makeFolder(entry.deletingLastPathComponent())
+            try fm.createSymbolicLink(at: entry, withDestinationURL: behind)
+            for path in [relative, "\(relative)/inner", "\(relative)/inner/deeper"] {
+                #expect(Self.refuses(path, home: home), "\(path)")
+            }
+            #expect(fm.fileExists(atPath: home.appendingPathComponent("\(relative)/inner").path))
+        }
+    }
+
+    @Test(arguments: [
+        (".gradle", ".gradle/caches"),
+        (".m2", ".m2/repository"),
+        ("Library/Developer", "Library/Developer/Xcode/DerivedData"),
+        ("Library/Developer/Xcode", "Library/Developer/Xcode/Archives"),
+        ("Library/Developer/CoreSimulator", "Library/Developer/CoreSimulator/Caches"),
+        ("Library/Application Support/Adobe", "Library/Application Support/Adobe/Common/Media Cache"),
+        ("Library/Containers/com.apple.mail/Data", "Library/Containers/com.apple.mail/Data/Library/Mail Downloads"),
+        ("Movies", "Movies/CacheClip"),
+        ("opt", "opt/anaconda3/pkgs"),
+        ("Library", "Library/Logs"),
+    ])
+    func aLinkedFolderOnTheWayRefusesTheEntry(link: String, entry: String) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(Self.behind(entry, link: link, target: elsewhere).appendingPathComponent("inner", isDirectory: true))
+        try Self.makeFolder(home.appendingPathComponent(link).deletingLastPathComponent())
+        try Self.makeFolder(home.appendingPathComponent(".npm/_cacache", isDirectory: true))
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        #expect(fm.fileExists(atPath: home.appendingPathComponent("\(entry)/inner").path))
+        #expect(Self.refuses(entry, home: home))
+        #expect(Self.refuses("\(entry)/inner", home: home))
+        // An entry no link leads to keeps its rows.
+        #expect(!Self.refuses(".npm", home: home))
+        #expect(!Self.refuses(".npm/_cacache", home: home))
+    }
+
+    /// Rows inside an entry: the children of `~/Library/Caches` and
+    /// `~/Library/Logs`, npm's folders, a JetBrains IDE's caches. A linked
+    /// folder between the entry and the row sends the move elsewhere. A row
+    /// whose own last part is the link moves as a link, as before.
+    @Test(arguments: [
+        ("Library/Caches/JetBrains", "Library/Caches/JetBrains/IntelliJIdea2026.2", "Library/Caches/com.example.app"),
+        ("Library/Caches/JetBrains/IntelliJIdea2026.2", "Library/Caches/JetBrains/IntelliJIdea2026.2/caches", "Library/Caches/JetBrains/GoLand2026.2/caches"),
+        ("Library/Logs/Example", "Library/Logs/Example/2026", "Library/Logs/DiagnosticReports"),
+        (".npm/_cacache", ".npm/_cacache/index-v5", ".npm/_logs"),
+    ])
+    func aLinkedFolderBetweenAnEntryAndARowRefusesTheRow(link: String, row: String, sibling: String) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(Self.behind(row, link: link, target: elsewhere))
+        try Self.makeFolder(home.appendingPathComponent(link).deletingLastPathComponent())
+        try Self.makeFolder(home.appendingPathComponent(sibling, isDirectory: true))
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        #expect(fm.fileExists(atPath: home.appendingPathComponent(row).path))
+        #expect(Self.refuses(row, home: home))
+        #expect(Self.refuses("\(row)/inner", home: home))
+        #expect(!Self.refuses(link, home: home))
+        #expect(!Self.refuses(sibling, home: home))
+        #expect(!Self.refuses((link as NSString).deletingLastPathComponent, home: home))
+    }
+
+    /// A home with no link offers what it did before, whether or not the
+    /// folders are on disk.
+    @Test(arguments: [true, false])
+    func nothingIsRefusedWithoutALink(foldersExist: Bool) throws {
+        let fm = FileManager.default
+        let (base, home, _) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let entries = Self.entries(home)
+        #expect(entries.count > 80)
+        for relative in entries {
+            if foldersExist {
+                try Self.makeFolder(home.appendingPathComponent("\(relative)/inner/deeper", isDirectory: true))
+            }
+            for path in [relative, "\(relative)/inner", "\(relative)/inner/deeper", "\(relative)/inner/deeper/file"] {
+                #expect(!Self.refuses(path, home: home), "\(path)")
+                #expect(!DeletionSafetyPolicy.allowlistLinkRefusesDeletion(
+                    standardizedPath: home.appendingPathComponent(path).standardizedFileURL.path,
+                    home: home.path,
+                    reuseRecentRead: true
+                ), "\(path)")
+            }
+        }
+    }
+
+    /// A link inside a folder goes to the Trash with it, as a link, so it
+    /// refuses nothing.
+    @Test
+    func aLinkInsideTheFolderRefusesNothing() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(home.appendingPathComponent(".gradle/caches/modules-2", isDirectory: true))
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".gradle/caches/modules-2/link"), withDestinationURL: elsewhere)
+        try Self.makeFolder(home.appendingPathComponent("Library/Caches/Homebrew", isDirectory: true))
+        try fm.createSymbolicLink(at: home.appendingPathComponent("Library/Caches/Homebrew/wget--1.25"), withDestinationURL: elsewhere)
+        for path in [
+            ".gradle/caches", ".gradle/caches/modules-2", ".gradle/caches/modules-2/link",
+            "Library/Caches/Homebrew", "Library/Caches/Homebrew/wget--1.25",
+        ] {
+            #expect(!Self.refuses(path, home: home), "\(path)")
+        }
+    }
+
+    /// `simctl delete` removes a device by its UDID and Purge never moves the
+    /// path, so a linked `Devices` folder keeps its device rows. Everything
+    /// else there moves by path and is refused.
+    @Test(arguments: ["Library/Developer", "Library/Developer/CoreSimulator", "Library/Developer/CoreSimulator/Devices"])
+    func simulatorDevicesAreLeftAlone(link: String) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let devices = "Library/Developer/CoreSimulator/Devices"
+        let udid = "5A1B2C3D-0000-4000-8000-00000000ABCD"
+        try Self.makeFolder(Self.behind("\(devices)/\(udid)/data", link: link, target: elsewhere))
+        try Self.makeFolder(home.appendingPathComponent(link).deletingLastPathComponent())
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        #expect(fm.fileExists(atPath: home.appendingPathComponent("\(devices)/\(udid)/data").path))
+
+        let byPath = [devices, "\(devices)/\(udid)/data", "\(devices)/unavailable/\(udid)", "\(devices)/device_set.plist", "\(devices)/not-a-udid"]
+        #expect(!Self.refuses("\(devices)/\(udid)", home: home))
+        #expect(FileDeleter.removesDirectly(home.appendingPathComponent("\(devices)/\(udid)"), simulatorRuntimePaths: []))
+        for path in byPath {
+            #expect(Self.refuses(path, home: home), "\(path)")
+            #expect(!FileDeleter.removesDirectly(home.appendingPathComponent(path), simulatorRuntimePaths: []), "\(path)")
+        }
+        // A folder that only looks like a device, in another entry, moves by path.
+        #expect(Self.refuses("Library/Developer/XCTestDevices/\(udid)", home: home) == (link == "Library/Developer"))
+    }
+
+    /// A folder on the way that can't be read is refused. One that is missing
+    /// is not.
+    @Test
+    func aFolderThatCannotBeReadIsRefused() throws {
+        let fm = FileManager.default
+        let (base, home, _) = try Self.makeHome()
+        let locked = home.appendingPathComponent(".m2", isDirectory: true)
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path)
+            try? fm.removeItem(at: base)
+        }
+        try Self.makeFolder(locked.appendingPathComponent("repository/inner", isDirectory: true))
+        #expect(!Self.refuses(".m2/repository", home: home))
+        try fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        #expect(Self.refuses(".m2/repository", home: home))
+        #expect(Self.refuses(".m2/repository/inner", home: home))
+        #expect(!Self.refuses(".ivy2/cache", home: home))
+    }
+
+    /// The on-screen filter may answer from a read of the last few seconds. A
+    /// move never does.
+    @Test
+    func onlyTheOnScreenFilterReusesARecentRead() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let tool = home.appendingPathComponent(".gradle", isDirectory: true)
+        try Self.makeFolder(tool.appendingPathComponent("caches", isDirectory: true))
+        try Self.makeFolder(elsewhere.appendingPathComponent("caches", isDirectory: true))
+        let path = tool.appendingPathComponent("caches").standardizedFileURL.path
+        func refuses(reuse: Bool) -> Bool {
+            DeletionSafetyPolicy.allowlistLinkRefusesDeletion(standardizedPath: path, home: home.path, reuseRecentRead: reuse)
+        }
+        #expect(!refuses(reuse: true))
+        try fm.removeItem(at: tool)
+        try fm.createSymbolicLink(at: tool, withDestinationURL: elsewhere)
+        #expect(refuses(reuse: false))
+        #expect(!refuses(reuse: true))
+        #expect(DeletionSafetyPolicy.linkReadLifetime <= 10)
+    }
+
+    /// The guard answers only for paths in an allowlist entry. Every other path
+    /// is left to `evaluate` and the other guards, linked or not: a project on
+    /// a linked drive still cleans (#190), and Gradle's own folder is refused
+    /// elsewhere.
+    @Test
+    func otherPathsAreLeftAlone() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        for link in [".gradle", "Developer", ".gem", ".local", "Library"] {
+            try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        }
+        for path in [
+            ".gradle", ".gradle/jdks", ".gradle/daemon/8.5", ".gradle/caches-old", "Developer", "Developer/app/node_modules",
+            "Developer/app/.gradle", ".gem/ruby/3.3.0/cache", ".local/share/uv", "Library", "Library/Application Support/Code/Cache",
+            "Library/Containers/com.example.app/Data/Library/Caches", "Library/CachesX/a", ".npmrc", "",
+        ] {
+            #expect(!Self.refuses(path, home: home), "\(path)")
+        }
+        #expect(!DeletionSafetyPolicy.allowlistLinkRefusesDeletion(elsewhere.appendingPathComponent(".gradle/caches"), home: home.path))
+        #expect(!DeletionSafetyPolicy.allowlistLinkRefusesDeletion(URL(fileURLWithPath: "/Library/Caches/a"), home: home.path))
+    }
+}
+
 // MARK: - The list itself
 
 @Suite("Allowlist audit: one entry per place")

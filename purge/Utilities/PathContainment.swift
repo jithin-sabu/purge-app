@@ -31,6 +31,31 @@ nonisolated enum PathContainment {
         return false
     }
 
+    /// True when `folder`, or a folder above it up to `home`, is a link or can't
+    /// be read, and when `folder` is not under `home` at all. `home` itself is
+    /// never read. A step that isn't there ends the walk: nothing below it
+    /// exists, so nothing below it is a link.
+    ///
+    /// The same walk as `containsSymlinkComponent`, on plain paths with
+    /// `lstat`, for callers that ask for every row of a scan (#422): 1 µs for
+    /// two steps, against 12 µs through `URL`.
+    static func reachesThroughLink(_ folder: String, home: String) -> Bool {
+        guard folder != home else { return false }
+        guard isInside(folder, home) else { return true }
+        // Counted in characters, as `isInside` compares them.
+        var slash = folder.index(folder.startIndex, offsetBy: home.hasSuffix("/") ? home.count - 1 : home.count)
+        while true {
+            let stepEnd = folder[folder.index(after: slash)...].firstIndex(of: "/") ?? folder.endIndex
+            var info = stat()
+            if lstat(String(folder[..<stepEnd]), &info) != 0 {
+                return !(errno == ENOENT || errno == ENOTDIR)
+            }
+            if (info.st_mode & S_IFMT) == S_IFLNK { return true }
+            guard stepEnd < folder.endIndex else { return false }
+            slash = stepEnd
+        }
+    }
+
     /// `url` resolves to somewhere under `root`, and `root` itself is reached
     /// through no link, so a link inside the root cannot point the delete
     /// elsewhere. `includingRoot` also accepts `url` resolving to `root` itself.

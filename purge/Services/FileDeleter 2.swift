@@ -1,0 +1,1456 @@
+import Foundation
+import os
+
+nonisolated struct DeletedItem: Identifiable {
+    let id: UUID
+    let path: String
+    let sizeBytes: Int64
+    /// Friendly label from the main list (e.g. explanation headline); nil if unknown.
+    let displayName: String?
+    /// `false` for items removed directly (e.g. simulators via `simctl delete`).
+    let movedToTrash: Bool
+
+    init(path: String, sizeBytes: Int64, displayName: String? = nil, movedToTrash: Bool = true) {
+        self.id = UUID()
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.displayName = displayName
+        self.movedToTrash = movedToTrash
+    }
+}
+
+nonisolated struct FailedDeletionItem: Identifiable, Equatable {
+    let id = UUID()
+    let path: String
+    let displayName: String
+    let reason: CleanFailureReason
+    let sizeBytes: Int64
+    /// The route that tried it, so Retry tries the same one (#174).
+    let route: DeletionRoute
+
+    init(
+        path: String,
+        displayName: String?,
+        reason: CleanFailureReason,
+        sizeBytes: Int64 = 0,
+        route: DeletionRoute = .cache
+    ) {
+        self.path = path
+        self.displayName = displayName ?? URL(fileURLWithPath: path).lastPathComponent
+        self.reason = reason
+        self.sizeBytes = sizeBytes
+        self.route = route
+    }
+}
+
+nonisolated struct SkippedDeletionItem: Identifiable, Hashable {
+    let id = UUID()
+    let path: String
+    let displayName: String
+    let reason: String
+    /// `true` when the user should see a "skipped for safety" notice.
+    /// `false` for silent never-delete blocks.
+    let isUserVisible: Bool
+    /// The route that refused it.
+    let route: DeletionRoute
+
+    init(
+        path: String,
+        displayName: String?,
+        reason: String,
+        isUserVisible: Bool,
+        route: DeletionRoute = .cache
+    ) {
+        self.path = path
+        self.displayName = displayName ?? URL(fileURLWithPath: path).lastPathComponent
+        self.reason = reason
+        self.isUserVisible = isUserVisible
+        self.route = route
+    }
+}
+
+nonisolated struct DeletionReport: Identifiable {
+    let id = UUID()
+    /// Sum of the sizes of items moved to the trash. This is what was *moved*, not
+    /// what was reclaimed: the files still occupy the volume until the trash is
+    /// emptied. Never present this as freed space.
+    let bytesMovedToTrash: Int64
+    /// Sum of the sizes of items removed outright rather than trashed (simulators,
+    /// via `simctl delete`). These bytes really are gone, so they are not pending.
+    let bytesRemovedDirectly: Int64
+    let deletedItems: [DeletedItem]
+    let failedItems: [FailedDeletionItem]
+    let skippedItems: [SkippedDeletionItem]
+    /// Volume readings taken immediately before and after the run. `nil` when the
+    /// volume could not be read, which stays distinct from a reading of zero.
+    let capacityBefore: VolumeCapacity?
+    let capacityAfter: VolumeCapacity?
+    let timestamp: Date
+    /// Paths the privileged helper moved to the Trash but could not fully hand back
+    /// to the user. They are gone from their source, but emptying the Trash may ask
+    /// for a password. Empty for every ordinary, non-escalated removal.
+    var ownershipWarningPaths: [String] = []
+    /// Runtimes `simctl` removed while Apple kept the download they came from, so
+    /// that space is still in use (#165). Empty for every ordinary run.
+    var keptRuntimeDownloads: [KeptRuntimeDownload] = []
+
+    /// The measured volume delta, the only number that may be called reclaimed.
+    /// `nil` when it was never measured. May be negative or near zero: a trash move
+    /// frees nothing, and other processes write while we measure.
+    var bytesReclaimedOnVolume: Int64? {
+        guard let capacityBefore, let capacityAfter else { return nil }
+        return capacityAfter.availableBytes - capacityBefore.availableBytes
+    }
+
+    /// The measured delta, but only when it clears measurement noise. `nil` means
+    /// "we cannot claim anything", which is not the same as "zero was reclaimed",
+    /// and must never be filled in with `bytesMovedToTrash`.
+    var reportableBytesReclaimedOnVolume: Int64? {
+        guard let measured = bytesReclaimedOnVolume,
+              measured >= VolumeCapacityReader.noiseFloorBytes
+        else { return nil }
+        return measured
+    }
+
+    var movedToTrashCount: Int {
+        deletedItems.lazy.filter(\.movedToTrash).count
+    }
+
+    /// True when nothing was deleted and at least one item failed: the run did
+    /// not do its job, and a scheduled clean stays due. A run that moved some
+    /// items, one that only skipped items for safety, and one that removed items
+    /// permanently all count as done (#173).
+    var movedNothingAndFailed: Bool {
+        deletedItems.isEmpty && !failedItems.isEmpty
+    }
+}
+
+/// What one retry from the completion screen came to (#174).
+nonisolated enum RetryOutcome: Sendable, Equatable {
+    /// The item went: to the Trash, or outright for a simulator or runtime, which
+    /// `movedToTrash` tells apart so the record and the Trash line stay honest.
+    /// `remaining` is what still failed this time: the entries of a folder emptied
+    /// one by one that did not move, each its own row from here on.
+    /// `keptRuntimeDownloads` is a runtime whose download Apple kept (#165).
+    case deleted(
+        bytes: Int64,
+        movedToTrash: Bool,
+        remaining: [FailedDeletionItem],
+        keptRuntimeDownloads: [KeptRuntimeDownload] = []
+    )
+    /// Nothing was at the path any more. Something else removed it since the clean.
+    case alreadyGone
+    /// Still there, with the reason the route gave this time. A gate's refusal
+    /// comes back as `.safetySkipped`, which offers no Retry.
+    case failed(CleanFailureReason)
+}
+
+/// Outcome of asking CoreSimulator to remove a runtime image.
+nonisolated enum SimulatorRuntimeRemoval: Sendable, Equatable {
+    /// Gone from `simctl runtime list`. `freed` is what the volume gave back,
+    /// `download` what became of Apple's download of the runtime (#165).
+    case removed(freed: VolumeCapacityReader.SettledGain, download: RuntimeDownloadAfterRemoval, isLegacyImage: Bool)
+    /// Not attempted: an older runtime that lives in Apple's download, or one
+    /// that could not be checked. The scan would not have offered it (#165).
+    case refused(String)
+    case failed(String)
+}
+
+/// Apple's download of a runtime once the runtime is gone (#165).
+nonisolated enum RuntimeDownloadAfterRemoval: Sendable, Equatable {
+    /// Apple keeps none now: there was none, or it went with the runtime.
+    case notKept
+    /// Still on disk. `bytes` is `nil` when it could not be measured.
+    case kept(bytes: Int64?)
+    /// The build, the runtime list or AssetsV2 could not be read.
+    case unknown
+}
+
+/// A runtime `simctl` removed while Apple kept its download (#165).
+nonisolated struct KeptRuntimeDownload: Sendable, Equatable {
+    let displayName: String
+    /// `nil` when the download could not be measured.
+    let bytes: Int64?
+
+    /// The completion screen's line for it.
+    var note: String {
+        guard let bytes else {
+            return String(localized: "macOS kept the \(displayName) download, so that space is still in use.")
+        }
+        return String(localized: "macOS kept the \(displayName) download (\(formatBytes(bytes))), so that space is still in use.")
+    }
+}
+
+/// Outcome of asking CoreSimulator to delete one simulator device.
+nonisolated enum SimulatorDeviceRemoval: Sendable, Equatable {
+    case removed
+    /// `detail` is simctl's own text and exit status, for the log only.
+    case failed(CleanFailureReason, detail: String)
+}
+
+/// Deletion engine. Runs off the main actor (`@concurrent`) so large removals
+/// never block the UI; progress reaches the UI via the `onProgress` buffer.
+nonisolated final class FileDeleter: Sendable {
+    typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) async -> SimulatorRuntimeRemoval
+    typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
+    /// Asks `xcodebuild` to delete a component, after checking it still names
+    /// `expectedAsset`. Tests pass a fake.
+    typealias XcodeComponentRemover = @Sendable (_ kind: XcodeComponent.Kind, _ expectedAsset: URL) async -> XcodeComponentRemoval
+    typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
+    typealias Trasher = @Sendable (_ url: URL) throws -> Void
+    typealias ContentsLister = @Sendable (_ folder: URL) throws -> [URL]
+
+    /// How one item moves to the Trash. Tests hand in a fake so nothing they make
+    /// reaches the user's own Trash (#171).
+    private let trash: Trasher
+
+    /// Lists a folder that is emptied entry by entry, such as `~/Library/Caches`.
+    /// Tests hand in a fixed list, so the per-entry gate can be checked without
+    /// listing the user's own folder (#189).
+    private let listContents: ContentsLister
+
+    /// The home folder the user-selected gates check against. Tests hand in a
+    /// temporary one. The cache route never uses it: `DeletionSafetyPolicy`
+    /// knows only the real home, so its checks keep that one. The store reads
+    /// it for the one check it runs on a path before a retry (#362).
+    let home: URL
+
+    /// How a simulator runtime row is removed. The live one calls `simctl`; tests
+    /// hand in a fake so the dispatch can be checked without CoreSimulator.
+    private let simulatorRuntimeRemover: SimulatorRuntimeRemover
+
+    /// How a simulator device row is removed. Same reason as the runtime remover.
+    private let simulatorDeviceRemover: SimulatorDeviceRemover
+
+    /// How an Xcode component row is removed. The live one runs `xcodebuild`;
+    /// tests hand in a fake (#132).
+    private let xcodeComponentRemover: XcodeComponentRemover
+
+    /// Moves root-owned paths to the Trash through the helper. Tests hand in a fake
+    /// so the routing can be checked without a registered helper.
+    private let privilegedMover: PrivilegedMover
+
+    /// Whether `macOS Install Data` still holds only leftovers from a finished update.
+    private let installLeftoverRule: @Sendable () -> Bool
+
+    /// The last check before a Dev Tools row moves that reads what the list gate
+    /// can't afford on the main thread: for an nvm Node version, its configs,
+    /// `bin` links and `lsof` (#400). True lets the move go. Tests hand in a
+    /// fake, since the real one only knows the real home's `~/.nvm`.
+    private let immediateMoveCheck: @Sendable (URL) -> Bool
+
+    /// Whether Purge has Full Disk Access. A clean asks once at the start, to read
+    /// the added folders the way the scan did, and again after a permission
+    /// error, since it changes how that error reads (#299). Tests hand in a
+    /// fixed answer.
+    private let fullDiskAccessGranted: @Sendable () -> Bool
+
+    init(
+        simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = { await FileDeleter.removeSimulatorRuntime(identifier: $0) },
+        simulatorDeviceRemover: @escaping SimulatorDeviceRemover = { FileDeleter.removeSimulatorDevice(udid: $0, folder: $1) },
+        xcodeComponentRemover: @escaping XcodeComponentRemover = { await FileDeleter.removeXcodeComponent($0, expectedAsset: $1) },
+        privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
+        installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() },
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
+        listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) },
+        fullDiskAccessGranted: @escaping @Sendable () -> Bool = { PermissionChecker().hasFullDiskAccess() },
+        immediateMoveCheck: @escaping @Sendable (URL) -> Bool = { NvmNodeVersionPolicy.passesImmediateTrashBoundary($0) }
+    ) {
+        self.immediateMoveCheck = immediateMoveCheck
+        self.simulatorRuntimeRemover = simulatorRuntimeRemover
+        self.simulatorDeviceRemover = simulatorDeviceRemover
+        self.xcodeComponentRemover = xcodeComponentRemover
+        self.privilegedMover = privilegedMover
+        self.installLeftoverRule = installLeftoverRule
+        self.home = home
+        self.trash = trash
+        self.listContents = listContents
+        self.fullDiskAccessGranted = fullDiskAccessGranted
+    }
+
+    /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
+    /// - Parameter pathToExpectedSizeBytes: Pre-scan sizes from deletion candidates; avoids re-measuring folders at delete time.
+    /// - Parameter simulatorRuntimeIDsByPath: Rows that are simulator runtimes, keyed by
+    ///   standardized path, with the image identifier `simctl runtime delete` takes. These
+    ///   never go near the filesystem policy: the path is a root-owned mount that only
+    ///   CoreSimulator may remove.
+    /// - Parameter xcodeComponentsByPath: Rows that are optional Xcode components, keyed
+    ///   by the standardized path of their asset folder, with the component
+    ///   `xcodebuild -deleteComponent` takes. Same rule: the path is Apple's asset
+    ///   store, which only `xcodebuild` may change (#132).
+    /// - Parameter requireOnDisk: On retry, drop files that have already disappeared.
+    /// - Parameter onProgress: Called on the engine's executor after each item starts / successfully
+    ///   deletes. Must be cheap; UI publishing is buffered elsewhere.
+    @concurrent func deleteItems(
+        at urls: [URL],
+        pathToDisplayName: [String: String] = [:],
+        pathToExpectedSizeBytes: [String: Int64] = [:],
+        simulatorRuntimeIDsByPath: [String: String] = [:],
+        xcodeComponentsByPath: [String: XcodeComponent.Kind] = [:],
+        requireOnDisk: Bool = false,
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
+    ) async throws -> DeletionReport {
+        var bytesMovedToTrash: Int64 = 0
+        var bytesRemovedDirectly: Int64 = 0
+        var deletedItems: [DeletedItem] = []
+        var failedItems: [FailedDeletionItem] = []
+        var fullDiskAccess: Bool?
+        var skippedItems: [SkippedDeletionItem] = []
+        var ownershipWarningPaths: [String] = []
+        var keptRuntimeDownloads: [KeptRuntimeDownload] = []
+        var installLeftovers: [URL] = []
+        let volumeURL = FileManager.default.homeDirectoryForCurrentUser
+        let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
+        // `evaluate` takes a project folder in a folder the user added (#318)
+        // only while that folder is on the list, so the list is read again from
+        // disk before anything moves. A folder removed in Settings, or on a drive
+        // that went away, is refused.
+        let scanAccess: ScanAccess = fullDiskAccessGranted() ? .full : .limited
+        ScanFolders.refreshSnapshot(home: home, insideHomeOnly: scanAccess == .limited)
+        // Same for the Go module cache: `evaluate` takes the folder the last
+        // read found, so a `GOMODCACHE` moved since the scan is refused (#397).
+        GoModuleCacheScanPolicy.refreshSnapshot(insideHomeOnly: scanAccess == .limited)
+        let projectHome = home.standardizedFileURL.path
+
+        for url in urls {
+            let standardizedPath = url.standardizedFileURL.path
+            let friendlyTitle = pathToDisplayName[standardizedPath]
+            let passesProjectBoundary = ScanFolders.permitsProjectArtifactMove(url, home: projectHome)
+            if requireOnDisk, passesProjectBoundary, !Self.stillOnDisk(url) { continue }
+
+            // Root-owned, so a plain Trash move can only fail. The helper moves them
+            // after this loop, all in one request (#127).
+            if MacOSInstallLeftovers.isEntryPath(standardizedPath) {
+                if DeletionSafetyPolicy.isOfferedForCleanup(url),
+                   DeletionSafetyPolicy.evaluate(url) == .allow {
+                    installLeftovers.append(url)
+                } else {
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
+                }
+                continue
+            }
+
+            if let runtimeID = simulatorRuntimeIDsByPath[standardizedPath] {
+                onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+                // Never measured here: the location is an 8 GB mounted image, and
+                // the scan already carries what `simctl` reported.
+                let size = pathToExpectedSizeBytes[standardizedPath] ?? 0
+                switch await simulatorRuntimeRemover(runtimeID) {
+                case .removed(let freed, let download, let isLegacyImage):
+                    let removedBytes = Self.runtimeRemovedBytes(
+                        listed: size,
+                        freed: freed,
+                        download: download,
+                        isLegacyImage: isLegacyImage
+                    )
+                    bytesRemovedDirectly += removedBytes
+                    deletedItems.append(DeletedItem(
+                        path: url.path,
+                        sizeBytes: removedBytes,
+                        displayName: friendlyTitle,
+                        movedToTrash: false
+                    ))
+                    switch download {
+                    case .kept(let bytes):
+                        keptRuntimeDownloads.append(KeptRuntimeDownload(
+                            displayName: friendlyTitle ?? url.lastPathComponent,
+                            bytes: bytes
+                        ))
+                    case .notKept, .unknown:
+                        break
+                    }
+                    onProgress?(.itemDeleted(sizeBytes: removedBytes))
+                case .refused(let reason):
+                    Self.simulatorLog.notice(
+                        "Skipped simulator runtime \(runtimeID, privacy: .public): \(reason, privacy: .public)"
+                    )
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
+                case .failed(let reason):
+                    NSLog("Purge: failed to delete simulator runtime %@ — %@", runtimeID, reason)
+                    failedItems.append(FailedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: .unknown,
+                        sizeBytes: size
+                    ))
+                }
+                continue
+            }
+
+            if let component = xcodeComponentsByPath[standardizedPath] {
+                onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+                // Never measured or touched here: the folder is Apple's asset store.
+                let size = pathToExpectedSizeBytes[standardizedPath] ?? 0
+                switch await xcodeComponentRemover(component, url.standardizedFileURL) {
+                case .removed(let freed):
+                    let removedBytes = Self.xcodeComponentRemovedBytes(listed: size, freed: freed)
+                    bytesRemovedDirectly += removedBytes
+                    deletedItems.append(DeletedItem(
+                        path: url.path,
+                        sizeBytes: removedBytes,
+                        displayName: friendlyTitle,
+                        movedToTrash: false
+                    ))
+                    onProgress?(.itemDeleted(sizeBytes: removedBytes))
+                case .alreadyGone:
+                    // Like a file that vanished before its move: nothing to book or
+                    // record, so a Retry reads it as gone and drops the row.
+                    Self.xcodeComponentLog.notice(
+                        "Xcode component \(component.rawValue, privacy: .public) was already gone"
+                    )
+                case .refused(let reason):
+                    Self.xcodeComponentLog.notice(
+                        "Skipped Xcode component \(component.rawValue, privacy: .public): \(reason, privacy: .public)"
+                    )
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
+                case .failed(let reason):
+                    Self.xcodeComponentLog.error(
+                        "Failed to delete Xcode component \(component.rawValue, privacy: .public): \(reason, privacy: .public)"
+                    )
+                    failedItems.append(FailedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: .unknown,
+                        sizeBytes: size
+                    ))
+                }
+                continue
+            }
+
+            // The scan offered every row here, so a refusal now means the answer
+            // changed since: Mail opened, Spotify downloaded music, a project
+            // started holding state. The row says so instead of vanishing (#174).
+            guard passesProjectBoundary, DeletionSafetyPolicy.isOfferedForCleanup(url)
+            else {
+                skippedItems.append(SkippedDeletionItem(
+                    path: url.path,
+                    displayName: friendlyTitle,
+                    reason: "This file was skipped for safety",
+                    isUserVisible: true
+                ))
+                continue
+            }
+
+            let decision = DeletionSafetyPolicy.evaluate(url)
+            switch decision {
+            case .allow:
+                // The real home, the one `evaluate` just allowed this path under.
+                let allowlistHome = FileManager.default.homeDirectoryForCurrentUser
+                let failsCursorBoundary = CursorAgentLeftoverScanPolicy.looksLikeCursorLeftoverPath(url, home: allowlistHome)
+                    && !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url)
+                let failsWorktreeBoundary = AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(url, home: allowlistHome)
+                    && !AgentWorktreeScanPolicy.passesImmediateTrashBoundary(url)
+                // An nvm version a config or `bin` link names, or a process has
+                // open, stays. `isOfferedForCleanup` skips these reads because it
+                // also runs on the main thread (#400).
+                let failsNvmBoundary = !immediateMoveCheck(url)
+                let projectIsInUse = ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess)
+                if failsCursorBoundary || failsWorktreeBoundary || failsNvmBoundary || projectIsInUse {
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
+                    continue
+                }
+
+                onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+                // A folder emptied entry by entry sums its entries below, so it is
+                // never measured whole here.
+                let deletesContentsOnly = DeletionSafetyPolicy.shouldDeleteContentsOnly(url)
+                let size = deletesContentsOnly
+                    ? 0
+                    : (pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.directoryByteSize(at: url))
+
+                if deletesContentsOnly {
+                    var didDeleteAnyContent = false
+                    var movedBytes: Int64 = 0
+
+                    do {
+                        let contents = try listContents(url)
+                        // Entries move one at a time, and a Telegram media folder can
+                        // hold tens of thousands. Each one reports its own size as it
+                        // moves, so the progress screen keeps moving, and the total
+                        // leaves out entries the policy refuses, failed moves and
+                        // hidden files instead of claiming the folder's scanned size
+                        // (#59). Measuring here also stops Crash Reports being counted
+                        // twice when it is emptied before Application Logs.
+                        let offered = contents.filter { DeletionSafetyPolicy.isOfferedForCleanup($0) }
+                        let entrySizes = Self.contentsEntrySizes(offered)
+                        for contentURL in offered {
+                            let entryBytes = entrySizes[contentURL] ?? 0
+                            do {
+                                try trash(contentURL)
+                                didDeleteAnyContent = true
+                                movedBytes += entryBytes
+                                onProgress?(.itemPartlyDeleted(sizeBytes: entryBytes))
+                            } catch {
+                                recordDeletionFailure(
+                                    path: contentURL.path,
+                                    error: error,
+                                    displayName: contentURL.lastPathComponent,
+                                    sizeBytes: entryBytes,
+                                    route: .cache,
+                                    failedItems: &failedItems,
+                                    fullDiskAccess: &fullDiskAccess
+                                )
+                            }
+                        }
+                    } catch {
+                        // A folder that cannot even be listed is a failure with a
+                        // reason, usually Full Disk Access, not a folder that was
+                        // never there (#174).
+                        recordDeletionFailure(
+                            path: url.path,
+                            error: error,
+                            displayName: friendlyTitle,
+                            sizeBytes: pathToExpectedSizeBytes[standardizedPath] ?? 0,
+                            route: .cache,
+                            failedItems: &failedItems,
+                            fullDiskAccess: &fullDiskAccess
+                        )
+                    }
+
+                    if didDeleteAnyContent {
+                        bytesMovedToTrash += movedBytes
+                        deletedItems.append(DeletedItem(
+                            path: url.path,
+                            sizeBytes: movedBytes,
+                            displayName: friendlyTitle
+                        ))
+                        onProgress?(.itemDeleted(sizeBytes: 0))
+                    }
+                } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
+                    switch simulatorDeviceRemover(udid, url) {
+                    case .removed:
+                        bytesRemovedDirectly += size
+                        deletedItems.append(DeletedItem(
+                            path: url.path,
+                            sizeBytes: size,
+                            displayName: friendlyTitle,
+                            movedToTrash: false
+                        ))
+                        onProgress?(.itemDeleted(sizeBytes: size))
+                    case .failed(let reason, let detail):
+                        Self.simulatorLog.error(
+                            "simctl could not delete simulator \(udid, privacy: .public): \(detail, privacy: .public)"
+                        )
+                        failedItems.append(FailedDeletionItem(
+                            path: url.path,
+                            displayName: friendlyTitle,
+                            reason: reason,
+                            sizeBytes: size
+                        ))
+                    }
+                } else {
+                    // Sizing gives browsers, Node, and other projects time to
+                    // start using a folder. Recheck before the Trash move.
+                    guard ScanFolders.permitsProjectArtifactMove(url, home: projectHome),
+                          DeletionSafetyPolicy.isOfferedForCleanup(url),
+                          !ProjectActivityPolicy.artifactBelongsToActiveProject(url, access: scanAccess),
+                          immediateMoveCheck(url)
+                    else {
+                        skippedItems.append(SkippedDeletionItem(
+                            path: url.path,
+                            displayName: friendlyTitle,
+                            reason: "This file was skipped for safety",
+                            isUserVisible: true
+                        ))
+                        continue
+                    }
+                    // Go makes each module folder read-only, and the Trash could
+                    // not empty them like that. The owner gets write permission
+                    // first, as `go clean -modcache` does. A folder that can't be
+                    // changed keeps the whole cache where it is (#397).
+                    var goModeChanges: GoModuleCacheScanPolicy.ModeChanges?
+                    if GoModuleCacheScanPolicy.isWholeCacheRoot(url) {
+                        guard let changes = GoModuleCacheScanPolicy.makeFoldersWritable(in: url) else {
+                            failedItems.append(FailedDeletionItem(
+                                path: url.path,
+                                displayName: friendlyTitle,
+                                reason: .unknown,
+                                sizeBytes: size
+                            ))
+                            continue
+                        }
+                        // The walk can take a while on a big cache. Something
+                        // added meanwhile, such as a `src` folder, stops the move.
+                        // The module folders just made writable were Go's.
+                        let refused = GoModuleCacheScanPolicy.$foldersMadeWritable.withValue(changes.goModules) {
+                            GoModuleCacheScanPolicy.refusesDeletion(url)
+                        }
+                        guard !refused else {
+                            GoModuleCacheScanPolicy.restoreModes(changes)
+                            skippedItems.append(SkippedDeletionItem(
+                                path: url.path,
+                                displayName: friendlyTitle,
+                                reason: "This file was skipped for safety",
+                                isUserVisible: true
+                            ))
+                            continue
+                        }
+                        goModeChanges = changes
+                    }
+                    do {
+                        try trash(url)
+                        bytesMovedToTrash += size
+                        deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                        onProgress?(.itemDeleted(sizeBytes: size))
+                    } catch {
+                        // Put Go's read-only mark back, so a Retry still
+                        // recognises the cache.
+                        if let goModeChanges { GoModuleCacheScanPolicy.restoreModes(goModeChanges) }
+                        recordDeletionFailure(
+                            path: url.path,
+                            error: error,
+                            displayName: friendlyTitle,
+                            sizeBytes: size,
+                            route: .cache,
+                            failedItems: &failedItems,
+                            fullDiskAccess: &fullDiskAccess
+                        )
+                    }
+                }
+
+            case .blockedNeverDelete, .blockedNotWhitelisted:
+                let reason = decision.skipReason ?? "Skipped for safety"
+                skippedItems.append(
+                    SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: reason,
+                        isUserVisible: decision.isUserVisibleSkip
+                    )
+                )
+            }
+        }
+
+        if !installLeftovers.isEmpty {
+            await moveInstallLeftovers(
+                installLeftovers,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                bytesMovedToTrash: &bytesMovedToTrash,
+                deletedItems: &deletedItems,
+                failedItems: &failedItems,
+                skippedItems: &skippedItems,
+                ownershipWarningPaths: &ownershipWarningPaths,
+                onProgress: onProgress
+            )
+        }
+
+        let capacityAfter = VolumeCapacityReader.read(for: volumeURL)
+        let report = DeletionReport(
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: bytesRemovedDirectly,
+            deletedItems: deletedItems,
+            failedItems: failedItems,
+            skippedItems: skippedItems,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
+            timestamp: Date(),
+            ownershipWarningPaths: ownershipWarningPaths,
+            keptRuntimeDownloads: keptRuntimeDownloads
+        )
+        return report
+    }
+
+    /// Hands the selected `macOS Install Data` entries to the helper in one request.
+    /// One request matters: every move changes the folder's date, so the helper
+    /// decides the date rule once, before the first move. The rule is checked here
+    /// too, so a waiting update is never even sent. There is no other route: with
+    /// the helper off, the entries come back as one-time setup.
+    private func moveInstallLeftovers(
+        _ urls: [URL],
+        pathToDisplayName: [String: String],
+        pathToExpectedSizeBytes: [String: Int64],
+        bytesMovedToTrash: inout Int64,
+        deletedItems: inout [DeletedItem],
+        failedItems: inout [FailedDeletionItem],
+        skippedItems: inout [SkippedDeletionItem],
+        ownershipWarningPaths: inout [String],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+    ) async {
+        guard installLeftoverRule() else {
+            for url in urls {
+                skippedItems.append(SkippedDeletionItem(
+                    path: url.path,
+                    displayName: pathToDisplayName[url.standardizedFileURL.path],
+                    reason: "This file was skipped for safety",
+                    isUserVisible: true
+                ))
+            }
+            return
+        }
+
+        let first = urls[0].standardizedFileURL.path
+        onProgress?(.itemStarted(name: pathToDisplayName[first] ?? urls[0].lastPathComponent))
+        // Each starts as a failure, so the shared folding below credits only what the
+        // helper reports moved.
+        let pending = urls.map { url in
+            let key = url.standardizedFileURL.path
+            return FailedDeletionItem(
+                path: url.path,
+                displayName: pathToDisplayName[key],
+                reason: .unknown,
+                sizeBytes: pathToExpectedSizeBytes[key] ?? FolderSizing.directoryByteSize(at: url)
+            )
+        }
+        failedItems.append(contentsOf: pending)
+        let result = await privilegedMover(urls)
+        foldPrivilegedResult(
+            result,
+            candidateIDs: Set(pending.map(\.id)),
+            bytesMovedToTrash: &bytesMovedToTrash,
+            deletedItems: &deletedItems,
+            failedItems: &failedItems,
+            ownershipWarningPaths: &ownershipWarningPaths,
+            pathToDisplayName: pathToDisplayName,
+            onProgress: onProgress
+        )
+    }
+
+    /// The route for items the user picks one by one: Large Files rows (single
+    /// files, and whole VM and Safari download bundles), AI models, and the
+    /// uninstaller's apps, leftovers and command-line tools. Each path must
+    /// pass one of the four policy gates below; this route never consults the cache allowlist,
+    /// which refuses the user's own files by design. Items always move to Trash.
+    ///
+    /// `aiModelPaths` are the components of AI model rows. They answer to
+    /// `AIModelScanPolicy` alone: several stores sit under `~/Library`, where
+    /// the uninstall gate admits any path, so the model gate's refusals (a
+    /// store root, GPT4All's local-documents database) would never hold if
+    /// another gate could still say yes (#157).
+    ///
+    /// `privilegedBundlePaths` are the `.app` bundles the user chose to uninstall,
+    /// also in `privilegedEligiblePaths`. They may go to the helper after any
+    /// permission error, not only one macOS gave no reason for (#299).
+    @concurrent func deleteUserSelectedFiles(
+        at urls: [URL],
+        pathToDisplayName: [String: String] = [:],
+        pathToExpectedSizeBytes: [String: Int64] = [:],
+        aiModelPaths: Set<String> = [],
+        privilegedEligiblePaths: Set<String> = [],
+        privilegedBundlePaths: Set<String> = [],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
+    ) async throws -> DeletionReport {
+        var bytesMovedToTrash: Int64 = 0
+        var deletedItems: [DeletedItem] = []
+        var failedItems: [FailedDeletionItem] = []
+        var fullDiskAccess: Bool?
+        var skippedItems: [SkippedDeletionItem] = []
+        var ownershipWarningPaths: [String] = []
+        let volumeURL = home
+        let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
+        // A command-line tool's shims are eligible only while they point into
+        // its folder, so the pairs are read once, before anything moves (#225).
+        // The gates read Ollama's store from launchd too, read again here (#318).
+        LaunchdEnvironment.refresh()
+        // Taken once, so every check in the batch reads the same store, even if
+        // a scan reads launchd again meanwhile (#318 review).
+        let modelEnvironment = AIModelScanPolicy.modelEnvironment
+        let commandLineToolPaths = CommandLineToolScanPolicy.eligiblePaths(home: home, environment: modelEnvironment)
+        // The folders the user added for Large Files (#318), read once from
+        // disk for the batch, so a folder removed in Settings is refused.
+        let addedScanRoots = ScanFolders.roots(home: home)
+
+        for url in urls {
+            let standardizedPath = url.standardizedFileURL.path
+            let friendlyTitle = pathToDisplayName[standardizedPath]
+
+            // AI model components live in hidden runtime directories that the
+            // large-file policy deliberately refuses, so they carry their own
+            // equally narrow gate. The uninstaller adds a third: an app bundle in
+            // an app root, or a leftover inside a known Library location. The
+            // fourth is a command-line tool's folder, shims and job plists.
+            let isAIModel = aiModelPaths.contains(standardizedPath)
+            let isEligible = isAIModel
+                ? AIModelScanPolicy.isEligibleForDeletion(url, home: home, environment: modelEnvironment)
+                : LargeFileScanPolicy.isEligibleForDeletion(url, home: home, addedRoots: addedScanRoots)
+                    || AIModelScanPolicy.isEligibleForDeletion(url, home: home, environment: modelEnvironment)
+                    || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
+                    || commandLineToolPaths.contains(standardizedPath)
+            // Stamped here, from the flags this call was given, so a retry asks the
+            // same gate with the same flags (#174).
+            let route = DeletionRoute.userSelected(
+                isAIModel: isAIModel,
+                privilegedEligible: privilegedEligiblePaths.contains(standardizedPath)
+            )
+            guard isEligible else {
+                skippedItems.append(SkippedDeletionItem(
+                    path: url.path,
+                    displayName: friendlyTitle,
+                    reason: "This file was skipped for safety",
+                    isUserVisible: true,
+                    route: route
+                ))
+                continue
+            }
+
+            onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+            let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.singleFileSize(at: url)
+            do {
+                try trash(url)
+                bytesMovedToTrash += size
+                deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                onProgress?(.itemDeleted(sizeBytes: size))
+            } catch {
+                recordDeletionFailure(
+                    path: url.path,
+                    error: error,
+                    displayName: friendlyTitle,
+                    sizeBytes: size,
+                    route: route,
+                    failedItems: &failedItems,
+                    fullDiskAccess: &fullDiskAccess
+                )
+            }
+        }
+
+        // Only paths the uninstall planner proved have a non-writable parent may use
+        // the administrator helper. Other deletion routes pass an empty set.
+        if !privilegedEligiblePaths.isEmpty {
+            await applyPrivilegedFallback(
+                bytesMovedToTrash: &bytesMovedToTrash,
+                deletedItems: &deletedItems,
+                failedItems: &failedItems,
+                ownershipWarningPaths: &ownershipWarningPaths,
+                privilegedEligiblePaths: privilegedEligiblePaths,
+                privilegedBundlePaths: privilegedBundlePaths,
+                pathToDisplayName: pathToDisplayName,
+                onProgress: onProgress
+            )
+        }
+
+        let capacityAfter = VolumeCapacityReader.read(for: volumeURL)
+        let report = DeletionReport(
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: 0,
+            deletedItems: deletedItems,
+            failedItems: failedItems,
+            skippedItems: skippedItems,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
+            timestamp: Date(),
+            ownershipWarningPaths: ownershipWarningPaths
+        )
+        return report
+    }
+
+    /// Escalates only explicit uninstall paths whose ordinary move failed: the app
+    /// bundles the user chose, and leftovers whose parent folder is not writable.
+    /// When the helper is enabled, successful moves fold into `deletedItems`;
+    /// otherwise the result screen can offer one-time setup. Nothing here shows a
+    /// system prompt on its own.
+    private func applyPrivilegedFallback(
+        bytesMovedToTrash: inout Int64,
+        deletedItems: inout [DeletedItem],
+        failedItems: inout [FailedDeletionItem],
+        ownershipWarningPaths: inout [String],
+        privilegedEligiblePaths: Set<String>,
+        privilegedBundlePaths: Set<String>,
+        pathToDisplayName: [String: String],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+    ) async {
+        // A root-owned bundle and a locked one fail the same way without Full Disk
+        // Access (Cocoa 513, OSStatus -5000, measured for #299), and both read as
+        // needing it. Only a look at the flags tells them apart, so a locked or
+        // SIP-marked bundle is named as protected and never sent.
+        // A path counts as a chosen bundle only when the caller named it one *and*
+        // it is a real `.app` in an app root. The helper also accepts a leftover
+        // root's direct children (`~/Library/Containers/<id>`), so this never rests
+        // on every caller keeping leftovers out of `privilegedBundlePaths`.
+        func isChosenBundle(_ path: String) -> Bool {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard privilegedBundlePaths.contains(url.path),
+                  url.pathExtension == "app",
+                  AppUninstallScanPolicy.isRealAppBundle(url) else { return false }
+            let appRoots = AppUninstallScanPolicy.installedAppRoots(home: home).map { $0.standardizedFileURL.path }
+            return AppFolders.folderDepth(ofAppAtPath: url.path, roots: appRoots, home: home) != nil
+        }
+
+        // The helper takes a bundle only from the two built-in Applications
+        // folders, and moves everything into `~/.Trash` with a rename, which
+        // can't leave the home folder's volume. So an app on a drive or in a
+        // folder the user added is never sent (#99).
+        func helperCanReach(_ path: String) -> Bool {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard AppFolders.isOnHomeVolume(url, home: home) else { return false }
+            guard isChosenBundle(path) else { return true }
+            let builtIn = AppFolders.builtInRoots(home: home).map { $0.standardizedFileURL.path }
+            return AppBundleReach.folderDepth(ofAppAtPath: url.path, roots: builtIn) != nil
+        }
+
+        failedItems = failedItems.map { item in
+            guard item.reason == .needsFullDiskAccess,
+                  isChosenBundle(item.path),
+                  FileProtection.blocksRemoval(URL(fileURLWithPath: item.path)) else { return item }
+            return FailedDeletionItem(
+                path: item.path,
+                displayName: item.displayName,
+                reason: .systemProtected,
+                sizeBytes: item.sizeBytes,
+                route: item.route
+            )
+        }
+
+        // With Full Disk Access granted, an ownership denial resolves to `.unknown`.
+        // Without it, the same denial reads as needing Full Disk Access, which says
+        // nothing about an app bundle: Full Disk Access guards user data, not app
+        // folders, and the helper moves a root-owned bundle without it (#299). So a
+        // chosen bundle goes to the helper either way. A leftover still goes only on
+        // `.unknown`, so one in a privacy-protected folder is never moved as root.
+        // Busy and system-protected failures keep their own handling.
+        // An app the helper can't reach says to use Finder instead (#99).
+        failedItems = failedItems.map { item in
+            guard isChosenBundle(item.path), !helperCanReach(item.path) else { return item }
+            switch item.reason {
+            case .needsFullDiskAccess, .needsAdministrator, .unknown:
+                return FailedDeletionItem(
+                    path: item.path,
+                    displayName: item.displayName,
+                    reason: .moveInFinder,
+                    sizeBytes: item.sizeBytes,
+                    route: item.route
+                )
+            case .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped, .keptForOtherApp,
+                 .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing,
+                 .moveInFinder:
+                return item
+            }
+        }
+
+        let candidates = failedItems.filter { item in
+            let key = URL(fileURLWithPath: item.path).standardizedFileURL.path
+            guard privilegedEligiblePaths.contains(key),
+                  FileManager.default.fileExists(atPath: item.path),
+                  helperCanReach(item.path) else { return false }
+            switch item.reason {
+            case .unknown:
+                return true
+            case .needsFullDiskAccess:
+                return isChosenBundle(item.path)
+            case .needsAdministrator, .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped,
+                 .keptForOtherApp, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart,
+                 .simulatorToolsMissing, .moveInFinder:
+                return false
+            }
+        }
+        guard !candidates.isEmpty else { return }
+
+        let result = await privilegedMover(candidates.map { URL(fileURLWithPath: $0.path) })
+        foldPrivilegedResult(
+            result,
+            candidateIDs: Set(candidates.map(\.id)),
+            bytesMovedToTrash: &bytesMovedToTrash,
+            deletedItems: &deletedItems,
+            failedItems: &failedItems,
+            ownershipWarningPaths: &ownershipWarningPaths,
+            pathToDisplayName: pathToDisplayName,
+            onProgress: onProgress
+        )
+    }
+
+    /// Folds a helper result back into the run. Moved items are credited; an item
+    /// the helper may still be finishing counts only if it is gone from disk. A
+    /// candidate still present is a real failure when the helper tried, with the
+    /// reason the helper gave, and one-time setup (`.needsAdministrator`) when it
+    /// isn't on. Other failures pass through.
+    private func foldPrivilegedResult(
+        _ result: PrivilegedMoveResult,
+        candidateIDs: Set<UUID>,
+        bytesMovedToTrash: inout Int64,
+        deletedItems: inout [DeletedItem],
+        failedItems: inout [FailedDeletionItem],
+        ownershipWarningPaths: inout [String],
+        pathToDisplayName: [String: String],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+    ) {
+        let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
+        let indeterminatePaths = Set(result.indeterminate.map { $0.standardizedFileURL.path })
+        let ownershipIncompletePaths = Set(result.ownershipIncomplete.map { $0.standardizedFileURL.path })
+        let failureCodes = Dictionary(
+            result.failureCodes.map { ($0.key.standardizedFileURL.path, $0.value) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        func replacing(_ item: FailedDeletionItem, with reason: CleanFailureReason) -> FailedDeletionItem {
+            FailedDeletionItem(
+                path: item.path,
+                displayName: item.displayName,
+                reason: reason,
+                sizeBytes: item.sizeBytes,
+                route: item.route
+            )
+        }
+
+        // Records a moved item: credits its bytes, lists it as deleted, advances
+        // progress, and carries forward any "emptying may ask for a password" note.
+        func recordMoved(_ item: FailedDeletionItem, standardized: String) {
+            bytesMovedToTrash += item.sizeBytes
+            deletedItems.append(DeletedItem(
+                path: item.path,
+                sizeBytes: item.sizeBytes,
+                displayName: pathToDisplayName[standardized] ?? item.displayName
+            ))
+            if ownershipIncompletePaths.contains(standardized) {
+                ownershipWarningPaths.append(item.path)
+            }
+            onProgress?(.itemDeleted(sizeBytes: item.sizeBytes))
+        }
+
+        var stillFailed: [FailedDeletionItem] = []
+        for item in failedItems {
+            let standardized = URL(fileURLWithPath: item.path).standardizedFileURL.path
+            if movedPaths.contains(standardized) {
+                recordMoved(item, standardized: standardized)
+            } else if indeterminatePaths.contains(standardized) {
+                // The helper timed out and may still be finishing. If the source is
+                // already gone, the move did land — credit it rather than leaving a
+                // removal button stuck forever. If it is still on disk, keep the
+                // honest original error and let the uncertainty stand. An app's
+                // "needs Full Disk Access" was never the cause, so it reads as unknown.
+                if FileManager.default.fileExists(atPath: item.path) {
+                    stillFailed.append(item.reason == .needsFullDiskAccess ? replacing(item, with: .unknown) : item)
+                } else {
+                    recordMoved(item, standardized: standardized)
+                }
+            } else if candidateIDs.contains(item.id) {
+                if result.helperAvailable {
+                    // An enabled helper attempted the move and the item is still here:
+                    // a real failure, not one-time setup, so the user never sees
+                    // "Set Up" again. The row says what the helper ran into (#299).
+                    stillFailed.append(replacing(item, with: Self.reasonAfterHelperFailure(
+                        path: item.path,
+                        code: failureCodes[standardized],
+                        refusal: result.refusal
+                    )))
+                } else {
+                    // Helper isn't enabled yet: present it as one-time setup.
+                    stillFailed.append(replacing(item, with: .needsAdministrator))
+                }
+            } else {
+                stillFailed.append(item)
+            }
+        }
+        failedItems = stillFailed
+    }
+
+    /// The reason for an item an enabled helper tried and left in place, from what it
+    /// said (#299). Never "needs Full Disk Access": the helper runs without it.
+    /// - Parameter code: The item's errno from the helper, or
+    ///   `PurgeHelperConstants.outsideAllowedLocationsCode`; `nil` when it gave none.
+    static func reasonAfterHelperFailure(
+        path: String,
+        code: Int?,
+        refusal: HelperMoveRefusal
+    ) -> CleanFailureReason {
+        switch refusal {
+        case .notAdministrator:
+            return .needsAdministratorAccount
+        case .invalidTrash, .invalidPeer, .approvalUnavailable:
+            return .unknown
+        case .accepted:
+            break
+        }
+        guard let code else { return .unknown }
+        if code == Int(EBUSY) { return .inUse }
+        // EPERM can come from a flag, SIP or a privacy check, so the flags are read
+        // on disk before the row claims that macOS protects it.
+        if code == Int(EPERM) || code == Int(EACCES),
+           FileProtection.blocksRemoval(URL(fileURLWithPath: path)) {
+            return .systemProtected
+        }
+        return .unknown
+    }
+
+    /// True when `deleteItems` removes this URL for good instead of moving it to the
+    /// Trash: a simulator runtime whose path is in `simulatorRuntimePaths`, an Xcode
+    /// component whose path is in `xcodeComponentPaths`, or a simulator device
+    /// folder. Confirmations use the same rule as the engine.
+    static func removesDirectly(
+        _ url: URL,
+        simulatorRuntimePaths: Set<String>,
+        xcodeComponentPaths: Set<String> = []
+    ) -> Bool {
+        let path = url.standardizedFileURL.path
+        if simulatorRuntimePaths.contains(path) || xcodeComponentPaths.contains(path) { return true }
+        return coreSimulatorDeviceUDID(from: url) != nil
+    }
+
+    /// Returns the simulator UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
+    /// The link guard asks the same rule, so it lives in the policy (#422).
+    private static func coreSimulatorDeviceUDID(from url: URL) -> String? {
+        DeletionSafetyPolicy.simulatorDeviceUDID(from: url)
+    }
+
+    /// Deleting a large device is real disk work, so this is generous — but still bounded, so a
+    /// wedged CoreSimulator cannot leave the delete run hanging forever.
+    private static let simctlDeleteTimeout: TimeInterval = 120
+    private static let simctlDeviceListTimeout: TimeInterval = 30
+
+    /// `simctl delete` removes the folder and the list entry before it exits: 0.07 s
+    /// for a new device on the dev Mac. The few extra checks only cover a slow disk.
+    private static let simctlDeviceGoneChecks = 4
+
+    /// Public on purpose: simctl's text is the only way to read a failed device
+    /// delete from someone's log (#161).
+    private static let simulatorLog = Logger(subsystem: "io.getpurge.app", category: "simulators")
+
+    /// Public on purpose for the same reason: `xcodebuild`'s text is the only way
+    /// to read a failed component delete from someone's log (#132).
+    private static let xcodeComponentLog = Logger(subsystem: "io.getpurge.app", category: "xcode-components")
+
+    /// Prefetched with a contents-only listing, so sizing a file costs no extra stat.
+    private static let contentsEntryKeys: [URLResourceKey] = [
+        .isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey
+    ]
+
+    /// The entries of a folder emptied entry by entry. Hidden ones are left out.
+    static func visibleContents(of folder: URL) throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: contentsEntryKeys,
+            options: [.skipsHiddenFiles]
+        )
+    }
+
+    /// On-disk size of each entry about to be moved, counted the way the scan sized
+    /// the row (#131): a file's or link's allocated size, or its share when it is a
+    /// full APFS clone (`SharedBlocks`), and the folder walk for folders.
+    static func contentsEntrySizes(_ entries: [URL]) -> [URL: Int64] {
+        var sizes: [URL: Int64] = [:]
+        var folders: [URL] = []
+        for entry in entries {
+            let values = try? entry.resourceValues(forKeys: Set(contentsEntryKeys))
+            if values?.isDirectory == true, values?.isSymbolicLink != true {
+                folders.append(entry)
+            } else {
+                let allocated = Int64(values?.totalFileAllocatedSize ?? 0)
+                sizes[entry] = allocated == 0 ? 0 : SharedBlocks.countedBytes(ofFileAt: entry.path, allocated: allocated)
+            }
+        }
+        if !folders.isEmpty {
+            let measured = FolderSizing.directorySizes(at: folders, split: .spread)
+            for folder in folders {
+                sizes[folder] = measured[folder.standardizedFileURL.path] ?? 0
+            }
+        }
+        return sizes
+    }
+
+    /// Asks CoreSimulator to delete one device. It counts as removed only when the
+    /// UDID is gone from `simctl list devices` and its folder is gone, whatever
+    /// simctl's exit code said.
+    static func removeSimulatorDevice(
+        udid: String,
+        folder: URL,
+        runSimctl: Simctl.Runner = Simctl.run,
+        folderExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) },
+        pollInterval: TimeInterval = 0.5
+    ) -> SimulatorDeviceRemoval {
+        guard let result = runSimctl(["delete", udid], simctlDeleteTimeout) else {
+            return .failed(.fromSimctl(nil), detail: "could not launch simctl")
+        }
+
+        let checks = result.succeeded ? simctlDeviceGoneChecks : 1
+        for check in 0..<checks {
+            if check > 0 { Thread.sleep(forTimeInterval: pollInterval) }
+            if isSimulatorDeviceListed(udid, runSimctl: runSimctl) == false, !folderExists(folder) {
+                return .removed
+            }
+        }
+
+        let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail: String
+        if result.timedOut {
+            detail = "timed out after \(Int(simctlDeleteTimeout))s"
+        } else if result.status == 0 {
+            detail = "exit 0, but the device is still listed or its folder is still there"
+        } else {
+            detail = "exit \(result.status): \(stderr.isEmpty ? "no error text" : stderr)"
+        }
+        // simctl said yes and the device is still there: nothing in its text names
+        // a cause, so this stays unknown and a retry stays on offer.
+        let reason: CleanFailureReason = result.succeeded ? .unknown : .fromSimctl(result)
+        return .failed(reason, detail: detail)
+    }
+
+    /// `nil` when the list could not be read, which never counts as gone.
+    private static func isSimulatorDeviceListed(_ udid: String, runSimctl: Simctl.Runner) -> Bool? {
+        guard let listing = runSimctl(["list", "devices", "--json"], simctlDeviceListTimeout),
+              listing.succeeded,
+              let devices = SimulatorDeviceList.parse(listing.stdout)
+        else { return nil }
+        return devices.contains(udid: udid)
+    }
+
+    /// `simctl runtime delete` hands the work to simdiskimaged and returns at once
+    /// with exit 0. The image is unmounted and dropped from the list a few seconds
+    /// later, so success is the identifier vanishing from `runtime list`, not the
+    /// exit code. Measured at 5 s for an 8 GB image; the budget leaves room for a
+    /// slow disk and the unmount retries the daemon makes when the volume is busy.
+    private static let simctlRuntimeDeleteTimeout: TimeInterval = 180
+    private static let simctlRuntimeListTimeout: TimeInterval = 30
+    private static let simctlRuntimePollInterval: TimeInterval = 1
+
+    /// Apple removes a newer runtime's download in the seconds after the image
+    /// leaves the list. One still there after this many more polls stayed.
+    private static let runtimeDownloadGoneChecks = 10
+
+    /// Asks CoreSimulator to remove one runtime image and waits for it to be gone.
+    /// Then it reads what the volume gave back, and whether Apple kept the download
+    /// the image came from: an older runtime is mounted from inside that download,
+    /// so the space only comes back if the download goes too (#165).
+    static func removeSimulatorRuntime(
+        identifier: String,
+        runSimctl: Simctl.Runner = Simctl.run,
+        assetsRoot: URL = SimulatorRuntime.mobileAssetRoot,
+        readAvailableBytes: @Sendable () -> Int64? = { VolumeCapacityReader.read()?.availableBytes },
+        pollInterval: TimeInterval = simctlRuntimePollInterval,
+        settleInterval: Duration = .seconds(1)
+    ) async -> SimulatorRuntimeRemoval {
+        // Read first: the build names the download, and the list forgets it once
+        // the runtime goes.
+        guard let list = simulatorRuntimeList(runSimctl: runSimctl) else {
+            return .failed("Could not read simctl runtime list")
+        }
+        guard let entry = list[identifier] as? [String: Any] else {
+            return .failed("simctl runtime list no longer names the runtime")
+        }
+        let build = entry["build"] as? String
+        let kind = entry["kind"] as? String ?? ""
+        let downloads = SimulatorRuntime.downloads(in: assetsRoot)
+
+        // The scan's rule, read again from disk right before the delete, as the
+        // other gates do.
+        if SimulatorRuntime.isHeldByAppleDownload(kind: kind, build: build, downloadBuilds: downloads.map { Set($0.map(\.build)) }) {
+            if let build, downloads != nil {
+                return .refused("older runtime mounted from Apple's download of build \(build)")
+            }
+            return .refused("older runtime whose Apple download could not be checked")
+        }
+        let download = build.flatMap { build in
+            downloads?.first { SimulatorRuntime.isSameBuild($0.build, build) }
+        }
+        let availableBefore = readAvailableBytes()
+
+        guard let result = runSimctl(["runtime", "delete", identifier], simctlRuntimeDeleteTimeout) else {
+            return .failed("Could not launch simctl")
+        }
+        if result.timedOut {
+            return .failed("simctl runtime delete timed out after \(Int(simctlRuntimeDeleteTimeout))s")
+        }
+        if result.status != 0 {
+            let errText = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failed(errText.isEmpty ? "simctl runtime delete failed (exit \(result.status))" : errText)
+        }
+
+        let deadline = Date().addingTimeInterval(simctlRuntimeDeleteTimeout)
+        var listed: Bool? = true
+        while Date() < deadline {
+            // `nil`, a list that could not be read, never counts as gone.
+            listed = simulatorRuntimeList(runSimctl: runSimctl).map { $0[identifier] != nil }
+            if listed == false { break }
+            try? await Task.sleep(for: .seconds(pollInterval))
+        }
+        guard listed == false else {
+            return .failed("runtime still listed after \(Int(simctlRuntimeDeleteTimeout))s")
+        }
+
+        if let download {
+            var checks = 0
+            while FileManager.default.fileExists(atPath: download.folder.path), checks < runtimeDownloadGoneChecks {
+                checks += 1
+                try? await Task.sleep(for: .seconds(pollInterval))
+            }
+        }
+        let freed = await VolumeCapacityReader.settle(
+            since: availableBefore,
+            interval: settleInterval,
+            read: readAvailableBytes
+        )
+        let downloadAfter: RuntimeDownloadAfterRemoval
+        if build == nil || downloads == nil {
+            downloadAfter = .unknown
+        } else if let download {
+            downloadAfter = downloadAfterRemoval(download.folder)
+        } else {
+            downloadAfter = .notKept
+        }
+        return .removed(freed: freed, download: downloadAfter, isLegacyImage: SimulatorRuntime.isLegacyImage(kind: kind))
+    }
+
+    /// A download folder still there is kept. One `du` can't measure is kept
+    /// without a size, unless it went while it was being measured.
+    private static func downloadAfterRemoval(_ folder: URL) -> RuntimeDownloadAfterRemoval {
+        guard FileManager.default.fileExists(atPath: folder.path) else { return .notKept }
+        if let bytes = FolderSizing.directoryByteSizeIfMeasurable(at: folder) {
+            return .kept(bytes: bytes)
+        }
+        return FileManager.default.fileExists(atPath: folder.path) ? .kept(bytes: nil) : .notKept
+    }
+
+    /// The bytes a removed runtime is booked at: what the volume gave back, never
+    /// what `simctl` listed, which can be wrong either way (#165). A reading that
+    /// settled under the noise floor books nothing. With no settled reading,
+    /// `simctl`'s size stands only for a newer runtime whose download is known to
+    /// be gone, since its image was that download.
+    static func runtimeRemovedBytes(
+        listed: Int64,
+        freed: VolumeCapacityReader.SettledGain,
+        download: RuntimeDownloadAfterRemoval,
+        isLegacyImage: Bool
+    ) -> Int64 {
+        switch freed {
+        case .gained(let bytes):
+            return bytes
+        case .belowNoiseFloor:
+            return 0
+        case .unknown:
+            switch download {
+            case .notKept:
+                return isLegacyImage ? 0 : listed
+            case .kept, .unknown:
+                return 0
+            }
+        }
+    }
+
+    /// `simctl runtime list -j` by image identifier, `nil` when it could not be read.
+    private static func simulatorRuntimeList(runSimctl: Simctl.Runner) -> [String: Any]? {
+        guard let listing = runSimctl(["runtime", "list", "-j"], simctlRuntimeListTimeout),
+              listing.succeeded
+        else { return nil }
+        return try? JSONSerialization.jsonObject(with: listing.stdout) as? [String: Any]
+    }
+
+    /// Retries one failed item through the route that tried it the first time, so
+    /// the same gate decides again with the same flags (#174). A Large Files row
+    /// retried through the cache route used to be refused there every time and
+    /// vanish from the report, which left Retry on the screen for good.
+    func retryDeleteItem(
+        at url: URL,
+        displayName: String?,
+        expectedSizeBytes: Int64,
+        route: DeletionRoute,
+        simulatorRuntimeID: String? = nil,
+        xcodeComponent: XcodeComponent.Kind? = nil
+    ) async -> RetryOutcome {
+        let key = url.standardizedFileURL.path
+        // A runtime, device or Xcode component row's path is only a handle for
+        // `simctl` or `xcodebuild`, so only a file row can be seen to be gone.
+        let isToolHandle = simulatorRuntimeID != nil || xcodeComponent != nil
+            || Self.coreSimulatorDeviceUDID(from: url) != nil
+        // The cache route checks existence only after validating an added folder.
+        if route != .cache, !isToolHandle, !Self.stillOnDisk(url) {
+            return .alreadyGone
+        }
+
+        let names = [key: displayName ?? url.lastPathComponent]
+        let sizes = [key: expectedSizeBytes]
+        let report: DeletionReport
+        do {
+            switch route {
+            case .cache:
+                report = try await deleteItems(
+                    at: [url],
+                    pathToDisplayName: names,
+                    pathToExpectedSizeBytes: sizes,
+                    simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:],
+                    xcodeComponentsByPath: xcodeComponent.map { [key: $0] } ?? [:],
+                    requireOnDisk: !isToolHandle
+                )
+            case .userSelected(let isAIModel, let privilegedEligible):
+                report = try await deleteUserSelectedFiles(
+                    at: [url],
+                    pathToDisplayName: names,
+                    pathToExpectedSizeBytes: sizes,
+                    aiModelPaths: isAIModel ? [key] : [],
+                    privilegedEligiblePaths: privilegedEligible ? [key] : []
+                )
+            case .lockedUninstall:
+                // A held app is finished bundle first by the store, never one path
+                // at a time here. The row stays as it is.
+                return .failed(.needsAdministrator)
+            }
+        } catch {
+            return .failed(.unknown)
+        }
+
+        if !report.deletedItems.isEmpty {
+            return .deleted(
+                bytes: report.bytesMovedToTrash + report.bytesRemovedDirectly,
+                movedToTrash: report.deletedItems.allSatisfy(\.movedToTrash),
+                remaining: report.failedItems,
+                keptRuntimeDownloads: report.keptRuntimeDownloads
+            )
+        }
+        if let failed = report.failedItems.first { return .failed(failed.reason) }
+        if !report.skippedItems.isEmpty { return .failed(.safetySkipped) }
+        // The move found nothing there: it went some other way since the clean.
+        return .alreadyGone
+    }
+
+    /// Whether something is still at `url`, the link itself for a symlink. Only a
+    /// clear "no such file" counts as gone: a path that cannot be read at all is
+    /// still a failure to show, not a row to drop.
+    private static func stillOnDisk(_ url: URL) -> Bool {
+        var info = stat()
+        if lstat(url.path, &info) == 0 { return true }
+        return !(errno == ENOENT || errno == ENOTDIR)
+    }
+
+    /// Probes Full Disk Access the first time a run needs to know, then reuses the
+    /// answer. A folder whose contents all fail used to probe once per entry (#190).
+    private func knownFullDiskAccess(cachedIn cached: inout Bool?) -> Bool {
+        if let cached { return cached }
+        let granted = fullDiskAccessGranted()
+        cached = granted
+        return granted
+    }
+
+    private func recordDeletionFailure(
+        path: String,
+        error: Error,
+        displayName: String?,
+        sizeBytes: Int64,
+        route: DeletionRoute,
+        failedItems: inout [FailedDeletionItem],
+        fullDiskAccess: inout Bool?
+    ) {
+        guard let reason = CleanFailureReason.resolved(
+            from: error,
+            path: path,
+            fullDiskAccessGranted: knownFullDiskAccess(cachedIn: &fullDiskAccess)
+        ) else {
+            NSLog("Purge: item already gone, skipping %@", path)
+            return
+        }
+        NSLog("Purge: failed to delete %@ — %@", path, error.localizedDescription)
+        failedItems.append(FailedDeletionItem(
+            path: path,
+            displayName: displayName,
+            reason: reason,
+            sizeBytes: sizeBytes,
+            route: route
+        ))
+    }
+}

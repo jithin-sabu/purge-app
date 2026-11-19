@@ -1,0 +1,913 @@
+# Safety notes
+
+Purge deletes files, so the times it got that wrong are worth writing down.
+This is the log. It has one entry for each time Purge removed, or could have
+removed, something it should not have. Entries marked "found internally" were
+fixed before anyone reported them. Each entry says what happened, who was
+affected, what changed in the code, and what would have caught it earlier.
+
+Entries are added only when something real happens. If you have hit something
+that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
+
+Newest first.
+
+## 2026-11-19: Allowlisted rows followed a link to another folder
+
+**Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** PR for #422, not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+
+### What happened
+
+The fix for #420 covered the allowlist entries under `~/.cache`. Every other
+entry had the same gap. The allowlist compares path text, and never checked
+whether a folder on the way was a link.
+
+If `~/.gradle` was a link to `~/Developer`, the row named `~/.gradle/caches`,
+the text matched, and the move took `~/Developer/caches`. The same held for a
+row inside an entry, such as `~/.npm/_cacache` with `~/.npm` linked, or a
+JetBrains cache with `~/Library/Caches/JetBrains` linked.
+
+Many of these rows are Safe to Clean, so Clean Safe Items or a scheduled clean
+could have moved the folder behind the link without asking.
+
+An entry that was itself a link, and its own row, did less harm: the move took
+only the link. The row was still wrong. Nothing was freed, and the tool made a
+new folder on the startup disk.
+
+### Who was affected
+
+Nobody reported a loss. It took a tool folder linked to a place that held a
+folder named like a cache: `caches`, `repository`, `registry`, `pkgs`. The
+common setup, a tool folder linked to another drive, moved the cache the tool
+really used. Anything moved went to the Trash and could be put back.
+
+### What changed
+
+`DeletionSafetyPolicy.allowlistLinkRefusesDeletion` refuses a path in an
+allowlist entry when the entry, or any folder above the path up to home, is a
+link. It finds the entry in the allowlist itself, so a new row is covered when
+it is added. `isOfferedForCleanup` asks it outside its saved answers, so the
+scan drops the row and `FileDeleter` refuses the move even when the link
+appeared after the scan. The checks for `~/.cache`, prek and opencode are now
+this one check.
+
+A link lower down refuses nothing, because it moves to the Trash as a link. A
+simulator device is left alone, because `simctl` removes it by its UDID and
+its path is never moved.
+
+A Mac with a link on the way to a row no longer gets that row. That includes a
+cache linked to another drive. Offering those again would need rows that say
+where they really are, and that never go into Clean Safe Items or a scheduled
+clean.
+
+### What would have caught it earlier
+
+The #420 fixture, run for every entry and not only the ones under `~/.cache`.
+`AllowlistLinkTests` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+builds a temporary home and checks every allowlist entry with its first folder
+linked, its own folder linked and nothing linked, and checks a folder on the
+way, a folder between an entry and a row, and a link inside a folder.
+`everyEntryIsFoundByItsText` fails if the guard misses an entry.
+
+## 2026-11-19: Rows under `~/.cache` followed a link to another folder
+
+**Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** [#421](https://github.com/jithin-sabu/purge-app/pull/421), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+
+### What happened
+
+The allowlist compares path text. It lists folders such as `~/.cache/uv` and
+`~/.cache/giget`, and never checked whether a folder on the way was a link.
+
+If `~/.cache` was a link to `~/Developer`, the row named `~/.cache/giget`, the
+text matched, and the move took `~/Developer/giget`. The same held when the
+cache folder itself was a link, or a folder between the two, such as
+`~/.cache/firebase` for `~/.cache/firebase/emulators`.
+
+Eleven rows had the gap: Corepack, act, Rebar3, Bazel, the Go build cache in
+`~/.cache`, pre-commit, Prisma, Puppeteer, giget, the Firebase emulators and
+uv. Eight of them are Safe to Clean, so Clean Safe Items or a scheduled clean
+could have moved the folder behind the link without asking. prek already had
+its own check.
+
+### Who was affected
+
+Nobody reported a loss. It took a `~/.cache`, or a cache folder in it, linked
+to a place that held a folder with the same name as a cache. Anything moved
+went to the Trash and could be put back.
+
+### What changed
+
+`DeletionSafetyPolicy.dotCacheLinkRefusesDeletion` refuses a path that is the
+same as or inside an allowlisted `~/.cache` entry when any folder from home
+down to that entry is a link. It takes the entries from the allowlist itself,
+so a new `~/.cache` row is covered when it is added. `isOfferedForCleanup`
+asks it outside its saved answers, so the scan drops the row and `FileDeleter`
+refuses the move even when the link appeared after the scan. A link inside a
+cache folder refuses nothing, because it moves to the Trash as a link.
+
+A Mac whose `~/.cache` is a link no longer gets these rows.
+
+### What would have caught it earlier
+
+A fixture with a linked folder. Every allowlist test used a plain path under
+the real home. `DotCacheLinkTests` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now builds a temporary home and checks each entry with `~/.cache` linked, the
+cache folder linked, a folder on the way linked, nothing linked, and a link
+inside the folder.
+
+## 2026-11-19: Old manual safety labels outranked Check First
+
+**Found internally** while reviewing contributor PR [#414](https://github.com/jithin-sabu/purge-app/pull/414) ([#415](https://github.com/jithin-sabu/purge-app/issues/415)), no report. **Fixed:** [#416](https://github.com/jithin-sabu/purge-app/pull/416), not shipped yet. **Affected:** every release up to v1.16.2, on Macs where someone set a level by hand in Purge 1.0 or 1.1.
+
+### What happened
+
+Purge 1.0 and 1.1 let you set an item's safety level by hand. Purge saved each
+choice by exact path in `user_overrides.json`. The screens stopped offering
+this on 2026-06-19, and #288 removed the code that wrote the file, but Purge
+kept reading it. An entry there beat every automatic rule. An old Safe entry on
+a Unity or Unreal folder, or on a project used in the last 6 months, made it
+Safe to Clean, so Clean Safe Items and scheduled cleans took it.
+
+The "Reset to automatic" button made this worse for project folders. It worked
+out the level again without the catalog's tier, so the level fell back to Safe,
+and resetting an old label on a Unity `Library` folder made it Safe to Clean.
+
+### Who was affected
+
+Nobody reported a loss. It took a label set by hand in May or June 2026 on a
+folder that is Check First today. A Unity or Unreal folder taken this way went
+to the Trash and could be put back, and the editor rebuilds it, slowly.
+
+### What changed
+
+Purge no longer reads `user_overrides.json`. Each level comes only from the
+catalog, `explanations.json`, the tier list and the Check First holds.
+`SafetyInfo.forStaleProjectArtifact` needs the catalog's level, with no
+default. The "Manual category" badge and the reset buttons are gone. The file
+stays on disk unread, so the fix adds no new delete path.
+
+This works both ways. An old Check First or Not Sure label no longer holds back
+a folder the automatic chain rates Safe, so Clean Safe Items and scheduled
+cleans can now take it without a prompt. Such a folder holds only data its app
+rebuilds, and it goes to the Trash. Exclude from Scans is the way to keep one.
+
+### What would have caught it earlier
+
+A check that nothing still reads a file once the code that writes it is gone.
+`noAppCodeReadsTheFile` in
+[`PurgeTests/OldSafetyLabelTests.swift`](../PurgeTests/OldSafetyLabelTests.swift)
+fails when any app source other than `FirstRunGate` names the file, so it fails
+on the code before this fix. The same file writes a Safe entry, as Purge 1.1
+did, and expects a Unity `Library` folder, a project held at Check First, an
+unknown cache folder, a merged App Caches row and a Check First dev tool to keep
+their automatic level. Those level tests alone would not have caught it: the
+old store read the file once, when the test host started with no file, and
+kept that empty result.
+
+## 2026-11-17: Large Files offered single Ollama blobs from a store Purge didn't know
+
+**Found internally** while testing [#318](https://github.com/jithin-sabu/purge-app/issues/318) ([#395](https://github.com/jithin-sabu/purge-app/issues/395)), no report. **Fixed:** [#396](https://github.com/jithin-sabu/purge-app/pull/396), not shipped yet. **Affected:** every release up to v1.16.2.
+
+### What happened
+
+An Ollama store keeps each model's weights as blobs named by digest
+(`blobs/sha256-…`), and lists the models in `manifests`. Purge reads
+`OLLAMA_MODELS` to find the store, and Large Files skips the store when it sits
+in a folder Large Files walks. When Purge can't see the variable, such as one
+set only in a shell profile while Purge started from the Dock, it doesn't know
+the store's path. A store in `~/Documents` or another walked folder was then
+walked like any folder, and each blob over the size floor was a row of its own
+with a `sha256-…` name.
+
+Trashing one blob breaks every model that uses it, and Ollama goes on listing
+those models.
+
+### Who was affected
+
+Nobody reported a loss. It took a store in a walked folder at a path Purge
+couldn't see, and a click on a row named only by a hash. The blob went to the
+Trash and could be put back.
+
+### What changed
+
+The Large Files walk knows a store by its shape, a folder holding both `blobs`
+and `manifests`, compared without case, and skips it
+(`AIModelScanPolicy.isOllamaStore`). It also skips a root that is a store or
+sits inside one. The Large Files delete gate refuses anything under a folder
+with that shape, by the path given and by its real path
+(`AIModelScanPolicy.isInsideOllamaStore`), so a row saved before the fix can't
+trash a blob either. AI Models doesn't list these stores, because `FileDeleter`
+also asks the AI model gate about plain Large Files rows.
+
+### What would have caught it earlier
+
+A walk test with a store at a path Purge doesn't know, not only at the paths
+it reads from the environment.
+[`PurgeTests/OllamaStoreShapeTests.swift`](../PurgeTests/OllamaStoreShapeTests.swift)
+now walks such a store, a mixed-case one and a root inside one, expects no
+blob rows, and expects `FileDeleter` to skip a blob for safety.
+
+## 2026-11-12: Retry could move a scripts folder that had gained files
+
+**Found internally** in a deletion-safety review before 1.15.0 ([#362](https://github.com/jithin-sabu/purge-app/issues/362)), no report. **Fixed:** [#363](https://github.com/jithin-sabu/purge-app/pull/363), shipped in v1.16.0 (2026-11-16). **Affected:** v1.15.0.
+
+### What happened
+
+macOS makes an app's folder in `~/Library/Application Scripts` empty. Files in
+it were put there for the app to run, and the user may have written them. The
+App Uninstaller offers an empty folder ticked, and one with files as Check
+First and unticked. Each clean reads the folder again right before the move,
+and leaves one that was approved as empty and holds files by then.
+
+Retry on the completion screen did not read it again. If the move of an empty
+folder failed and a file landed in it before the user clicked Retry, the
+folder went to the Trash with the file.
+
+### Who was affected
+
+Nobody reported a loss. It took a failed move of an empty scripts folder, a
+file written into it afterwards, and a click on Retry. The folder went to the
+Trash and could be put back.
+
+### What changed
+
+Retry runs the check the clean runs
+(`AppUninstallScanPolicy.scriptsFolderGainedFiles`). The failure row keeps
+whether the folder was ticked with files in it, so one the user approved
+knowing what it held still moves.
+
+### What would have caught it earlier
+
+A test that takes Retry, not only the clean, through each check a clean makes
+right before the move.
+[`PurgeTests/PurgeStoreRetryTests.swift`](../PurgeTests/PurgeStoreRetryTests.swift)
+now takes the failed row of an empty scripts folder, writes a script into the
+folder, retries, and expects the folder to stay and the row to read as skipped
+for safety.
+
+## 2026-11-07: Browsers' Service Worker caches were Safe to Clean
+
+**Found internally** in a deletion-safety review of [#325](https://github.com/jithin-sabu/purge-app/pull/325) before 1.14.0, no report. **Fixed:** [#335](https://github.com/jithin-sabu/purge-app/pull/335), shipped in v1.14.0 (2026-11-07). **Affected:** browsers that keep a `User Data` folder, such as Dia and Arc, v1.1.2 to v1.13.4. Chrome, Brave and Edge only on `main` after #325, never in a release.
+
+### What happened
+
+A Chromium profile's `Service Worker` folder holds two caches. `CacheStorage`
+is the offline content of installed web apps. `ScriptCache` is each site's
+worker script. When Chromium can't read a stored script, it deletes that
+site's registration, and its web push subscription goes with it
+(`registration->ForceDelete()` in Chromium's
+`service_worker_installed_scripts_sender.cc`).
+
+Purge offered both as Safe to Clean in every `User Data/<profile>` folder
+under Application Support. Electron apps rarely use that layout, but browsers
+do. On the Mac where this was found, Dia's profile had 198 MB in
+`CacheStorage` and 3.5 MB in `ScriptCache`, both Safe, so Clean Safe Items or
+a scheduled clean would move them to the Trash. #325 then offered
+`ScriptCache` in Chrome, Brave and Edge profiles too.
+
+### Who was affected
+
+Nobody reported a loss. The folders went to the Trash and could be put back
+while the browser was closed. After a clean, sites stop sending web
+notifications and installed web apps don't work offline until you visit each
+site again.
+
+### What changed
+
+Nothing in a `Service Worker` folder is offered, in any Chromium layout: an
+app folder, a `User Data` profile, a nested profile, or the Antigravity
+browser profile. The tier list no longer calls them Safe either.
+
+### What would have caught it earlier
+
+A rule that a cache is Safe only when its app rebuilds it by itself, checked
+against what the browser does when the folder is gone.
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now refuses these folders in Chrome, Brave, Edge, Dia, Arc and Antigravity
+profiles, and
+[`PurgeTests/MissedSafeCachesTests.swift`](../PurgeTests/MissedSafeCachesTests.swift)
+checks that discovery lists none of them.
+
+## 2026-11-04: A Cursor agent folder in use could be listed as a leftover
+
+**Found internally** in a code audit ([#183](https://github.com/jithin-sabu/purge-app/issues/183)), no report. **Fixed:** [#315](https://github.com/jithin-sabu/purge-app/pull/315), shipped in v1.13.3 (2026-11-04). **Affected:** v1.5.3 to v1.13.2.
+
+### What happened
+
+Cursor keeps a folder in `~/.cursor/projects` for each place an agent works.
+Dev Tools lists the ones whose work is over as Cursor Agent Leftovers. For an
+agent working in `/tmp/<id>`, the folder is `tmp-<id>` or `private-tmp-<id>`,
+and Purge decides it is over when `/tmp/<id>` is gone.
+
+It looked in the wrong place. It checked `$TMPDIR/<id>`, which is a different
+folder, found nothing, and listed the folder while the agent was still using
+it. The second check, which reads the working folders of Cursor's processes,
+could fail without Purge noticing. A failed read counted as no agent running.
+
+### Who was affected
+
+Nobody reported a loss. The row is Check First, so it was only moved when the
+user picked it and confirmed. It went to the Trash and could be put back. It
+holds Cursor's notes for that agent, not the user's files.
+
+### What changed
+
+`tmp-` and `private-tmp-` folders are checked against `/private/tmp`. When the
+process read fails, no folder is listed.
+
+### What would have caught it earlier
+
+A test for each slug shape, not only `var-folders-`, and one for a failed
+process read.
+[`PurgeTests/CursorAgentLeftoverScanPolicyTests.swift`](../PurgeTests/CursorAgentLeftoverScanPolicyTests.swift)
+now lists a `tmp-` and a `private-tmp-` folder only while its `/tmp` folder is
+gone, and lists nothing when the process read fails.
+
+## 2026-11-03: Project folders could be judged by the wrong path
+
+**Found internally** in review of [#313](https://github.com/jithin-sabu/purge-app/pull/313) ([#190](https://github.com/jithin-sabu/purge-app/issues/190)), no report. **Fixed:** [#313](https://github.com/jithin-sabu/purge-app/pull/313), shipped in v1.13.3 (2026-11-04). **Affected:** `~/.gradle` from v1.1.0, linked folders from v1.4.0, to v1.13.2.
+
+### What happened
+
+There were two ways in, both through Dev Tools project folders.
+
+A stray `settings.gradle` or `build.gradle` in the home folder, such as one
+`gradle init` leaves behind, made home itself look like a Gradle project. Its
+`.gradle` folder is Gradle's own folder: installed JDKs, `gradle.properties`
+(often signing or repository keys) and `init.d`. Purge offered it whole as
+Safe to Clean, so Clean Safe Items or a scheduled clean could move it to the
+Trash.
+
+A project folder such as `ios` can be a link. Purge checked the path as
+written, and project folders like `.gradle`, `Pods` or `node_modules` are
+allowed by name anywhere in home. Moving one to the Trash follows the link,
+so a link into `~/Pictures` or another protected place would have moved the
+folder inside it.
+
+### Who was affected
+
+Nobody reported a loss. Both need an unusual setup: a Gradle file loose in
+home, or a project folder linked into a protected place. Anything moved went
+to the Trash and could be put back.
+
+### What changed
+
+`~/.gradle` itself is never deleted. Its caches are still offered as their
+own rows. A project folder is judged again where its link leads, and refused
+when that is a never-delete place. A project on a linked drive still cleans.
+A rule for a nested folder now also checks the folder's full name, so the
+`android/.gradle` rule cannot unlock `ios/.gradle`.
+
+### What would have caught it earlier
+
+`neighboursStayOut` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now lists `.gradle`. `LinkedArtifactTests` and `nestedRuleChecksEveryComponent`
+in
+[`PurgeTests/ProjectArtifactCatalogTests.swift`](../PurgeTests/ProjectArtifactCatalogTests.swift)
+check a link into `/Library`, a link inside home, and a nested rule's name.
+Every earlier fixture used plain folders and a home with no Gradle files.
+
+## 2026-10-22: A project in use stayed listed under its other spelling
+
+**Found internally** in a code audit ([#175](https://github.com/jithin-sabu/purge-app/issues/175)), no report. **Fixed:** [#255](https://github.com/jithin-sabu/purge-app/pull/255), shipped in v1.13.0 (2026-10-24). **Affected:** v1.7.1 to v1.12.0.
+
+### What happened
+
+Dev Tools looks for projects in a list of folders that names both spellings of
+many of them, such as `~/Developer` and `~/developer`. The default Mac volume
+ignores case, so both spellings open the same folder. Purge walked it twice and
+listed every project in it twice, with its size counted twice.
+
+A project someone is using right now is hidden: Purge reads the working folder
+of every running process and hides any project one of them sits in. That check
+compared paths letter by letter. A Terminal in `~/Developer/app` hid
+`~/Developer/app` but not `~/developer/app`, so the second copy stayed listed.
+If the project had not been edited within "Consider stale after", or Show all
+was on, its folders were Safe to Clean, and Clean Safe Items or a scheduled
+clean could move them to the Trash.
+
+### Who was affected
+
+Nobody reported a loss. Anyone with a project in one of the doubled folders
+that had a Terminal or a dev server running in it, but no recent edits, was
+exposed. The folders went to the Trash, so they could be put back or rebuilt
+with the project's install command.
+
+### What changed
+
+Each project is listed once, and a folder already walked as deep is not walked
+again. Folders are compared by the identity the file system gives them, not by
+spelling, and the first spelling in the list is kept. The in-use check now
+ignores case, as the volume does. On a case-sensitive volume that only errs
+toward hiding a project.
+
+### What would have caught it earlier
+
+`otherCapitalisation` in
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
+checks that a process under another capitalisation hides the project, and
+[`PurgeTests/ProjectDiscoveryDedupeTests.swift`](../PurgeTests/ProjectDiscoveryDedupeTests.swift)
+checks that two spellings, or a link and its target, give one project and one
+walk. The earlier tests spelled every path one way, so none of them could see
+two.
+
+## 2026-10-16: Leftovers offered an installed OrbStack's Docker data
+
+**Reported** by @vim-diesel ([#197](https://github.com/jithin-sabu/purge-app/issues/197)). **Fixed:** [#199](https://github.com/jithin-sabu/purge-app/pull/199), shipped in v1.11.1 (2026-10-17). **Affected:** v1.5.2 to v1.11.0.
+
+### What happened
+
+App Uninstaller → Leftovers listed
+`~/Library/Group Containers/HUAQ24HBR6.dev.orbstack`, 4.59 GB, as left behind
+by a removed app. OrbStack was installed, and the folder held its Docker
+containers and images.
+
+The scan took the part of a group container's name after the team id as the
+owning app's bundle id, and looked for an installed app with that id. That part
+is an app-group name, which the developer picks freely. OrbStack's app is
+`dev.kdrag0n.MacVirt`, so no installed app matched `dev.orbstack`, and the data
+looked orphaned.
+
+The age check did not catch it either. It read only the folder's own date,
+which changes only when something directly inside is added or removed.
+OrbStack writes deeper in, so the folder looked months old while in use.
+Telegram's group container read 181 days old on a Mac where Telegram is used
+every day.
+
+Checking a second Mac found another case. Podcasts, which comes with macOS,
+keeps its data in `243LU875E5.groups.com.apple.podcasts`, and the scan would
+have offered it, because only names starting with `com.apple.` counted as
+Apple's.
+
+### Who was affected
+
+Nobody reported a loss, and the reporter did not delete the folder. Leftovers
+are always Check First, never ticked by default, and never part of Clean Safe
+Items or a scheduled clean, so removing one took ticking it and confirming. It
+would have gone to the Trash. Anyone with an installed app whose app-group name
+differs from its bundle id was exposed once that folder's own date was more
+than 30 days old.
+
+### What changed
+
+Ownership now comes from the installed code, not from folder names. Purge
+reads the signing team and the app-group entitlements of every app in
+Applications and ~/Applications, the helpers, extensions and XPC services
+inside them, the apps that come with macOS, running apps, and the programs
+launchd starts. A group container is kept when installed code lists that
+group, or when anything installed is signed by the same team. If most
+signatures cannot be read, group containers are not judged at all. A group
+name with `com.apple.` anywhere in it is Apple's.
+
+A leftover now has to be untouched all the way down: the newest file inside
+it, not the folder's own date, must be older than the age setting. If the walk
+cannot read or date something, the folder counts as in use.
+
+### What would have caught it earlier
+
+Tests built from real apps whose data folder is not named after their bundle
+id. `leftoverOfInstalledCodeIsKept` in
+[`PurgeTests/OrphanLeftoverScanPolicyTests.swift`](../PurgeTests/OrphanLeftoverScanPolicyTests.swift)
+runs OrbStack, Microsoft's shared groups, Telegram's share extension, Podcasts,
+Sparkle's downloader and others through the scan's rules, and
+`leftoversOfRemovedAppsAreStillFound` checks that real leftovers are still
+listed. `deepWriteMakesAnOldFolderRecent` covers the age check, and
+[`PurgeTests/InstalledCodeEvidenceTests.swift`](../PurgeTests/InstalledCodeEvidenceTests.swift)
+checks each source and that real signatures are read.
+
+It is the same lesson as the 2026-10-01 project entry: a folder's own date is
+not when it was last used.
+
+## 2026-10-15: Projects in use were Safe to Clean under "Consider stale after"
+
+**Found internally**, no report. **Fixed:** [#194](https://github.com/jithin-sabu/purge-app/pull/194), shipped in v1.11.0 (2026-10-15). **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
+
+### What happened
+
+Settings showed "Consider stale after: 6 months", but that value was only a
+display default and was never saved. The scanner read the missing setting as
+0, and 0 means Show all. So the activity check from the 2026-10-01 entry below
+never ran. A project edited an hour ago was listed, its `node_modules` and
+build folders were Safe to Clean, and Clean Safe Items or a scheduled clean
+could move them to the Trash.
+
+The activity check also failed open in two ways. It reads at most 20,000
+entries in a project, and a walk that stopped there answered "not used". And it
+skipped every folder named like a build folder of any language, such as
+`build`, `bin` or `vendor`, so edits to the user's own scripts in a Node
+project's `build/` folder did not count as use.
+
+Show all, chosen on purpose, had the same effect as the bug: a project edited
+an hour ago was listed with its folders Safe to Clean.
+
+### Who was affected
+
+Nobody reported a loss. Anyone with code projects who had never changed the
+setting was exposed. The folders went to the Trash, so they could be put back
+or rebuilt with the project's install command.
+
+### What changed
+
+A missing setting now reads as the 6 months Settings shows. Only a saved Show
+all means Show all. The orphan leftover scan, which reads the same setting,
+keeps its 30-day buffer until the user picks an age; leftovers are always
+Check First.
+
+A walk that hits the entry limit no longer answers "not used". The project is
+listed, but its folders are Check First, and the project card says Purge could
+not check every file. The walk skips dependency trees nobody edits, such as
+`node_modules`, `.venv` and `Pods`, wherever they sit. It skips a generic name
+such as `build` only when it is the folder being offered, or when the folder
+around it is a project that produces it, like `app/build` next to
+`app/build.gradle`.
+
+Show all still lists every project, but folders of a project worked on in the
+last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
+them. Each artifact keeps the reason it is Check First, so Reset to automatic
+lands on Check First again. A path the user marked Safe by hand stays Safe.
+(Both later changed: #415 removed the reset and stopped reading those labels.)
+
+A closed project card used to show only the name and size, so a project held at
+Check First looked the same as a Safe one. The card header now shows the
+strictest level among its folders and one line saying why.
+
+### What would have caught it earlier
+
+`StalenessThresholdDefaultTests` in
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
+reads the setting from a fresh `ThrowawayDefaults` and expects 180 days, and
+checks that a project edited today is not listed. In the same file,
+`entryLimitIsTooBigToCheck` and `tooBigProjectIsCheckFirst` cover the cut-off
+walk, `sameNameFolderIsWalked` the skipped folder names,
+`showAllRecentProjectIsCheckFirst` Show all. `RecentProjectResetTests` covered
+the reset path until #415 removed it, and
+[`PurgeTests/OldSafetyLabelTests.swift`](../PurgeTests/OldSafetyLabelTests.swift)
+now checks that an old Safe label leaves a held project Check First. Recategorize had no caller and was removed in #184. The earlier tests
+always passed the age in directly, so none of them read the setting the way the
+scanner does.
+
+## 2026-10-14: Simulators were Safe to Clean although they are removed for good
+
+**Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166) and [#167](https://github.com/jithin-sabu/purge-app/pull/167), shipped in v1.11.0 (2026-10-15). **Affected:** v1.1.0 to v1.10.0.
+
+### What happened
+
+Dev Tools badged a simulator device Safe when `simctl` gave no last-booted
+date. `simctl` leaves that date out for some devices that have been used, so
+a device someone still used could show as Safe. Deleting a device removes its
+apps and data with `simctl delete`, and nothing goes to the Trash. Select All
+in Dev Tools ticks Safe rows first, so one click could select such a device.
+The report came from a mismatch: the row said Safe, but the Overview counted
+nothing safe under Dev Tools.
+
+Review of the fix found a second case. Devices Xcode can't run were Safe
+whatever their last use. Removing a simulator runtime, which Purge can do,
+makes its devices unavailable while their apps and data stay on disk and come
+back when the runtime is downloaded again. On the next scan those devices
+showed as Safe.
+
+Both cases come from one mistake. Safe means Clean Safe Items and scheduled
+cleans take the item without asking, and those only move things to the Trash.
+Simulators and runtimes never went to either, so a Safe badge on them promised
+something the rest of the app did not do.
+
+### Who was affected
+
+Nobody reported a loss. Clean Safe Items, scheduled cleans, the menu bar and
+the Shortcuts action never included simulators, because they only move things
+to the Trash. A device could only be removed by ticking it in Dev Tools,
+directly or through Select All, and confirming the delete.
+
+### What changed
+
+Simulator devices and runtimes are always Check First. Their explanations
+still say when each was last used and whether any simulator uses a runtime, so
+a forgotten one is still easy to spot. Dev Tools and the Overview now agree.
+CLAUDE.md now says that anything removed for good is never Safe.
+
+### What would have caught it earlier
+
+A rule that Safe only goes on things the one-click clean takes, checked by a
+test. `noSimulatorRowIsEverSafe` in `PurgeTests/SimulatorDeviceSafetyTests.swift`
+runs every branch of both simulator safety functions, and the one-click tests
+there and in `SimulatorRuntimeStoreTests.swift` force a simulator Safe to prove
+the clean skips it anyway.
+
+## 2026-10-06: Allowlist audit moved data folders out of Safe to Clean
+
+**Found internally**, no report. **Fixed:** [#103](https://github.com/jithin-sabu/purge-app/pull/103), shipped in v1.8.1 (2026-10-06). **Affected:** v1.1.0 to v1.8.0.
+
+### What happened
+
+An audit of everything Safe to Clean holds, checked against
+[Mole](https://github.com/tw93/Mole)'s cleanup rules and against what people
+find in System Data. Safe rows are what Clean Safe Items and scheduled cleans
+take without asking, so the question was whether anything in Safe held more
+than a cache. Several entries did:
+
+- `~/.gem` held installed gems and their commands.
+- `~/.sbt` held the user's own sbt settings.
+- `~/.pub-cache` held globally installed Dart tools.
+- VS Code and Cursor `workspaceStorage` held per-project AI chat history.
+- Zed's `db` was its workspace database.
+- The JetBrains caches included Local History.
+- `~/.android` was offered whole, including emulators, the adb key and
+  `debug.keystore`.
+- The Spotify cache was offered even when offline downloads were present.
+
+### Who was affected
+
+Nobody reported a loss. Anyone who ran Clean Safe Items or a scheduled clean
+with one of these folders present would have had it moved to the Trash.
+
+### What changed
+
+Each entry was narrowed to its cache part, moved to Check First, or dropped.
+Maven, the global Gradle cache, NuGet, Cabal, the Ivy cache, CocoaPods spec
+repos and Playwright browsers moved to Check First. Finder, Dock, Control
+Center and System Settings caches, endpoint security agents and input methods
+are now never offered. The full diff is in
+[`explanations.json`](https://github.com/jithin-sabu/purge-app/blob/v1.8.1/purge/Resources/explanations.json)
+and
+[`DeletionSafetyPolicy.swift`](https://github.com/jithin-sabu/purge-app/blob/v1.8.1/purge/Services/DeletionSafetyPolicy.swift)
+at v1.8.1.
+
+### What would have caught it earlier
+
+The audit itself, run before each entry shipped instead of after.
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now pins each finding: `gemsOnlyOfferDownloadsNotInstalledGems`,
+`sbtSettingsAreNeverOffered`, `pubCacheKeepsGloballyActivatedTools`,
+`editorWorkspaceStorageIsOfferedEntryByEntry`,
+`zedWorkspaceDatabaseIsNeverOffered`, `jetBrainsLocalHistoryIsNeverOffered`,
+`androidOffersCachesOnly` and `SpotifyOfflineMusicTests`, and
+`bigDownloadStoresAreCheckFirst` covers the rows that moved to Check First. The
+[safety page](https://purgemac.com/safety) is generated from the source at
+build time, so the published list cannot drift from the code.
+
+## 2026-10-01: An active project's build folders could look stale and be swept
+
+**Found internally**, no report. **Fixed:** [#87](https://github.com/jithin-sabu/purge-app/pull/87), shipped in v1.7.1 (2026-10-05). **Affected:** v1.1.1 to v1.7.0.
+
+### What happened
+
+Dev Projects has a "Consider stale after" setting. It compared that age
+against the date on the artifact folder itself. A folder's date only changes
+when something is added to or removed from its top level, so `node_modules`
+said when `npm install` last ran, not when anyone last opened the project. A
+project worked on every day with stable dependencies looked stale, its folders
+were Safe to Clean, and Clean Safe Items or a scheduled clean could move them
+to the Trash.
+
+### Who was affected
+
+Nobody reported a loss. Anyone with an active project whose dependencies had
+not changed for longer than the stale setting was exposed.
+
+### What changed
+
+Age now comes from the project, not the folder
+([`ProjectActivityPolicy.swift`](https://github.com/jithin-sabu/purge-app/blob/v1.7.1/purge/Services/ProjectActivityPolicy.swift)).
+A project is active if its git metadata, any file inside it, or the artifact
+folders' own dates are newer than the cutoff. A project in use right now, with
+a process working inside it or a git lock present, is hidden whatever the age
+setting says. Four tests describing the bug fail on the old rule.
+
+### What would have caught it earlier
+
+"Is anyone using this" is process state, not a folder date. The same lesson as
+the Chrome entry below, applied to projects. In
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift),
+`recentSourceEditBeatsOldArtifact` and `recentGitIndex` fail on the old
+folder-date rule, `processInside` and `gitLock` check that a project in use is
+hidden, and `inUseProjectHidden` checks it end to end through the scanner.
+
+## 2026-10-01: Docker Desktop was Safe to Clean, so one-click cleans could trash the VM disk
+
+**Found internally**, no report. **Fixed:** [#86](https://github.com/jithin-sabu/purge-app/pull/86), shipped in v1.7.1 (2026-10-05). **Affected:** v1.1.0 to v1.7.0.
+
+### What happened
+
+The Docker Desktop row in Dev Tools is the whole
+`~/Library/Containers/com.docker.docker` folder. Almost all of it is
+`Docker.raw`, Docker's VM disk, which holds every image, container and volume.
+Volumes can hold the only copy of a database. The `docker` entry in
+`explanations.json` was tagged `safe`, so Clean Safe Items and scheduled
+cleaning both picked it up. A comment in `DeletionSafetyPolicy` said "Check
+First, not Safe", but that list only decides whether a path can be offered at
+all, so the comment never took effect.
+
+Found while scoping [#67](https://github.com/jithin-sabu/purge-app/issues/67),
+which assumed Docker was already Check First.
+
+### Who was affected
+
+Nobody reported a loss. Anyone with Docker Desktop installed who ran Clean
+Safe Items or a scheduled clean would have had the VM disk moved to the Trash.
+It can be put back from there, but a running Docker would have lost it.
+
+### What changed
+
+The row is Check First. Its description says what the folder holds, to quit
+Docker Desktop first, and points at `docker system prune` for freeing space
+without losing volumes.
+[`DockerSafetyTierTests.swift`](https://github.com/jithin-sabu/purge-app/blob/v1.7.1/PurgeTests/DockerSafetyTierTests.swift)
+checks both the bundled record and the resolved row. Both tests fail on the
+old tag.
+
+### What would have caught it earlier
+
+A test that asserts the tier of the resolved row, not the comment next to it.
+`dockerDesktopRowResolvesToCheckFirst` in
+[`PurgeTests/DockerSafetyTierTests.swift`](../PurgeTests/DockerSafetyTierTests.swift)
+resolves the Dev Tools row the way the scanner does, and
+`bigDownloadStoresAreCheckFirst` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+does the same for the other large download stores. A comment never sets a
+tier: the tag in `explanations.json` is the only thing that does.
+
+## 2026-09-21: Old Version cleanup removed the framework Chrome was running from
+
+**Reported:** [#75](https://github.com/jithin-sabu/purge-app/issues/75), Purge 1.5.2. **Fixed:** [#76](https://github.com/jithin-sabu/purge-app/pull/76), shipped in v1.5.3 (2026-09-24). **Affected:** v1.1.2 to v1.5.2.
+
+### What happened
+
+Chrome had been running since 8 September and was never relaunched. In the
+meantime its updater had installed two newer versions in the background, so
+the bundle held three framework folders:
+
+- `Versions/152.0.7977.76`, loaded by the running process
+- `Versions/153.0.8010.48`
+- `Versions/153.0.8010.50`, the `Current` symlink target
+
+Purge listed the first two as "Google Chrome Old Version" under Check First.
+Cleaning them moved both to the Trash. Straight away Chrome could not load any
+page in any tab, while the network itself was fine. All 25 Chrome helper
+processes were still running from the deleted 152 folder, and Chrome could not
+spawn new renderer or network processes from a path that no longer existed.
+
+Quitting and relaunching Chrome fixed it, since `Current` pointed to a
+complete 153.0.8010.50. No data was lost, but the browser was dead until the
+user worked out why.
+
+### Who was affected
+
+One user reported it. Anyone running a Chromium browser across a background
+update, without relaunching, who then cleaned the Old Version rows. The
+scanner had worked this way since it shipped in v1.1.2: it offered every
+`Versions/<x>` folder that was not the `Current` target, and never asked
+whether a process was running from it. Its explanation said "Usually safe to
+remove, but reinstall the browser if it fails to launch."
+
+### What changed
+
+Purge now reads running process paths before offering a version, and checks
+again before deleting.
+
+- [`DeletionSafetyPolicy.staleBrowserFrameworkRefusesDeletion`](https://github.com/jithin-sabu/purge-app/blob/v1.5.3/purge/Services/DeletionSafetyPolicy.swift)
+  reads the bundle and executable path of every running application, maps
+  each Chrome helper back to its outer `.app`, and pulls the version out of
+  `Versions/<version>/` in the path.
+- `shouldOfferStaleFrameworkVersion` applies three rules. Never offer the
+  `Current` target. Never offer a version a process is executing from. If the
+  browser is running but no process path reveals a version, offer nothing.
+- That refusal stays out of the offered-for-cleanup cache, because the answer
+  flips when the user quits the browser.
+- [`FileDeleter`](https://github.com/jithin-sabu/purge-app/blob/v1.5.3/purge/Services/FileDeleter.swift)
+  re-runs the check after sizing, immediately before the item goes to the
+  Trash, and re-reads the `Current` symlink at that moment. An item that no
+  longer passes is reported as "skipped for safety" instead of deleted. This
+  delete-time re-check is the part that protects against the next case,
+  whatever it turns out to be.
+- The row's explanation now says to quit and relaunch the browser first, and
+  that the browser deletes leftover versions itself on relaunch.
+- [`StaleBrowserFrameworkPolicyTests.swift`](https://github.com/jithin-sabu/purge-app/blob/v1.5.3/PurgeTests/StaleBrowserFrameworkPolicyTests.swift)
+  pins the decision table.
+
+### What would have caught it earlier
+
+An item whose safety depends on something outside the filesystem, here a
+running app, needs that state checked at scan time and again at delete time.
+A test that modelled a running browser on an old version would have failed on
+the v1.1.2 code. `loadedHelperVersionIsRefusedAndUnusedLeftoverIsOffered` and
+`runningBrowserWithNoVisibleVersionHidesEveryLeftover` in
+[`PurgeTests/StaleBrowserFrameworkPolicyTests.swift`](../PurgeTests/StaleBrowserFrameworkPolicyTests.swift)
+are that test.
+
+## 2026-09-11: JetBrains cleaner deleted installed plugins and all IDE settings
+
+**Reported** by a user outside GitHub, no tracked issue. **Fixed:** [#48](https://github.com/jithin-sabu/purge-app/pull/48), shipped in v1.5.0 (2026-09-11). **Affected:** v1.1.0 to v1.4.0.
+
+### What happened
+
+The "JetBrains Cache" row targeted two folders. `~/Library/Caches/JetBrains`
+is a real cache: indexes and compiler output, rebuilt on next launch.
+`~/Library/Application Support/JetBrains` is not. Since the 2020.1 layout it
+holds installed plugins (`plugins/`) and every IDE setting (`options/`,
+`keymaps/`, `codestyles/` and more). Both paths were delete targets in
+`DevScanner` and both were on the allowlist, under the label "Safe to delete
+and will be recreated when you open the IDE again." Cleaning the row wiped
+every plugin and every setting.
+
+### Who was affected
+
+Every IntelliJ, WebStorm or PyCharm user who cleaned that row. One reported
+it. The fix cannot restore what was lost. A backup such as Time Machine is the
+only way back.
+
+### What changed
+
+[`DevScanner`](https://github.com/jithin-sabu/purge-app/blob/v1.5.0/purge/Services/DevScanner.swift)
+targets only the Caches folder.
+[`DeletionSafetyPolicy.evaluate`](https://github.com/jithin-sabu/purge-app/blob/v1.5.0/purge/Services/DeletionSafetyPolicy.swift)
+refuses `Application Support/JetBrains` and every descendant before any
+allowlist rule runs, so it can never be scanned, sized or deleted. Three tests
+pin it.
+
+### What would have caught it earlier
+
+Treating anything under `Application Support` as not a cache unless an entry
+proves otherwise. The allowlist audit above (#103) went through the whole list
+on that principle. `jetBrainsApplicationSupportRootIsBlocked` and
+`jetBrainsApplicationSupportCacheDescendantIsBlocked` in
+[`PurgeTests/DeletionSafetyPolicyTests.swift`](../PurgeTests/DeletionSafetyPolicyTests.swift)
+check that the folder and everything in it is refused, and
+`jetBrainsLocalHistoryIsNeverOffered` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+keeps Local History out of the cache that is still offered.
+
+## 2026-07-25: Spotlight and 29 other items were Safe to Clean although cleaning them had visible consequences
+
+**Reported:** [#10](https://github.com/jithin-sabu/purge-app/issues/10). **Fixed:** commit [`c265a95`](https://github.com/jithin-sabu/purge-app/commit/c265a9585f29fe551fb68641065db0e17efa9207), shipped in v1.3.0 (2026-08-02). **Affected:** v1.1.0 to v1.2.9.
+
+### What happened
+
+The user cleaned the Spotlight index from Safe to Clean, without reading the
+whole list because it was labelled safe. Search then misbehaved until the
+index was rebuilt. Nothing was lost, but they asked why something with an
+immediate consequence sat in the one-click tier, and pointed at iCloud sync
+caches as the same kind of thing.
+
+### Who was affected
+
+Anyone who ran Clean Safe Items or a scheduled clean. These entries had been
+Safe since v1.1.0, the first release with the two labels.
+
+### What changed
+
+Thirty entries moved from Safe to Clean to Check First in
+[`explanations.json`](https://github.com/jithin-sabu/purge-app/blob/v1.3.0/purge/Resources/explanations.json)
+and
+[`SafetyTierList.swift`](https://github.com/jithin-sabu/purge-app/blob/v1.3.0/purge/Services/SafetyTierList.swift),
+so they are no longer swept up by one-click or scheduled cleaning:
+
+- Index rebuilds: Spotlight Search, Apple Photos, Apple Mail
+- Sync re-verification: iCloud Data Sync, iCloud Drive Sync, Dropbox, Google
+  Drive, Microsoft OneDrive, Contacts & Calendar Sync
+- Lost history: Screen Time, Siri Suggestions
+- Possible re-authentication: Apple ID, Sign in with Apple, 1Password
+
+The full list is in the commit.
+
+### What would have caught it earlier
+
+A written definition of Safe, applied to every entry as a checklist rather
+than as a tag. The definition now exists on the
+[safety page](https://purgemac.com/safety): the app rebuilds it on its own and
+you will not notice it is gone. Spotlight fails that test.
+[`PurgeTests/VisibleCostTierTests.swift`](../PurgeTests/VisibleCostTierTests.swift)
+resolves a row from each group above and expects Check First, and checks that
+a Spotlight folder with no entry of its own is Check First too.
+
+## 2026-07-12: Spotify cache cleanup took files a user kept there on purpose
+
+**Reported:** [#3](https://github.com/jithin-sabu/purge-app/issues/3). **Fixed:** [#4](https://github.com/jithin-sabu/purge-app/pull/4), shipped in v1.2.8 (2026-07-13).
+
+### What happened
+
+The user ran a modified Spotify client that kept its added files inside
+Spotify's cache folder. Purge listed the Spotify cache as Safe to Clean, and
+cleaning it removed those files along with the cache. Purge did what its label
+said. The gap was that there was no way to tell it to leave a folder alone.
+
+### Who was affected
+
+One user. Anyone else who keeps their own files inside a folder Purge treats
+as a cache would have hit the same thing.
+
+### What changed
+
+Settings gained Excluded from Scans
+([`ExcludedPathsStore.swift`](https://github.com/jithin-sabu/purge-app/blob/v1.2.8/purge/Services/ExcludedPathsStore.swift)).
+An exclusion is a subtractive filter on top of the allowlist. It can only
+remove a candidate from the results, never widen what Purge can touch.
+
+### What would have caught it earlier
+
+Nothing in Purge can know what a modified client keeps in a cache folder. The
+lesson is that a deleter needs a per-path opt-out from the first release.
+[`PurgeTests/ExcludedCacheFolderTests.swift`](../PurgeTests/ExcludedCacheFolderTests.swift)
+excludes a Safe cache row and checks that it leaves the list and the one-click
+clean, and that a file inside the folder counts as excluded too.
