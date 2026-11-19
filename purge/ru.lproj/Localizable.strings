@@ -805,7 +805,6 @@
 "Project %@" = "Проект %@";
 
 /* Developer Projects review (#392) */
-"Build data modified %@" = "Данные сборки изменены %@";
 "%@ · Modified %@" = "%@ · Изменено %@";
 "Project details" = "Сведения о проекте";
 "Select cleanup item" = "Выбрать для очистки";

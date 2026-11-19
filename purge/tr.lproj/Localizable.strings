@@ -444,7 +444,6 @@
 "Project %@" = "Proje %@";
 
 /* Developer Projects review (#392) */
-"Build data modified %@" = "Derleme verileri %@ tarihinde değiştirildi";
 "%@ · Modified %@" = "%@ · Değiştirilme: %@";
 "Project details" = "Proje ayrıntıları";
 "Select cleanup item" = "Temizlenecek öğeyi seç";

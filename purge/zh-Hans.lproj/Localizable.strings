@@ -444,7 +444,6 @@
 "Project %@" = "项目 %@";
 
 /* Developer Projects review (#392) */
-"Build data modified %@" = "构建数据修改于 %@";
 "%@ · Modified %@" = "%@ · 修改于 %@";
 "Project details" = "项目详情";
 "Select cleanup item" = "选择清理项目";
