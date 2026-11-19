@@ -967,7 +967,6 @@ struct DevToolsView: View {
                     if store.devTools.indices.contains(index), store.devTools[index].id == entryID {
                     let tool = store.devTools[index]
                     let toolID = tool.id
-                    let primaryPath = tool.primaryOverridePath
                     ScanSelectionScope(
                         selection: store.scanSelection,
                         isSelected: { $0.devToolIDs.contains(toolID) }
@@ -987,7 +986,6 @@ struct DevToolsView: View {
                             detailCaption: nil,
                             reinstallSafety: tool.reinstallSafety,
                             showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
-                            onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
                             onExcludeFromScans: { store.excludeFromScans(tool) },
                             revealLocations: {
                                 // `standardizedPaths` is precomputed and parallel to `paths`,
@@ -1000,7 +998,6 @@ struct DevToolsView: View {
                                     )
                                 }
                             },
-                            isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
                             isMetadataPending: isDevToolMetadataPending(tool),
                             onHighlight: highlightAction(.tool(toolID))
                         )
@@ -1075,12 +1072,10 @@ struct DevToolsView: View {
                                     detailCaption: nil,
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
-                                    onResetToAutomatic: nil,
                                     onExcludeFromScans: { store.excludeFromScans(device) },
                                     revealLocations: {
                                         [ScanRowLocation(url: device.folderURL, sizeBytes: device.sizeOnDisk)]
                                     },
-                                    isUserOverride: false,
                                     allowsBulkSelection: true,
                                     isMetadataPending: isSimulatorMetadataPending(device),
                                     usesCompactExplanation: true,
@@ -1166,12 +1161,10 @@ struct DevToolsView: View {
                                     detailCaption: String(localized: "Build \(runtime.build)"),
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
-                                    onResetToAutomatic: nil,
                                     onExcludeFromScans: { store.excludeFromScans(runtime) },
                                     revealLocations: {
                                         [ScanRowLocation(url: runtime.locationURL, sizeBytes: runtime.sizeBytes)]
                                     },
-                                    isUserOverride: false,
                                     allowsBulkSelection: true,
                                     isMetadataPending: false,
                                     usesCompactExplanation: true,
@@ -1600,7 +1593,6 @@ struct DevToolsView: View {
            store.projectGroups[gi].artifacts.indices.contains(ai),
            store.projectGroups[gi].artifacts[ai].id == artifactID {
             let art = store.projectGroups[gi].artifacts[ai]
-            let artifactPath = art.path.standardizedFileURL.path
 
             ScanSelectionScope(
                 selection: store.scanSelection,
@@ -1622,14 +1614,12 @@ struct DevToolsView: View {
                     detailCaption: nil,
                     reinstallSafety: nil,
                     showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
-                    onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
                     onExcludeFromScans: {
                         store.excludeProjectArtifactFromScans(groupID: groupID, artifactID: artifactID)
                     },
                     revealLocations: {
                         [ScanRowLocation(url: art.path, sizeBytes: art.sizeBytes)]
                     },
-                    isUserOverride: store.userOverridePaths.contains(artifactPath),
                     showsBulkCheckbox: true,
                     isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
                     showsCardChrome: false,

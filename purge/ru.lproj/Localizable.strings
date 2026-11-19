@@ -597,7 +597,6 @@
 "Mail, Messages, Photos, Music, TV and iMovie keep these" = "Эти данные хранят Почта, Сообщения, Фото, Музыка, TV и iMovie";
 "Managed by macOS" = "Управляется macOS";
 "Managed in Apps" = "Через приложения";
-"Manual category" = "Ручная категория";
 "Manual clean" = "Ручная очистка";
 "Map" = "Карты";
 "Map of Everything else" = "Карта «Всё остальное»";
@@ -974,7 +973,6 @@
 "No GitHub account? Email %@" = "Нет аккаунта GitHub? Напишите на %@";
 "Copy email address" = "Скопировать адрес почты";
 "Rescan" = "Сканировать снова";
-"Reset to automatic" = "Вернуть автоматический выбор";
 "Restart Watcher" = "Перезапустить наблюдение";
 "Restart to Update to Purge %@" = "Перезапустить для обновления до Purge %@";
 "Restarting…" = "Перезапуск…";
@@ -1334,9 +1332,6 @@
 "Xcode's predictive code completion" = "Предиктивное автодополнение кода в Xcode";
 "Yesterday" = "Вчера";
 "You have unsaved code changes nearby" = "Рядом есть несохранённые изменения кода";
-"You marked this as Check First." = "Вы отметили это как «Сначала проверить».";
-"You marked this as Not Sure." = "Вы пометили это как «Неизвестно».";
-"You marked this as Safe to Clean." = "Вы отметили это как «Безопасно очистить».";
 "You picked %lld of %lld apps in %@. Removing only some of them can stop its own uninstaller from removing the rest." = "Вы выбрали %lld из %lld приложений в %@. Если удалить только часть, его собственный деинсталлятор может не удалить остальные.";
 "You're all clear" = "Всё чисто";
 "You're all clear." = "Всё чисто.";
