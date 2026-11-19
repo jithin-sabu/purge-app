@@ -204,12 +204,51 @@ struct GoModuleCacheScanPolicyTests {
         #expect(read?.isWholeCache == false)
     }
 
+    /// Earlier versions of Purge cleaned `cache` and left the modules. Their
+    /// own evidence is enough to offer the folder whole.
     @Test
-    func aFolderWithoutDownloadsIsNotACache() throws {
+    func aCacheWhoseDownloadsWereCleanedIsStillOfferedWhole() throws {
         let (home, root) = try Self.makeHome()
         defer { Self.cleanUp(home) }
-        try FileManager.default.removeItem(at: root.appendingPathComponent("cache/download"))
-        #expect(GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false) == nil)
+        try FileManager.default.removeItem(at: root.appendingPathComponent("cache"))
+        let read = GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false)
+        #expect(read?.offer == .wholeCache)
+    }
+
+    /// A folder with neither Go's downloads nor any module is not Go's.
+    @Test
+    func aFolderWithoutGosEvidenceOffersNothing() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-397-\(UUID().uuidString)", isDirectory: true)
+        defer { Self.cleanUp(home) }
+        try Self.lay(home, folders: ["go/pkg/mod/notes.d"])
+        let read = GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false)
+        #expect(read?.offer == .nothing)
+    }
+
+    /// Even where nothing may be offered, no row moves a folder that holds the
+    /// configured cache, such as Go's Safe build cache with `GOMODCACHE`
+    /// inside it.
+    @Test
+    func aFolderHoldingARefusedCacheIsNeverMoved() throws {
+        let (home, root) = try Self.makeHome(cacheAt: "Sync/gomod")
+        defer { Self.cleanUp(home) }
+        try Data().write(to: home.appendingPathComponent("Sync/.stfolder"))
+        let context = GoModuleCacheScanPolicy.TestContext(environment: ["GOMODCACHE": root.path], home: home)
+        GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            #expect(GoModuleCacheScanPolicy.refreshSnapshot() == nil)
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("Sync")))
+            #expect(GoModuleCacheScanPolicy.rowPaths(home: home).isEmpty)
+        }
+        // A folder that doesn't exist yet is guarded the same way.
+        let missing = GoModuleCacheScanPolicy.TestContext(
+            environment: ["GOMODCACHE": home.appendingPathComponent("caches/go-build/gomod").path], home: home
+        )
+        GoModuleCacheScanPolicy.$testContext.withValue(missing) {
+            GoModuleCacheScanPolicy.refreshSnapshot()
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("caches/go-build")))
+            #expect(!GoModuleCacheScanPolicy.refusesDeletion(home.appendingPathComponent("caches/other")))
+        }
     }
 
     @Test

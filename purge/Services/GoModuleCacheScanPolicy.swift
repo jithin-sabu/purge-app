@@ -15,7 +15,7 @@ import os
 /// (what `go env -w` writes), since Purge never sees a shell profile.
 ///
 /// The whole folder is offered only with positive evidence that everything in
-/// it is Go's: `cache/download`, and below every other entry only folders that
+/// it is Go's: below every entry other than `cache`, only folders that
 /// lead down to unpacked modules (`<path>@<version>`). A file, a link, a hidden
 /// entry or a version-control folder on the way means the folder holds more,
 /// such as the user's own checkouts under `github.com/me/repo`, and then only
@@ -52,7 +52,7 @@ nonisolated enum GoModuleCacheScanPolicy {
     final class TestContext: @unchecked Sendable {
         let home: URL
         let excludedPaths: Set<String>
-        fileprivate let stored = OSAllocatedUnfairLock<Snapshot?>(initialState: nil)
+        fileprivate let stored = OSAllocatedUnfairLock<State>(initialState: State())
         private let environmentStore: OSAllocatedUnfairLock<[String: String]>
 
         init(environment: [String: String] = [:], home: URL, excludedPaths: Set<String> = []) {
@@ -205,7 +205,7 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     /// Whether `root` is somewhere a Go module cache may be offered from at
     /// all: an allowed spelling (`isRefusedSpelling`), a real local folder
-    /// with `cache/download` in it reached through no link, and not in a
+    /// reached through no link, and not in a
     /// folder iCloud or another sync service keeps, where a move to the Trash
     /// is a delete on every device.
     static func acceptsLocation(_ root: URL, home: URL) -> Bool {
@@ -218,9 +218,7 @@ nonisolated enum GoModuleCacheScanPolicy {
         } else if containsLinkFromRoot(path) {
             return false
         }
-        guard isRealFolder(path), isRealFolder(path + "/cache"), isRealFolder(path + "/cache/download") else {
-            return false
-        }
+        guard isRealFolder(path) else { return false }
         guard AppFolders.isOnLocalDisk(root) else { return false }
 
         // iCloud Desktop & Documents leaves no marker file, so ask each folder
@@ -244,10 +242,13 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// file, a link, a hidden entry or a `.git` on the way down means the
     /// folder holds more than modules, such as the user's checkouts. A folder
     /// the user excluded inside it keeps the whole folder from being offered.
+    /// So does an empty one: it needs Go's `cache/download` or at least one
+    /// module. `cache` can be gone, as earlier versions of Purge cleaned it.
     static func holdsOnlyModules(_ root: URL, excludedPaths: Set<String>) -> Bool {
         let canonical = root.standardizedFileURL.resolvingSymlinksInPath().path
         if excludedPaths.contains(where: { PathContainment.isInside($0, canonical) }) { return false }
         guard let entries = entries(of: root) else { return false }
+        var modules = 0
         for entry in entries {
             let name = entry.url.lastPathComponent
             if name == ".DS_Store", !entry.isFolder { continue }
@@ -257,13 +258,15 @@ nonisolated enum GoModuleCacheScanPolicy {
             // A one-element module path, such as `example.com@v1.0.0`.
             if name.contains("@v") {
                 guard isUnpackedModule(entry.url, relativePath: name, root: root) else { return false }
+                modules += 1
                 continue
             }
-            guard !name.contains("@"), leadsOnlyToModules(entry.url, relativePath: name, root: root, depth: 1) else {
+            guard !name.contains("@"),
+                  leadsOnlyToModules(entry.url, relativePath: name, root: root, depth: 1, modules: &modules) else {
                 return false
             }
         }
-        return true
+        return modules > 0 || isRealFolder(root.path + "/cache/download")
     }
 
     /// Go's module paths are short. A deeper tree is not one.
@@ -271,7 +274,13 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     private static let versionControlFolders: Set<String> = [".git", ".hg", ".svn", ".bzr", "_darcs", ".jj"]
 
-    private static func leadsOnlyToModules(_ folder: URL, relativePath: String, root: URL, depth: Int) -> Bool {
+    private static func leadsOnlyToModules(
+        _ folder: URL,
+        relativePath: String,
+        root: URL,
+        depth: Int,
+        modules: inout Int
+    ) -> Bool {
         guard depth <= maxModulePathDepth, let entries = entries(of: folder) else { return false }
         for entry in entries {
             let name = entry.url.lastPathComponent
@@ -280,7 +289,8 @@ nonisolated enum GoModuleCacheScanPolicy {
             let relative = relativePath + "/" + name
             if name.contains("@v") {
                 guard isUnpackedModule(entry.url, relativePath: relative, root: root) else { return false }
-            } else if !leadsOnlyToModules(entry.url, relativePath: relative, root: root, depth: depth + 1) {
+                modules += 1
+            } else if !leadsOnlyToModules(entry.url, relativePath: relative, root: root, depth: depth + 1, modules: &modules) {
                 return false
             }
         }
@@ -360,6 +370,23 @@ nonisolated enum GoModuleCacheScanPolicy {
         excludedPaths: Set<String>,
         insideHomeOnly: Bool
     ) -> Snapshot? {
+        readState(environment: environment, home: home, excludedPaths: excludedPaths, insideHomeOnly: insideHomeOnly)
+            .snapshot
+    }
+
+    /// What a refresh keeps: where Go's cache is, by its spelling alone,
+    /// whether or not anything there may be offered, and the snapshot.
+    struct State: Equatable, Sendable {
+        var configuredRoot: String?
+        var snapshot: Snapshot?
+    }
+
+    static func readState(
+        environment: [String: String],
+        home: URL,
+        excludedPaths: Set<String>,
+        insideHomeOnly: Bool
+    ) -> State {
         let homePath = home.standardizedFileURL.path
         // A limited scan opens Go's env file only inside home and only where
         // it may read: `GOENV` can name a file in Documents.
@@ -367,12 +394,13 @@ nonisolated enum GoModuleCacheScanPolicy {
             !insideHomeOnly || (PathContainment.isInside(file.path, homePath)
                 && ProtectedLocations.isReadable(file, access: .limited, home: home))
         }
-        guard let root = configuredRoot(environment: environment, home: home, canRead: canRead) else { return nil }
+        guard let root = configuredRoot(environment: environment, home: home, canRead: canRead) else { return State() }
+        var state = State(configuredRoot: root.path)
         if insideHomeOnly {
             guard PathContainment.isInside(root.path, homePath),
-                  ProtectedLocations.isReadable(root, access: .limited, home: home) else { return nil }
+                  ProtectedLocations.isReadable(root, access: .limited, home: home) else { return state }
         }
-        guard acceptsLocation(root, home: home) else { return nil }
+        guard acceptsLocation(root, home: home) else { return state }
 
         let offer: Snapshot.Offer
         let cache = root.appendingPathComponent("cache", isDirectory: true)
@@ -381,12 +409,14 @@ nonisolated enum GoModuleCacheScanPolicy {
             offer = .nothing
         } else if holdsOnlyModules(root, excludedPaths: excludedPaths) {
             offer = .wholeCache
-        } else if excludedPaths.contains(where: { PathContainment.isInside($0, cacheCanonical) }) {
+        } else if !isRealFolder(cache.path + "/download")
+            || excludedPaths.contains(where: { PathContainment.isInside($0, cacheCanonical) }) {
             offer = .nothing
         } else {
             offer = .downloadsOnly
         }
-        return Snapshot(root: root.path, offer: offer, limited: insideHomeOnly)
+        state.snapshot = Snapshot(root: root.path, offer: offer, limited: insideHomeOnly)
+        return state
     }
 
     // MARK: Snapshot
@@ -396,6 +426,18 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// start of each Dev Tools scan and each clean. Nil in the test host until
     /// a test binds `testContext` and refreshes.
     static var snapshot: Snapshot? {
+        state.snapshot
+    }
+
+    /// Where Go keeps its cache as last read, even when nothing there may be
+    /// offered, such as a folder without Go's evidence inside a Safe cache
+    /// folder. `refusesDeletion` keeps every row from moving a folder that
+    /// holds it.
+    static var configuredRootPath: String? {
+        state.configuredRoot
+    }
+
+    private static var state: State {
         if let testContext { return testContext.stored.withLock { $0 } }
         return store.withLock { $0 }
     }
@@ -404,37 +446,41 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// lists the folder. The test host never reads the real one.
     @discardableResult
     static func refreshSnapshot(insideHomeOnly: Bool = false) -> Snapshot? {
-        let read: Snapshot?
+        let read: State
         if let testContext {
-            read = currentRead(insideHomeOnly: insideHomeOnly)
+            read = currentState(insideHomeOnly: insideHomeOnly)
             testContext.stored.withLock { $0 = read }
         } else {
             guard !RemovedAppHandoff.runsInTestHost else { return snapshot }
             LaunchdEnvironment.refresh()
-            read = currentRead(insideHomeOnly: insideHomeOnly)
+            read = currentState(insideHomeOnly: insideHomeOnly)
             let changed = store.withLock { stored -> Bool in
                 defer { stored = read }
                 return stored != read
             }
-            if !changed { return read }
+            if !changed { return read.snapshot }
         }
         // `evaluate` reads the snapshot, so verdicts cached before it changed
         // are stale.
         DeletionSafetyPolicy.clearOfferedForCleanupCache()
-        return read
+        return read.snapshot
     }
 
-    /// `read` with the test's values or the real ones.
     private static func currentRead(insideHomeOnly: Bool) -> Snapshot? {
+        currentState(insideHomeOnly: insideHomeOnly).snapshot
+    }
+
+    /// `readState` with the test's values or the real ones.
+    private static func currentState(insideHomeOnly: Bool) -> State {
         if let testContext {
-            return read(
+            return readState(
                 environment: testContext.environment,
                 home: testContext.home,
                 excludedPaths: testContext.excludedPaths,
                 insideHomeOnly: insideHomeOnly
             )
         }
-        return read(
+        return readState(
             environment: liveEnvironment,
             home: FileManager.default.homeDirectoryForCurrentUser,
             excludedPaths: ExcludedPathsStore.allExcludedPaths(),
@@ -447,7 +493,7 @@ nonisolated enum GoModuleCacheScanPolicy {
         LaunchdEnvironment.merged(into: ProcessInfo.processInfo.environment)
     }
 
-    private static let store = OSAllocatedUnfairLock<Snapshot?>(initialState: nil)
+    private static let store = OSAllocatedUnfairLock<State>(initialState: State())
 
     // MARK: Row and gates
 
@@ -493,15 +539,18 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// The Dev Tools filter asks on the main thread on every scan flush and
     /// takes the scan's answer for the second part.
     static func refusesDeletion(_ url: URL, reuseRecentRead: Bool = false) -> Bool {
-        guard let snapshot else { return false }
+        let current = Self.state
+        guard let configured = current.configuredRoot else { return false }
         let path = url.standardizedFileURL.path
         // Only a shorter path can hold the root, so most calls stop at the
-        // length test; this runs for every scanned item.
-        if path.utf8.count < snapshot.root.utf8.count,
-           PathContainment.isInside(snapshot.root.lowercased(), path.lowercased()),
+        // length test; this runs for every scanned item. It holds whether or
+        // not the folder passed the checks below.
+        if path.utf8.count < configured.utf8.count,
+           PathContainment.isInside(configured.lowercased(), path.lowercased()),
            !DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
             return true
         }
+        guard let snapshot = current.snapshot else { return false }
         let target: Snapshot.Offer
         if path == snapshot.root {
             target = .wholeCache
