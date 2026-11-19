@@ -222,13 +222,14 @@ nonisolated enum OldToolVersionScanPolicy {
             android: android ?? .current(home: home),
             nvm: nvm,
             vitePlus: vitePlus,
-            nodeCheck: .quick
+            nvmCheck: .quick
         )
     }
 
-    /// `nodeCheck` says how far an nvm or Vite+ entry is judged: `refusesDeletion`
-    /// may run on the main thread, so it takes `.quick`, and `FileDeleter` runs
-    /// the rest right before the move (`passesImmediateTrashBoundary` in each policy).
+    /// `nvmCheck` says how far an nvm or Vite+ (#398) entry is judged:
+    /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
+    /// `FileDeleter` runs the rest right before the move
+    /// (`passesImmediateTrashBoundary` in each policy).
     static func isOffered(
         _ path: String,
         kind: Kind,
@@ -237,7 +238,7 @@ nonisolated enum OldToolVersionScanPolicy {
         android: AndroidContext,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
-        nodeCheck: NvmNodeVersionPolicy.Check = .scan
+        nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
         guard !PathContainment.containsSymlinkComponent(url, home: home) else { return false }
@@ -281,10 +282,10 @@ nonisolated enum OldToolVersionScanPolicy {
             return number < current
         case .nvmNodeVersion:
             // Built here, not before: it probes Full Disk Access, which no other row needs.
-            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm ?? .current(home: home), check: nodeCheck)
+            return NvmNodeVersionPolicy.isOffered(path, home: home, context: nvm ?? .current(home: home), check: nvmCheck)
         case .vitePlusNodeVersion, .vitePlusInstallLeftover:
             return VitePlusNodeVersionPolicy.isOffered(
-                path, home: home, now: now, context: vitePlus ?? .current(home: home), check: nodeCheck
+                path, home: home, now: now, context: vitePlus ?? .current(home: home), check: nvmCheck
             )
         }
     }
