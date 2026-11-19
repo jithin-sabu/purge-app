@@ -1117,6 +1117,57 @@ struct OpencodeCacheTests {
     func dataSettingsAndInstallStayOut(relative: String) {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
     }
+
+    /// The allowlist accepts `.cache/opencode` by its text. With `~/.cache` or the
+    /// folder itself a link to `~/Developer`, a move would take
+    /// `~/Developer/opencode`, so only this recheck catches it.
+    @Test(arguments: ["none", ".cache", ".cache/opencode"])
+    func cacheReachedThroughALinkIsRefused(link: String) throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("opencode-link-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let cache = home.appendingPathComponent(".cache/opencode", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        switch link {
+        case ".cache":
+            try fm.createDirectory(at: elsewhere.appendingPathComponent("opencode/bin", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createDirectory(at: home, withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: home.appendingPathComponent(".cache"), withDestinationURL: elsewhere)
+        case ".cache/opencode":
+            try fm.createDirectory(at: elsewhere.appendingPathComponent("bin", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createDirectory(at: home.appendingPathComponent(".cache", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: cache, withDestinationURL: elsewhere)
+        default:
+            try fm.createDirectory(at: cache.appendingPathComponent("bin", isDirectory: true), withIntermediateDirectories: true)
+        }
+        for url in [cache, cache.appendingPathComponent("bin", isDirectory: true)] {
+            #expect(fm.fileExists(atPath: url.path))
+            #expect(DeletionSafetyPolicy.opencodeCacheLinkRefusesDeletion(url, home: home.path) == (link != "none"), "\(url.path)")
+        }
+    }
+
+    /// A link inside the cache moves to the Trash as a link, so it refuses
+    /// nothing, and the guard answers for no other folder.
+    @Test
+    func linkGuardCoversOnlyTheWayDownToTheCache() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("opencode-inner-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let cache = home.appendingPathComponent(".cache/opencode", isDirectory: true)
+        try fm.createDirectory(at: cache.appendingPathComponent("npm", isDirectory: true), withIntermediateDirectories: true)
+        let inner = cache.appendingPathComponent("npm/link")
+        try fm.createSymbolicLink(at: inner, withDestinationURL: base)
+        #expect(!DeletionSafetyPolicy.opencodeCacheLinkRefusesDeletion(cache, home: home.path))
+        #expect(!DeletionSafetyPolicy.opencodeCacheLinkRefusesDeletion(inner, home: home.path))
+
+        let other = home.appendingPathComponent(".cache-link", isDirectory: false)
+        try fm.createSymbolicLink(at: other, withDestinationURL: base)
+        for url in [other, home.appendingPathComponent(".cache/uv"), home.appendingPathComponent(".cache/opencode-old")] {
+            #expect(!DeletionSafetyPolicy.opencodeCacheLinkRefusesDeletion(url, home: home.path), "\(url.path)")
+        }
+    }
 }
 
 // MARK: - The list itself
