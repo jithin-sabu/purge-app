@@ -1078,9 +1078,14 @@ struct OpencodeCacheTests {
     }
 
     /// The Dev Tools scan lists the folder, so it is a row and not only allowed.
+    /// A throwaway home, so the row list reads no real folder.
     @Test
-    func devToolsScanListsTheFolder() {
-        #expect(DevScanner.claimedGlobalCachePaths().contains(AuditPaths.url(".cache/opencode").standardizedFileURL.path))
+    func devToolsScanListsTheFolder() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("opencode-audit-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let claimed = DevScanner.claimedGlobalCachePaths(home: home)
+        #expect(claimed.contains(home.appendingPathComponent(".cache/opencode").standardizedFileURL.path))
     }
 
     /// A running session loads its provider and plugin packages from the cache,
