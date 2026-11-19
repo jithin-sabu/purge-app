@@ -507,6 +507,8 @@ enum DeletionSafetyPolicy {
         // The Go module cache is moved whole only while it still holds nothing
         // but modules. Same split as Playwright: a move reads the folder again.
         if GoModuleCacheScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // `~/.cache` or a cache folder in it can become a link after the scan (#420).
+        if dotCacheLinkRefusesDeletion(standardizedPath: key) { return false }
         // Recheck before a move in case the prek store was redirected since the scan.
         if prekStoreLinkRefusesDeletion(url) { return false }
         if prekToolsRefuseDeletion(url) { return false }
@@ -560,6 +562,40 @@ enum DeletionSafetyPolicy {
         let tools = root.appendingPathComponent("tools", isDirectory: true).standardizedFileURL.path
         guard PathContainment.isSameOrInside(url.standardizedFileURL.path, tools) else { return false }
         return isExcluded(root.appendingPathComponent("hooks", isDirectory: true))
+    }
+
+    /// The allowlist entries under `~/.cache`, taken from the list itself, so a
+    /// new one is covered by `dotCacheLinkRefusesDeletion` the day it is added.
+    nonisolated static func dotCacheEntries(home: String) -> [String] {
+        whitelistedPrefixes(home: home).filter { PathContainment.isInside($0, "\(home)/.cache") }
+    }
+
+    /// Prebuilt for `cachedHomePath`, like `cachedWhitelistedPrefixes`.
+    private nonisolated static let cachedDotCacheEntries: [String] = dotCacheEntries(home: cachedHomePath)
+    private nonisolated static let cachedDotCachePrefix = "\(cachedHomePath)/.cache/"
+
+    /// The allowlist compares path text. If `~/.cache`, a cache folder in it, or a
+    /// folder between the two were a link to `~/Developer`, the row would name
+    /// `~/.cache/uv` while the move took `~/Developer/uv` (#420). A link anywhere
+    /// from home down to the entry's folder refuses the folder and everything in
+    /// it. Links inside the folder don't count: they move to the Trash as links.
+    ///
+    /// `isOfferedForCleanup` asks this for every row on each scan flush, on the
+    /// main thread, so a path outside `~/.cache` costs one text comparison and
+    /// only an entry's own path is read from disk.
+    nonisolated static func dotCacheLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        dotCacheLinkRefusesDeletion(standardizedPath: url.standardizedFileURL.path, home: home)
+    }
+
+    nonisolated static func dotCacheLinkRefusesDeletion(
+        standardizedPath path: String,
+        home: String = cachedHomePath
+    ) -> Bool {
+        let isRealHome = home == cachedHomePath
+        guard path.hasPrefix(isRealHome ? cachedDotCachePrefix : "\(home)/.cache/") else { return false }
+        let entries = isRealHome ? cachedDotCacheEntries : dotCacheEntries(home: home)
+        guard let entry = entries.first(where: { PathContainment.isSameOrInside(path, $0) }) else { return false }
+        return PathContainment.containsSymlinkComponent(URL(fileURLWithPath: entry, isDirectory: true), home: home)
     }
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]

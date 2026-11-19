@@ -11,6 +11,53 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-19: Rows under `~/.cache` followed a link to another folder
+
+**Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** the pull request for [#420](https://github.com/jithin-sabu/purge-app/issues/420), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+
+### What happened
+
+The allowlist compares path text. It lists folders such as `~/.cache/uv` and
+`~/.cache/giget`, and never checked whether a folder on the way was a link.
+
+If `~/.cache` was a link to `~/Developer`, the row named `~/.cache/giget`, the
+text matched, and the move took `~/Developer/giget`. The same held when the
+cache folder itself was a link, or a folder between the two, such as
+`~/.cache/firebase` for `~/.cache/firebase/emulators`.
+
+Eleven rows had the gap: Corepack, act, Rebar3, Bazel, the Go build cache in
+`~/.cache`, pre-commit, Prisma, Puppeteer, giget, the Firebase emulators and
+uv. Eight of them are Safe to Clean, so Clean Safe Items or a scheduled clean
+could have moved the folder behind the link without asking. prek already had
+its own check.
+
+### Who was affected
+
+Nobody reported a loss. It took a `~/.cache`, or a cache folder in it, linked
+to a place that held a folder with the same name as a cache. Anything moved
+went to the Trash and could be put back.
+
+### What changed
+
+`DeletionSafetyPolicy.dotCacheLinkRefusesDeletion` refuses a path that is the
+same as or inside an allowlisted `~/.cache` entry when any folder from home
+down to that entry is a link. It takes the entries from the allowlist itself,
+so a new `~/.cache` row is covered when it is added. `isOfferedForCleanup`
+asks it outside its saved answers, so the scan drops the row and `FileDeleter`
+refuses the move even when the link appeared after the scan. A link inside a
+cache folder refuses nothing, because it moves to the Trash as a link.
+
+A Mac whose `~/.cache` is a link no longer gets these rows.
+
+### What would have caught it earlier
+
+A fixture with a linked folder. Every allowlist test used a plain path under
+the real home. `DotCacheLinkTests` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now builds a temporary home and checks each entry with `~/.cache` linked, the
+cache folder linked, a folder on the way linked, nothing linked, and a link
+inside the folder.
+
 ## 2026-11-17: Large Files offered single Ollama blobs from a store Purge didn't know
 
 **Found internally** while testing [#318](https://github.com/jithin-sabu/purge-app/issues/318) ([#395](https://github.com/jithin-sabu/purge-app/issues/395)), no report. **Fixed:** [#396](https://github.com/jithin-sabu/purge-app/pull/396), not shipped yet. **Affected:** every release up to v1.16.2.

@@ -1057,6 +1057,172 @@ struct UVCacheTests {
     }
 }
 
+// MARK: - Rows under ~/.cache reached through a link (#420)
+
+/// The allowlist accepts `.cache/uv` by its text. With `~/.cache`, the folder
+/// itself or a folder between them a link to `~/Developer`, a move would take
+/// `~/Developer/uv`, so only `dotCacheLinkRefusesDeletion` catches it.
+@Suite("~/.cache rows reached through a link (#420)")
+struct DotCacheLinkTests {
+    /// A temporary home, with a `Developer` folder beside it for links to point at.
+    private static func makeHome() throws -> (base: URL, home: URL, elsewhere: URL) {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("dot-cache-link-\(UUID().uuidString)", isDirectory: true)
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        try fm.createDirectory(at: home, withIntermediateDirectories: true)
+        try fm.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        return (base, home, elsewhere)
+    }
+
+    /// The allowlist's own entries under `.cache`, relative to home.
+    private static func entries(_ home: URL) -> [String] {
+        DeletionSafetyPolicy.dotCacheEntries(home: home.path).map { String($0.dropFirst(home.path.count + 1)) }
+    }
+
+    private static func refuses(_ relative: String, home: URL) -> Bool {
+        DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(home.appendingPathComponent(relative), home: home.path)
+    }
+
+    @Test
+    func entriesAreTheAllowlistRowsUnderDotCache() {
+        let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        let entries = Set(Self.entries(home))
+        for expected in [
+            ".cache/node/corepack", ".cache/act", ".cache/rebar3", ".cache/bazel", ".cache/go-build",
+            ".cache/pre-commit", ".cache/prek/repos", ".cache/prek/hooks", ".cache/prek/tools", ".cache/prek/cache",
+            ".cache/prisma", ".cache/puppeteer", ".cache/giget", ".cache/firebase/emulators", ".cache/uv",
+        ] {
+            #expect(entries.contains(expected), "\(expected)")
+        }
+        #expect(entries.allSatisfy { $0.hasPrefix(".cache/") })
+    }
+
+    @Test
+    func everyEntryIsRefusedWhenDotCacheIsALink() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".cache"), withDestinationURL: elsewhere)
+        let entries = Self.entries(home)
+        #expect(!entries.isEmpty)
+        for relative in entries {
+            // The folder a move would really take.
+            let behind = elsewhere.appendingPathComponent(String(relative.dropFirst(".cache/".count)), isDirectory: true)
+            try fm.createDirectory(at: behind.appendingPathComponent("inner", isDirectory: true), withIntermediateDirectories: true)
+            for path in [relative, "\(relative)/inner"] {
+                #expect(fm.fileExists(atPath: home.appendingPathComponent(path).path))
+                #expect(Self.refuses(path, home: home), "\(path)")
+            }
+        }
+    }
+
+    @Test
+    func everyEntryIsRefusedWhenItsOwnFolderIsALink() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        for (index, relative) in Self.entries(home).enumerated() {
+            let entry = home.appendingPathComponent(relative)
+            let behind = elsewhere.appendingPathComponent("target-\(index)", isDirectory: true)
+            try fm.createDirectory(at: behind.appendingPathComponent("inner", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createDirectory(at: entry.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: entry, withDestinationURL: behind)
+            for path in [relative, "\(relative)/inner"] {
+                #expect(fm.fileExists(atPath: home.appendingPathComponent(path).path))
+                #expect(Self.refuses(path, home: home), "\(path)")
+            }
+        }
+    }
+
+    @Test
+    func aLinkedFolderRefusesOnlyItsOwnRow() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try fm.createDirectory(at: home.appendingPathComponent(".cache/giget/inner", isDirectory: true), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".cache/uv"), withDestinationURL: elsewhere)
+        #expect(Self.refuses(".cache/uv", home: home))
+        #expect(!Self.refuses(".cache/giget", home: home))
+        #expect(!Self.refuses(".cache/giget/inner", home: home))
+    }
+
+    @Test(arguments: [
+        (".cache/firebase", ".cache/firebase/emulators"),
+        (".cache/node", ".cache/node/corepack"),
+        (".cache/prek", ".cache/prek/repos"),
+    ])
+    func aLinkedFolderOnTheWayRefusesTheEntry(link: String, entry: String) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try fm.createDirectory(at: elsewhere.appendingPathComponent((entry as NSString).lastPathComponent, isDirectory: true),
+                               withIntermediateDirectories: true)
+        try fm.createDirectory(at: home.appendingPathComponent(".cache/uv", isDirectory: true), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        #expect(fm.fileExists(atPath: home.appendingPathComponent(entry).path))
+        #expect(Self.refuses(entry, home: home))
+        #expect(!Self.refuses(".cache/uv", home: home))
+    }
+
+    /// An unlinked `~/.cache` offers what it did before, whether or not the
+    /// folders are on disk.
+    @Test(arguments: [true, false])
+    func nothingIsRefusedWithoutALink(foldersExist: Bool) throws {
+        let fm = FileManager.default
+        let (base, home, _) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let entries = Self.entries(home)
+        #expect(!entries.isEmpty)
+        for relative in entries {
+            if foldersExist {
+                try fm.createDirectory(at: home.appendingPathComponent("\(relative)/inner", isDirectory: true),
+                                       withIntermediateDirectories: true)
+            }
+            for path in [relative, "\(relative)/inner"] {
+                #expect(!Self.refuses(path, home: home), "\(path)")
+            }
+        }
+    }
+
+    /// A link inside the cache moves to the Trash as a link, so it refuses nothing.
+    @Test
+    func aLinkInsideTheFolderRefusesNothing() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try fm.createDirectory(at: home.appendingPathComponent(".cache/uv/archive-v0", isDirectory: true), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".cache/uv/archive-v0/link"), withDestinationURL: elsewhere)
+        for path in [".cache/uv", ".cache/uv/archive-v0", ".cache/uv/archive-v0/link"] {
+            #expect(!Self.refuses(path, home: home), "\(path)")
+        }
+    }
+
+    /// The guard answers only for the allowlist's `~/.cache` entries. Every other
+    /// path is left to `evaluate` and the other guards, linked or not.
+    @Test(arguments: [true, false])
+    func otherPathsAreLeftAlone(dotCacheIsLink: Bool) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        if dotCacheIsLink {
+            try fm.createSymbolicLink(at: home.appendingPathComponent(".cache"), withDestinationURL: elsewhere)
+        } else {
+            try fm.createDirectory(at: home.appendingPathComponent(".cache", isDirectory: true), withIntermediateDirectories: true)
+        }
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".npm"), withDestinationURL: elsewhere)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".cache-link"), withDestinationURL: elsewhere)
+        for path in [
+            ".cache", ".cache/uv-old", ".cache/unknown", ".cache/unknown/inner", ".cache/firebase", ".cache/prek/patches",
+            ".cachette/uv", ".nvm/.cache", ".npm", ".npm/_cacache", ".cache-link", ".cache-link/uv",
+            "Developer/app/.cache", "Library/Caches/uv",
+        ] {
+            #expect(!Self.refuses(path, home: home), "\(path)")
+        }
+        #expect(!DeletionSafetyPolicy.dotCacheLinkRefusesDeletion(elsewhere.appendingPathComponent(".cache/uv"), home: home.path))
+    }
+}
+
 // MARK: - The list itself
 
 @Suite("Allowlist audit: one entry per place")
