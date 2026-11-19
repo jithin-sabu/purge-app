@@ -138,8 +138,7 @@ nonisolated final class DevScanner {
         if let version = VitePlusNodeVersionPolicy.version(inLabel: toolLabel) {
             let base = SafetyInfo.fromExplanationDatabase(
                 key: VitePlusNodeVersionPolicy.explanationKey,
-                friendlyFallback: toolLabel,
-                path: primaryPath
+                friendlyFallback: toolLabel
             )
             return SafetyInfo(
                 level: base.level,
