@@ -15,6 +15,8 @@ enum UnifiedAssetCalls {
     static let frameworkPath =
         "/System/Library/PrivateFrameworks/UnifiedAssetFramework.framework/UnifiedAssetFramework"
     static let serviceName = "com.apple.siri.uaf.subscription.service"
+    /// siriknowledged's service, which passes each operation on to `serviceName`.
+    static let forwardingServiceName = "com.apple.siri.uaf.service"
 
     static func load() throws {
         guard dlopen(frameworkPath, RTLD_NOW) != nil else {
@@ -78,6 +80,15 @@ enum UnifiedAssetCalls {
     /// Sends one operation to the subscription service and waits for its reply.
     /// `config` carries "Operation" and its arguments. Throws on a missing
     /// interface, a transport error, a timeout, or an error reply.
+    ///
+    /// From macOS 27.3 the subscription service takes connections only from
+    /// clients Apple signed and drops Purge's. siriknowledged's service has the
+    /// same interface and passes `operationWithConfig:` on unchanged, so a
+    /// refused request goes out once more through it. Found by pdfux and
+    /// shipped first by RemoveMacAI (github.com/omlahore/RemoveMacAI, MIT,
+    /// its issue 123). Both tries share `timeout`, so the wait is no longer
+    /// than before. An error reply is the service's own answer and a timeout
+    /// may mean the request ran, so neither is sent again.
     static func send(_ config: [String: Any], timeout: TimeInterval) throws {
         try load()
         guard let interfaceClass = NSClassFromString("UAFXPCProxyServiceInterface"),
@@ -89,7 +100,42 @@ enum UnifiedAssetCalls {
             || protocol_getMethodDescription(interface.protocol, selector, false, true).name != nil
         guard described else { throw CallError("the service interface no longer has operationWithConfig:completion:") }
 
-        let connection = NSXPCConnection(machServiceName: serviceName, options: [])
+        let deadline = Date().addingTimeInterval(timeout)
+        do {
+            try send(config, to: serviceName, interface: interface, selector: selector, timeout: timeout)
+        } catch {
+            let remaining = deadline.timeIntervalSinceNow
+            guard isRefusedConnection(error), remaining >= 1 else { throw error }
+            let refused = error as NSError
+            let first = "\(serviceName) refused the connection first (\(refused.domain) \(refused.code))"
+            do {
+                try send(config, to: forwardingServiceName, interface: interface, selector: selector, timeout: remaining)
+            } catch let second as CallError {
+                throw CallError("\(second.description); \(first)")
+            } catch {
+                // The second error keeps its domain and code, which Purge reads,
+                // and carries the first in its userInfo for the details.
+                let second = error as NSError
+                var userInfo = second.userInfo
+                userInfo["PurgeFirstTry"] = first
+                throw NSError(domain: second.domain, code: second.code, userInfo: userInfo)
+            }
+        }
+    }
+
+    /// Whether `error` says the connection was dropped or never made, rather
+    /// than the service answering or the wait running out.
+    static func isRefusedConnection(_ error: Error) -> Bool {
+        guard !(error is CallError) else { return false }
+        let nsError = error as NSError
+        return nsError.domain == NSCocoaErrorDomain
+            && (nsError.code == NSXPCConnectionInterrupted || nsError.code == NSXPCConnectionInvalid)
+    }
+
+    /// One try at one Mach service.
+    private static func send(_ config: [String: Any], to service: String, interface: NSXPCInterface,
+                             selector: Selector, timeout: TimeInterval) throws {
+        let connection = NSXPCConnection(machServiceName: service, options: [])
         connection.remoteObjectInterface = interface
         connection.resume()
 
@@ -115,7 +161,7 @@ enum UnifiedAssetCalls {
         let waited = done.wait(timeout: .now() + timeout)
         connection.invalidate()
         guard waited == .success else {
-            throw CallError("no reply from \(serviceName) in \(Int(timeout)) seconds; the request may still have run")
+            throw CallError("no reply from \(service) in \(Int(timeout)) seconds; the request may still have run")
         }
         if let replyError { throw replyError }
     }
