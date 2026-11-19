@@ -502,6 +502,9 @@ enum DeletionSafetyPolicy {
         // flush, so it may reuse a read from the last few seconds. `FileDeleter`
         // asks off the main thread, so a move always reads the links again.
         if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // The Go module cache is moved whole only while it still holds nothing
+        // but modules. Same split as Playwright: a move reads the folder again.
+        if GoModuleCacheScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         // Recheck before a move in case the prek store was redirected since the scan.
         if prekStoreLinkRefusesDeletion(url) { return false }
         if prekToolsRefuseDeletion(url) { return false }
@@ -1595,6 +1598,13 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if gradleLeftover(at: path, home: home) != nil {
+            return .allow
+        }
+        // Shape only. Whether the whole folder still holds nothing but modules
+        // is checked by `GoModuleCacheScanPolicy.refusesDeletion` before every
+        // move. Its location was checked against the never-delete list when it
+        // was read (#397).
+        if GoModuleCacheScanPolicy.isWhitelistedPath(path) {
             return .allow
         }
         // Above the never-delete guards on purpose: it is in `/var/folders`, which

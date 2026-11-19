@@ -289,7 +289,9 @@
 "Temporary files stored by the Zed code editor. Safe to delete and will be recreated when you open Zed again." = "Zed kod düzenleyicisinin sakladığı geçici dosyalar. Silmek güvenlidir ve Zed'i yeniden açtığınızda yeniden oluşturulur.";
 
 "Go Module Cache" = "Go Modül Önbelleği";
-"Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again." = "Önbelleğe alınmış Go paketleri ve derleme çıktıları. Silmek güvenlidir ve Go projelerinizi yeniden derlediğinizde yeniden indirilir.";
+"Go Build Cache" = "Go Derleme Önbelleği";
+"Go modules your projects downloaded. Nothing is lost, but the next build downloads them all again and needs a connection." = "Projelerinizin indirdiği Go modülleri. Hiçbir şey kaybolmaz ancak bir sonraki derleme hepsini yeniden indirir ve bağlantı gerektirir.";
+"Compiled outputs Go keeps to speed up builds. Safe to delete; Go rebuilds them on your next build." = "Go'nun derlemeleri hızlandırmak için sakladığı derleme çıktıları. Silmek güvenlidir; Go bir sonraki derlemede bunları yeniden oluşturur.";
 
 "Maven Package Cache" = "Maven Paket Önbelleği";
 "Maven's downloaded libraries and your own mvn install builds. Libraries download again on your next build; your own builds come back only if you rebuild them." = "Maven'in indirdiği kitaplıklar ve kendi mvn install derlemeleriniz. Kitaplıklar bir sonraki derlemenizde yeniden indirilir; kendi derlemeleriniz yalnızca yeniden derlerseniz geri gelir.";

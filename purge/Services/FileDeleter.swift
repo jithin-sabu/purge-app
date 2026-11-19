@@ -308,6 +308,9 @@ nonisolated final class FileDeleter: Sendable {
         // that went away, is refused.
         let scanAccess: ScanAccess = fullDiskAccessGranted() ? .full : .limited
         ScanFolders.refreshSnapshot(home: home, insideHomeOnly: scanAccess == .limited)
+        // Same for the Go module cache: `evaluate` takes the folder the last
+        // read found, so a `GOMODCACHE` moved since the scan is refused (#397).
+        GoModuleCacheScanPolicy.refreshSnapshot(insideHomeOnly: scanAccess == .limited)
         let projectHome = home.standardizedFileURL.path
 
         for url in urls {
@@ -569,6 +572,20 @@ nonisolated final class FileDeleter: Sendable {
                             displayName: friendlyTitle,
                             reason: "This file was skipped for safety",
                             isUserVisible: true
+                        ))
+                        continue
+                    }
+                    // Go makes each module folder read-only, and the Trash could
+                    // not empty them like that. The owner gets write permission
+                    // first, as `go clean -modcache` does. A folder that can't be
+                    // changed keeps the whole cache where it is (#397).
+                    if GoModuleCacheScanPolicy.isWholeCacheRoot(url),
+                       !GoModuleCacheScanPolicy.makeFoldersWritable(in: url) {
+                        failedItems.append(FailedDeletionItem(
+                            path: url.path,
+                            displayName: friendlyTitle,
+                            reason: .unknown,
+                            sizeBytes: size
                         ))
                         continue
                     }

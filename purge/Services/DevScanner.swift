@@ -43,7 +43,8 @@ nonisolated final class DevScanner {
         "Cursor Cache": "cursor",
         "JetBrains Cache": "jetbrains",
         "Zed Cache": "zed",
-        "Go Module Cache": "go",
+        GoModuleCacheScanPolicy.label: GoModuleCacheScanPolicy.explanationKey,
+        "Go Build Cache": "go-build-cache",
         "Maven Cache": "maven",
         "SBT Cache": "sbt",
         "Ruby Gems": "rubygems",
@@ -861,10 +862,13 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
             ]),
 
+            // The whole module cache when it holds nothing but modules, else
+            // its download folder. Check First, unlike the build cache below,
+            // so the two are separate rows (#397).
+            (GoModuleCacheScanPolicy.label, GoModuleCacheScanPolicy.rowPaths(home: home)),
             // Go keeps its build cache in `~/Library/Caches/go-build` on macOS.
             // `~/.cache/go-build` is only used when `GOCACHE` points there.
-            ("Go Module Cache", [
-                home.appendingPathComponent("go/pkg/mod/cache", isDirectory: true),
+            ("Go Build Cache", [
                 home.appendingPathComponent("Library/Caches/go-build", isDirectory: true),
                 home.appendingPathComponent(".cache/go-build", isDirectory: true)
             ]),
@@ -938,6 +942,8 @@ nonisolated final class DevScanner {
 
     private func scanGlobalCachePlaceholders(access: ScanAccess) -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
+        // Read before the row list, which takes the Go module cache from it.
+        GoModuleCacheScanPolicy.refreshSnapshot(insideHomeOnly: access == .limited)
         var staticDefinitions = Self.globalCacheDefinitions()
             + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
             + Self.oldCLIVersionDefinitions(home: home)

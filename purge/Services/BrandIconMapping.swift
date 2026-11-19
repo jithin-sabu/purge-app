@@ -91,6 +91,7 @@ enum BrandIconMapping {
         "cocoapods": "swift",
         "cargo": "rust",
         "go": "go",
+        "go-build-cache": "go",
         "maven": "openjdk",
         "sbt": "scala",
         "rubygems": "ruby",
