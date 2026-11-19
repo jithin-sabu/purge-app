@@ -73,6 +73,12 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// so the answer leaves this rule out.
     @TaskLocal private static var judgingOtherRules = false
 
+    /// The folders `makeFoldersWritable` just gave write permission, by inode
+    /// number, so any spelling of their path matches. They were read-only,
+    /// which is Go's evidence, so the check right before the move still
+    /// counts them as Go's.
+    @TaskLocal static var foldersMadeWritable: Set<UInt64> = []
+
     static let label = "Go Module Cache"
     static let explanationKey = "go"
 
@@ -82,13 +88,18 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     /// Where Go keeps its module cache, from `environment` and then Go's env
     /// file. Nil when the value Go would use is not an absolute path, which Go
-    /// itself refuses.
+    /// itself refuses. Paths are tidied as text only, never by asking the
+    /// disk, which could follow a link into a protected folder. `canRead`
+    /// says whether the env file may be opened at all.
     static func configuredRoot(
         environment: [String: String],
         home: URL,
+        canRead: (URL) -> Bool = { _ in true },
         envFile: (URL) -> String? = { try? String(contentsOf: $0, encoding: .utf8) }
     ) -> URL? {
-        let fileValues = goEnvFileValues(environment: environment, home: home, read: envFile)
+        let fileValues = goEnvFileValues(environment: environment, home: home) { file in
+            canRead(file) ? envFile(file) : nil
+        }
         func value(_ name: String) -> String? {
             if let set = environment[name], !set.isEmpty { return set }
             if let set = fileValues[name], !set.isEmpty { return set }
@@ -102,7 +113,7 @@ nonisolated enum GoModuleCacheScanPolicy {
                   let base = absoluteFolder(String(first)) else { return nil }
             return base.appendingPathComponent("pkg/mod", isDirectory: true)
         }
-        return home.appendingPathComponent("go/pkg/mod", isDirectory: true).standardizedFileURL
+        return absoluteFolder(home.path + "/go/pkg/mod")
     }
 
     /// `KEY=value` lines from the file `go env -w` writes:
@@ -118,7 +129,7 @@ nonisolated enum GoModuleCacheScanPolicy {
             guard goEnv != "off", let url = absoluteFile(goEnv) else { return [:] }
             file = url
         } else {
-            file = home.appendingPathComponent("Library/Application Support/go/env")
+            file = URL(fileURLWithPath: lexicalPath(home.path + "/Library/Application Support/go/env"), isDirectory: false)
         }
         guard let text = read(file) else { return [:] }
         var values: [String: String] = [:]
@@ -132,12 +143,26 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     private static func absoluteFolder(_ value: String) -> URL? {
         guard value.hasPrefix("/") else { return nil }
-        return URL(fileURLWithPath: value, isDirectory: true).standardizedFileURL
+        return URL(fileURLWithPath: lexicalPath(value), isDirectory: true)
     }
 
     private static func absoluteFile(_ value: String) -> URL? {
         guard value.hasPrefix("/") else { return nil }
-        return URL(fileURLWithPath: value).standardizedFileURL
+        return URL(fileURLWithPath: lexicalPath(value), isDirectory: false)
+    }
+
+    /// `path` without `.`, `..` or doubled slashes, worked out as text.
+    static func lexicalPath(_ path: String) -> String {
+        var parts: [Substring] = []
+        for part in path.split(separator: "/") {
+            if part == "." { continue }
+            if part == ".." {
+                _ = parts.popLast()
+                continue
+            }
+            parts.append(part)
+        }
+        return "/" + parts.joined(separator: "/")
     }
 
     // MARK: Judging the folder
@@ -231,10 +256,12 @@ nonisolated enum GoModuleCacheScanPolicy {
             guard !name.hasPrefix("."), name.contains(".") else { return false }
             // A one-element module path, such as `example.com@v1.0.0`.
             if name.contains("@v") {
-                guard isUnpackedModule(entry.url) else { return false }
+                guard isUnpackedModule(entry.url, relativePath: name, root: root) else { return false }
                 continue
             }
-            guard !name.contains("@"), leadsOnlyToModules(entry.url, depth: 1) else { return false }
+            guard !name.contains("@"), leadsOnlyToModules(entry.url, relativePath: name, root: root, depth: 1) else {
+                return false
+            }
         }
         return true
     }
@@ -244,26 +271,48 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     private static let versionControlFolders: Set<String> = [".git", ".hg", ".svn", ".bzr", "_darcs", ".jj"]
 
-    private static func leadsOnlyToModules(_ folder: URL, depth: Int) -> Bool {
+    private static func leadsOnlyToModules(_ folder: URL, relativePath: String, root: URL, depth: Int) -> Bool {
         guard depth <= maxModulePathDepth, let entries = entries(of: folder) else { return false }
         for entry in entries {
             let name = entry.url.lastPathComponent
             if name == ".DS_Store", !entry.isFolder { continue }
             guard entry.isFolder, !name.hasPrefix(".") else { return false }
+            let relative = relativePath + "/" + name
             if name.contains("@v") {
-                guard isUnpackedModule(entry.url) else { return false }
-            } else if !leadsOnlyToModules(entry.url, depth: depth + 1) {
+                guard isUnpackedModule(entry.url, relativePath: relative, root: root) else { return false }
+            } else if !leadsOnlyToModules(entry.url, relativePath: relative, root: root, depth: depth + 1) {
                 return false
             }
         }
         return true
     }
 
-    /// An unpacked module folder, `<last element>@<version>`. Go's zips never
-    /// hold a version-control folder, so one at its top is someone's checkout.
-    private static func isUnpackedModule(_ folder: URL) -> Bool {
-        guard let entries = entries(of: folder) else { return false }
-        return !entries.contains { versionControlFolders.contains($0.url.lastPathComponent) }
+    /// The files Go keeps in `cache/download/<module>/@v/` for each version it
+    /// fetched.
+    private static let downloadFileExtensions = ["zip", "ziphash", "mod", "info"]
+
+    /// An unpacked module folder, `<module>@<version>`, with evidence that Go
+    /// put it there: its download files in `cache/download`, or the
+    /// read-only mode Go leaves on it. Either can be missing on its own:
+    /// earlier versions of Purge cleaned `cache` and left the modules, and
+    /// `-modcacherw` leaves them writable. A folder with neither, such as an
+    /// exported checkout named like a module, is not Go's. Go's zips never
+    /// hold a version-control folder either, so one at its top is a checkout.
+    private static func isUnpackedModule(_ folder: URL, relativePath: String, root: URL) -> Bool {
+        guard let entries = entries(of: folder),
+              !entries.contains(where: { versionControlFolders.contains($0.url.lastPathComponent) }),
+              let at = relativePath.range(of: "@", options: .backwards) else { return false }
+        let modulePath = relativePath[..<at.lowerBound]
+        let version = relativePath[at.upperBound...]
+        guard !modulePath.isEmpty, !version.isEmpty else { return false }
+
+        var info = stat()
+        if lstat(folder.path, &info) == 0 {
+            if info.st_mode & S_IWUSR == 0 { return true }
+            if foldersMadeWritable.contains(UInt64(info.st_ino)) { return true }
+        }
+        let downloads = root.path + "/cache/download/" + modulePath + "/@v/" + version
+        return downloadFileExtensions.contains { isRegularFile(downloads + "." + $0) }
     }
 
     private struct Entry {
@@ -311,8 +360,14 @@ nonisolated enum GoModuleCacheScanPolicy {
         excludedPaths: Set<String>,
         insideHomeOnly: Bool
     ) -> Snapshot? {
-        guard let root = configuredRoot(environment: environment, home: home) else { return nil }
         let homePath = home.standardizedFileURL.path
+        // A limited scan opens Go's env file only inside home and only where
+        // it may read: `GOENV` can name a file in Documents.
+        let canRead: (URL) -> Bool = { file in
+            !insideHomeOnly || (PathContainment.isInside(file.path, homePath)
+                && ProtectedLocations.isReadable(file, access: .limited, home: home))
+        }
+        guard let root = configuredRoot(environment: environment, home: home, canRead: canRead) else { return nil }
         if insideHomeOnly {
             guard PathContainment.isInside(root.path, homePath),
                   ProtectedLocations.isReadable(root, access: .limited, home: home) else { return nil }
@@ -465,15 +520,17 @@ nonisolated enum GoModuleCacheScanPolicy {
     /// Gives the owner write permission on every folder under `root` that
     /// lacks it, so the Trash can be emptied. Files are left alone: removing
     /// a file needs write permission on its folder, not on the file. Links are
-    /// never followed and other volumes never entered. False when any folder
-    /// could not be read or changed; the caller then leaves the cache where it is.
-    static func makeFoldersWritable(in root: URL) -> Bool {
+    /// never followed and other volumes never entered. Returns the inode
+    /// numbers of the folders it changed, all on the root's volume, or nil when any folder could not be read or changed; the
+    /// caller then leaves the cache where it is.
+    static func makeFoldersWritable(in root: URL) -> Set<UInt64>? {
         let rootPath = root.standardizedFileURL.path
         var rootInfo = stat()
-        guard lstat(rootPath, &rootInfo) == 0, (rootInfo.st_mode & S_IFMT) == S_IFDIR else { return false }
+        guard lstat(rootPath, &rootInfo) == 0, (rootInfo.st_mode & S_IFMT) == S_IFDIR else { return nil }
         let device = rootInfo.st_dev
         let user = getuid()
         var allWritable = true
+        var changed: Set<UInt64> = []
 
         func makeWritable(_ path: String, _ info: stat) {
             guard info.st_uid == user else {
@@ -483,7 +540,9 @@ nonisolated enum GoModuleCacheScanPolicy {
                 return
             }
             guard info.st_mode & S_IWUSR == 0 else { return }
-            if fchmodat(AT_FDCWD, path, (info.st_mode & 0o7777) | S_IWUSR, AT_SYMLINK_NOFOLLOW) != 0 {
+            if fchmodat(AT_FDCWD, path, (info.st_mode & 0o7777) | S_IWUSR, AT_SYMLINK_NOFOLLOW) == 0 {
+                changed.insert(UInt64(info.st_ino))
+            } else {
                 allWritable = false
                 log.error("Could not make a Go module folder writable: errno \(errno, privacy: .public)")
             }
@@ -498,7 +557,7 @@ nonisolated enum GoModuleCacheScanPolicy {
                 allWritable = false
                 return true
             }
-        ) else { return false }
+        ) else { return nil }
         for case let url as URL in enumerator {
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
             var info = stat()
@@ -517,10 +576,15 @@ nonisolated enum GoModuleCacheScanPolicy {
             }
             makeWritable(url.path, info)
         }
-        return allWritable
+        return allWritable ? changed : nil
     }
 
     // MARK: Helpers
+
+    private static func isRegularFile(_ path: String) -> Bool {
+        var info = stat()
+        return lstat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
+    }
 
     private static func isRealFolder(_ path: String) -> Bool {
         var info = stat()

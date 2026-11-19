@@ -580,7 +580,7 @@ nonisolated final class FileDeleter: Sendable {
                     // first, as `go clean -modcache` does. A folder that can't be
                     // changed keeps the whole cache where it is (#397).
                     if GoModuleCacheScanPolicy.isWholeCacheRoot(url) {
-                        guard GoModuleCacheScanPolicy.makeFoldersWritable(in: url) else {
+                        guard let madeWritable = GoModuleCacheScanPolicy.makeFoldersWritable(in: url) else {
                             failedItems.append(FailedDeletionItem(
                                 path: url.path,
                                 displayName: friendlyTitle,
@@ -591,7 +591,11 @@ nonisolated final class FileDeleter: Sendable {
                         }
                         // The walk can take a while on a big cache. Something
                         // added meanwhile, such as a `src` folder, stops the move.
-                        guard !GoModuleCacheScanPolicy.refusesDeletion(url) else {
+                        // The folders just made writable were Go's read-only ones.
+                        let refused = GoModuleCacheScanPolicy.$foldersMadeWritable.withValue(madeWritable) {
+                            GoModuleCacheScanPolicy.refusesDeletion(url)
+                        }
+                        guard !refused else {
                             skippedItems.append(SkippedDeletionItem(
                                 path: url.path,
                                 displayName: friendlyTitle,

@@ -304,6 +304,49 @@ struct GoModuleCacheScanPolicyTests {
         #expect(full?.root == root.standardizedFileURL.path)
     }
 
+    /// A link into Documents is caught by `ProtectedLocations` before anything
+    /// is read through it.
+    @Test
+    func aLimitedScanSkipsALinkIntoAProtectedFolder() throws {
+        let (home, root) = try Self.makeHome(cacheAt: "Documents/gomod")
+        defer { Self.cleanUp(home) }
+        let link = home.appendingPathComponent("gomod")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root)
+        let read = GoModuleCacheScanPolicy.read(
+            environment: ["GOMODCACHE": link.path], home: home, excludedPaths: [], insideHomeOnly: true
+        )
+        #expect(read == nil)
+    }
+
+    /// `GOENV` can name a file in Documents. A limited scan doesn't open it.
+    @Test
+    func aLimitedScanDoesNotOpenAGoEnvFileInAProtectedFolder() throws {
+        let (home, root) = try Self.makeHome(cacheAt: "elsewhere/mod")
+        defer { Self.cleanUp(home) }
+        try FileManager.default.createDirectory(at: home.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+        let envFile = home.appendingPathComponent("Documents/goenv")
+        try Data("GOMODCACHE=\(root.path)\n".utf8).write(to: envFile)
+        let environment = ["GOENV": envFile.path]
+        var opened: [String] = []
+        let limitedRoot = GoModuleCacheScanPolicy.configuredRoot(
+            environment: environment,
+            home: home,
+            canRead: { ProtectedLocations.isReadable($0, access: .limited, home: home) },
+            envFile: { opened.append($0.path); return try? String(contentsOf: $0, encoding: .utf8) }
+        )
+        #expect(opened.isEmpty)
+        #expect(limitedRoot?.path == home.path + "/go/pkg/mod")
+        let fullRead = GoModuleCacheScanPolicy.read(
+            environment: environment, home: home, excludedPaths: [], insideHomeOnly: false
+        )
+        #expect(fullRead?.root == root.path)
+    }
+
+    @Test
+    func pathsAreTidiedAsText() {
+        #expect(GoModuleCacheScanPolicy.lexicalPath("/Users/a/./go//pkg/../pkg/mod/") == "/Users/a/go/pkg/mod")
+    }
+
     // MARK: Evidence below the top
 
     /// A folder of the user's own repos, laid out by host, gains Go's
@@ -330,8 +373,47 @@ struct GoModuleCacheScanPolicyTests {
     func aOneElementModuleCountsAsGos() throws {
         let (home, root) = try Self.makeHome()
         defer { Self.cleanUp(home) }
-        try Self.lay(root, folders: ["example.com@v1.0.0"], files: ["example.com@v1.0.0/go.mod"])
+        try Self.lay(
+            root,
+            folders: ["example.com@v1.0.0", "cache/download/example.com/@v"],
+            files: ["example.com@v1.0.0/go.mod", "cache/download/example.com/@v/v1.0.0.mod"]
+        )
         #expect(GoModuleCacheScanPolicy.holdsOnlyModules(root, excludedPaths: []))
+    }
+
+    /// A folder named like a module, but writable and with no download files,
+    /// such as an exported checkout, is not Go's.
+    @Test
+    func aModuleShapedCheckoutOffersOnlyTheDownloads() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        try Self.lay(root, folders: ["example.com/billing@v1.0.0"], files: ["example.com/billing@v1.0.0/main.go"])
+        let read = GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false)
+        #expect(read?.offer == .downloadsOnly)
+        // The move reads it again and agrees.
+        let context = GoModuleCacheScanPolicy.TestContext(home: home)
+        GoModuleCacheScanPolicy.$testContext.withValue(context) {
+            GoModuleCacheScanPolicy.refreshSnapshot()
+            #expect(GoModuleCacheScanPolicy.refusesDeletion(root))
+        }
+    }
+
+    /// Either piece of evidence is enough: Go's download files for a writable
+    /// module (`-modcacherw`), or Go's read-only mode once `cache` is gone, as
+    /// it is after earlier versions of Purge cleaned only `cache`.
+    @Test
+    func eitherDownloadFilesOrGosReadOnlyModeCount() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        try Self.lay(
+            root,
+            folders: ["example.org/lib@v1.0.0", "cache/download/example.org/lib/@v"],
+            files: ["example.org/lib@v1.0.0/go.mod", "cache/download/example.org/lib/@v/v1.0.0.ziphash"]
+        )
+        #expect(GoModuleCacheScanPolicy.holdsOnlyModules(root, excludedPaths: []))
+        // `golang.org/x/text@v0.20.0` has no download files, only Go's mode.
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("cache/download/golang.org").path))
+        #expect(Self.mode(root.appendingPathComponent("golang.org/x/text@v0.20.0")) == 0o555)
     }
 
     /// An exclusion inside `cache` keeps the fallback from being offered too.
@@ -465,7 +547,7 @@ struct GoModuleCacheScanPolicyTests {
         defer { Self.cleanUp(home) }
         let module = root.appendingPathComponent("github.com/x/y@v1.2.0")
         #expect(Self.mode(module) == 0o555)
-        #expect(GoModuleCacheScanPolicy.makeFoldersWritable(in: root))
+        #expect(GoModuleCacheScanPolicy.makeFoldersWritable(in: root) != nil)
         #expect(Self.mode(module) == 0o755)
         #expect(Self.mode(module.appendingPathComponent("internal")) == 0o755)
         // Files keep Go's mode; only their folders change.
@@ -485,7 +567,7 @@ struct GoModuleCacheScanPolicyTests {
             at: root.appendingPathComponent("golang.org/link"),
             withDestinationURL: outside
         )
-        #expect(GoModuleCacheScanPolicy.makeFoldersWritable(in: root))
+        #expect(GoModuleCacheScanPolicy.makeFoldersWritable(in: root) != nil)
         #expect(Self.mode(outside) == 0o555)
     }
 
