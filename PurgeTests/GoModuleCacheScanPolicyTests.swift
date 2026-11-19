@@ -437,6 +437,19 @@ struct GoModuleCacheScanPolicyTests {
         }
     }
 
+    /// A read-only folder named like a module, with writable files in it and
+    /// no download files, is not Go's: Go leaves every file read-only too.
+    @Test
+    func aReadOnlyCheckoutWithWritableFilesOffersOnlyTheDownloads() throws {
+        let (home, root) = try Self.makeHome()
+        defer { Self.cleanUp(home) }
+        let checkout = root.appendingPathComponent("example.com/billing@v1.0.0")
+        try Self.lay(root, folders: ["example.com/billing@v1.0.0"], files: ["example.com/billing@v1.0.0/main.go"])
+        chmod(checkout.path, 0o555)
+        let read = GoModuleCacheScanPolicy.read(environment: [:], home: home, excludedPaths: [], insideHomeOnly: false)
+        #expect(read?.offer == .downloadsOnly)
+    }
+
     /// Either piece of evidence is enough: Go's download files for a writable
     /// module (`-modcacherw`), or Go's read-only mode once `cache` is gone, as
     /// it is after earlier versions of Purge cleaned only `cache`.

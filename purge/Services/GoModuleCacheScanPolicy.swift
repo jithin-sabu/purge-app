@@ -303,7 +303,7 @@ nonisolated enum GoModuleCacheScanPolicy {
 
     /// An unpacked module folder, `<module>@<version>`, with evidence that Go
     /// put it there: its download files in `cache/download`, or the
-    /// read-only mode Go leaves on it. Either can be missing on its own:
+    /// read-only mode Go leaves on it and on everything at its top. Either can be missing on its own:
     /// earlier versions of Purge cleaned `cache` and left the modules, and
     /// `-modcacherw` leaves them writable. A folder with neither, such as an
     /// exported checkout named like a module, is not Go's. Go's zips never
@@ -317,12 +317,18 @@ nonisolated enum GoModuleCacheScanPolicy {
         guard !modulePath.isEmpty, !version.isEmpty else { return false }
 
         var info = stat()
-        if lstat(folder.path, &info) == 0 {
-            if info.st_mode & S_IWUSR == 0 { return true }
-            if foldersMadeWritable.contains(UInt64(info.st_ino)) { return true }
-        }
+        guard lstat(folder.path, &info) == 0 else { return false }
+        if foldersMadeWritable.contains(UInt64(info.st_ino)) { return true }
         let downloads = root.path + "/cache/download/" + modulePath + "/@v/" + version
-        return downloadFileExtensions.contains { isRegularFile(downloads + "." + $0) }
+        if downloadFileExtensions.contains(where: { isRegularFile(downloads + "." + $0) }) { return true }
+        // Go's mark: the folder and everything at its top read-only, folders
+        // `r-x` and files `r--`. A checkout someone made read-only rarely has
+        // every file that way too.
+        guard info.st_mode & S_IWUSR == 0 else { return false }
+        return entries.allSatisfy { entry in
+            var entryInfo = stat()
+            return lstat(entry.url.path, &entryInfo) == 0 && entryInfo.st_mode & S_IWUSR == 0
+        }
     }
 
     private struct Entry {
