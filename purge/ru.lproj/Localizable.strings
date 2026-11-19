@@ -840,6 +840,7 @@
 "Purge couldn't move the junk to the Trash. Open Purge to see why." = "Purge не удалось переместить мусор в Корзину. Откройте Purge, чтобы узнать причину.";
 "Purge couldn't move this folder to the Trash." = "Purge не удалось переместить эту папку в Корзину.";
 "Purge couldn't run launchctl." = "Purge не смог запустить launchctl.";
+"Purge couldn't save the category reset. Try again." = "Purge не удалось сохранить сброс категории. Попробуйте ещё раз.";
 "Purge couldn't save your exclusions. This change lasts until Purge quits." = "Purge не удалось сохранить исключения. Изменение действует до закрытия Purge.";
 "Purge couldn't start %@ again. It starts again when you next log in." = "Purge не удалось снова запустить %@. Он запустится снова при следующем входе в систему.";
 "Purge couldn't start %@ again. They start again when you next log in." = "Purge не смог снова запустить %@. Они запустятся при следующем входе в систему.";

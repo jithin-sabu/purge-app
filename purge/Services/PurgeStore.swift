@@ -6201,8 +6201,13 @@ final class PurgeStore: ObservableObject {
 
     // MARK: - Categorization (per-row reset, exclusions)
 
-    private func refreshUserOverridePaths() {
+    private func resetOverrides(at paths: [URL]) -> Bool {
+        guard UserOverridesStore.remove(paths: paths) else {
+            errorMessage = String(localized: "Purge couldn't save the category reset. Try again.")
+            return false
+        }
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
+        return true
     }
 
     /// Reads both exclusion lists again, and publishes only when one changed.
@@ -6424,14 +6429,11 @@ final class PurgeStore: ObservableObject {
         largeFileDuplicates.removeFiles(ids: removedIDs)
     }
 
-    /// Remove a single override and re-resolve the row using the automatic chain.
+    /// Removes the row's overrides and re-resolves it using the automatic chain.
     func resetCacheItemToAutomatic(id: String) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
         let item = cacheItems[index]
-        for location in item.locations {
-            UserOverridesStore.remove(path: location.path)
-        }
-        refreshUserOverridePaths()
+        guard resetOverrides(at: item.locations.map(\.path)) else { return }
 
         let resolved = resolvedAutomaticSafety(for: item)
 
@@ -6459,8 +6461,7 @@ final class PurgeStore: ObservableObject {
         guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
         let tool = devTools[index]
         guard let primary = tool.primaryOverridePath else { return }
-        UserOverridesStore.remove(path: primary)
-        refreshUserOverridePaths()
+        guard resetOverrides(at: [primary]) else { return }
 
         let label = tool.toolName
         let info = DevScanner.automaticSafetyInfo(
@@ -6481,8 +6482,7 @@ final class PurgeStore: ObservableObject {
         guard projectGroups.indices.contains(groupIndex),
               projectGroups[groupIndex].artifacts.indices.contains(artifactIndex) else { return }
         let artifact = projectGroups[groupIndex].artifacts[artifactIndex]
-        UserOverridesStore.remove(path: artifact.path)
-        refreshUserOverridePaths()
+        guard resetOverrides(at: [artifact.path]) else { return }
 
         let info = SafetyInfo.forStaleProjectArtifact(
             kind: artifact.kind,

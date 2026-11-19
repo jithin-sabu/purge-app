@@ -15,7 +15,10 @@ nonisolated struct UserOverrideEntry: Codable, Sendable {
 /// Persists user-chosen safety categories keyed by exact filesystem path.
 /// Overrides take absolute priority over AI cache, bundled database, and tier list.
 enum UserOverridesStore {
-    nonisolated private static let store = JSONPathStore<UserOverrideEntry>(fileName: "user_overrides.json")
+    nonisolated private static let defaultStore = JSONPathStore<UserOverrideEntry>(fileName: "user_overrides.json")
+    @TaskLocal nonisolated static var storeOverride: JSONPathStore<UserOverrideEntry>?
+
+    nonisolated private static var store: JSONPathStore<UserOverrideEntry> { storeOverride ?? defaultStore }
 
     nonisolated static func fileURL() -> URL {
         store.fileURL
@@ -29,11 +32,14 @@ enum UserOverridesStore {
         store.read { $0[canonicalKey(forPath: path)] }
     }
 
-    /// Returns false when the change could not be saved.
-    @discardableResult
-    nonisolated static func remove(path: URL) -> Bool {
-        let key = canonicalKey(forPath: path)
-        return store.update { $0.removeValue(forKey: key) != nil }
+    /// Saves a row's removals together and keeps its manual categories on failure.
+    nonisolated static func remove(paths: [URL]) -> Bool {
+        let keys = paths.map(canonicalKey)
+        return store.update(keepUnsavedChanges: false) { entries in
+            let count = entries.count
+            for key in keys { entries.removeValue(forKey: key) }
+            return entries.count != count
+        }
     }
 
     nonisolated static func allOverriddenPaths() -> Set<String> {

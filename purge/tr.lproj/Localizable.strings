@@ -1386,6 +1386,7 @@
 "Stops macOS downloading the Apple Intelligence models Purge removed. Remove this profile, or choose Download Again in Purge, to let them come back." = "macOS'in Purge'ün kaldırdığı Apple Intelligence modellerini indirmesini durdurur. Geri gelmelerine izin vermek için bu profili kaldırın veya Purge'te Yeniden İndir'i seçin.";
 "request could not be encoded" = "istek kodlanamadı";
 "Purge couldn't look up %@, so it left them alone: %@" = "Purge %@ öğesine bakamadı, bu yüzden onlara dokunmadı: %@";
+"Purge couldn't save the category reset. Try again." = "Purge kategori sıfırlamasını kaydedemedi. Tekrar deneyin.";
 "Purge couldn't save your exclusions. This change lasts until Purge quits." = "Purge hariç tutmalarınızı kaydedemedi. Bu değişiklik Purge'den çıkılana kadar sürer.";
 "%lld items" = "%lld öğe";
 "%lld apps" = "%lld uygulama";

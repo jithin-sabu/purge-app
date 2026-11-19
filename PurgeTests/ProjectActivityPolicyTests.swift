@@ -343,7 +343,7 @@ struct ProjectListingFilterTests {
 }
 
 @MainActor
-@Suite("A project held at Check First stays there after a reset")
+@Suite("Project artifact category reset")
 struct RecentProjectResetTests {
     /// Built on fake scans and throwaway defaults, so the store never reads or
     /// writes the real user's records.
@@ -359,19 +359,22 @@ struct RecentProjectResetTests {
         return store
     }
 
-    /// A path that does not exist and that no override can name.
-    private func recentArtifact(_ reason: ProjectCheckFirstReason = .usedRecently) -> ProjectCacheArtifact {
+    private func projectArtifact(
+        _ reason: ProjectCheckFirstReason? = .usedRecently,
+        kind: DeletableArtifactKind = .nodeModules
+    ) -> ProjectCacheArtifact {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("purge-test-\(UUID().uuidString)", isDirectory: true)
-        let path = root.appendingPathComponent("node_modules", isDirectory: true)
+        let folder = ProjectArtifactCatalog.rules(forKind: kind).first?.folder ?? kind.rawValue
+        let path = root.appendingPathComponent(folder, isDirectory: true)
         return ProjectCacheArtifact(
-            kind: .nodeModules,
+            kind: kind,
             path: path,
             projectRoot: root,
             sizeBytes: 1024,
             lastModified: .distantPast,
             isSelected: false,
-            safetyInfo: SafetyInfo.forStaleProjectArtifact(kind: .nodeModules, path: path, checkFirstReason: reason),
+            safetyInfo: SafetyInfo.forStaleProjectArtifact(kind: kind, path: path, checkFirstReason: reason),
             reinstallSafety: .notApplicable,
             gitStatus: .clean,
             checkFirstReason: reason
@@ -382,7 +385,7 @@ struct RecentProjectResetTests {
     func resetKeepsCheckFirst() {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        let artifact = recentArtifact()
+        let artifact = projectArtifact()
         let store = store(with: artifact, scans)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
@@ -394,7 +397,7 @@ struct RecentProjectResetTests {
     func resetWithoutRecentUseIsSafe() {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        var artifact = recentArtifact()
+        var artifact = projectArtifact()
         artifact.checkFirstReason = nil
         let store = store(with: artifact, scans)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
@@ -407,9 +410,67 @@ struct RecentProjectResetTests {
     func tooBigToCheckSurvivesReset() {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        let store = store(with: recentArtifact(.tooBigToCheck), scans)
+        let store = store(with: projectArtifact(.tooBigToCheck), scans)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+    }
+
+    @Test("Game engine artifacts retain the catalog's Check First level",
+          arguments: [DeletableArtifactKind.unityLibrary, .unityTemp, .unrealIntermediate, .unrealDerivedData])
+    func gameEngineArtifactsStayCheckFirst(kind: DeletableArtifactKind) {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let artifact = projectArtifact(nil, kind: kind)
+        let store = store(with: artifact, scans)
+        store.resetProjectArtifactToAutomatic(groupID: store.projectGroups[0].id, artifactID: artifact.id)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        #expect(store.manualSafeCleanupCandidates().isEmpty)
+    }
+
+    @Test("A failed write keeps the manual category until a retry saves")
+    func failedResetCanBeRetried() throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let fileName = "category-reset-\(UUID().uuidString).json"
+        let overrides = JSONPathStore<UserOverrideEntry>(fileName: fileName)
+        let file = overrides.fileURL
+        let saved = file.appendingPathExtension("backup")
+        let fm = FileManager.default
+        defer {
+            try? fm.removeItem(at: file)
+            try? fm.removeItem(at: saved)
+        }
+        var artifact = projectArtifact(nil)
+        let key = artifact.path.standardizedFileURL.path
+        let manual = UserOverrideEntry(overrideTag: "medium", overrideDate: Date(), originalTag: "safe")
+        try #require(overrides.update { entries in
+            entries[key] = manual
+            return true
+        })
+        artifact.safetyInfo = UserOverridesStore.safetyInfo(from: manual, friendlyHeadline: artifact.safetyInfo.headline)
+
+        try UserOverridesStore.$storeOverride.withValue(overrides) {
+            let store = store(with: artifact, scans)
+            let groupID = store.projectGroups[0].id
+            #expect(store.userOverridePaths.contains(key))
+
+            try fm.moveItem(at: file, to: saved)
+            try fm.createDirectory(at: file, withIntermediateDirectories: false)
+            store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifact.id)
+            #expect(store.errorMessage != nil)
+            #expect(store.userOverridePaths.contains(key))
+            #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+            #expect(store.manualSafeCleanupCandidates().isEmpty)
+
+            try fm.removeItem(at: file)
+            try fm.moveItem(at: saved, to: file)
+            store.errorMessage = nil
+            store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifact.id)
+            #expect(store.errorMessage == nil)
+            #expect(!store.userOverridePaths.contains(key))
+            #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .safe)
+            #expect(JSONPathStore<UserOverrideEntry>(fileName: fileName).read { $0[key] } == nil)
+        }
     }
 }
 

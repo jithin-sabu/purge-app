@@ -30,15 +30,16 @@ nonisolated final class JSONPathStore<Entry: Codable & Sendable>: @unchecked Sen
 
     /// Changes the entries and writes the file. `body` returns false when it
     /// changed nothing, and nothing is written. Returns false when the file could
-    /// not be written: the change still holds until Purge quits, but it was not
-    /// saved, and the caller says so.
+    /// not be written. By default an unsaved change still holds until Purge
+    /// quits. Pass false to keep the previous cached entries on a failure.
     @discardableResult
-    func update(_ body: (inout [String: Entry]) -> Bool) -> Bool {
+    func update(keepUnsavedChanges: Bool = true, _ body: (inout [String: Entry]) -> Bool) -> Bool {
         lock.withLock {
             var entries = loadLocked()
             guard body(&entries) else { return true }
-            loadedEntries = entries
-            return write(entries)
+            let saved = write(entries)
+            if saved || keepUnsavedChanges { loadedEntries = entries }
+            return saved
         }
     }
 
