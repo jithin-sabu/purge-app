@@ -597,6 +597,8 @@
 "nvm Node.js Version" = "Версия Node.js в nvm";
 "nvm Node.js Versions" = "Версии Node.js в nvm";
 "opam Download Cache" = "Кэш загрузок opam";
+"opencode Cache" = "Кэш opencode";
+"Packages, tools and the model list opencode downloaded. Clean while opencode is idle. It gets them again when needed. Sessions and logins stay." = "Пакеты, инструменты и список моделей, которые скачал opencode. Очищайте, пока opencode простаивает. При необходимости он скачает их снова. Сеансы и данные входа остаются.";
 "photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images." = "Photoshop, Lightroom и Bridge кэшируют здесь RAW-превью. Можно безопасно очистить — при открытии изображений они создадутся заново автоматически.";
 "pnpm Package Store" = "Хранилище пакетов pnpm";
 "pre-commit Environments" = "Среды pre-commit";

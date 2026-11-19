@@ -1170,6 +1170,10 @@
 "Hermes Agent Cache" = "Hermes 代理缓存";
 "Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay." = "Hermes 代理在 ~/.hermes/cache 中的下载与临时空间。运行中的任务可能正在使用，请在 Hermes 空闲时清理。不会动设置、密钥和会话。";
 
+/* opencode-cache */
+"opencode Cache" = "opencode 缓存";
+"Packages, tools and the model list opencode downloaded. Clean while opencode is idle. It gets them again when needed. Sessions and logins stay." = "opencode 下载的软件包、工具和模型列表。请在 opencode 空闲时清理。需要时它会重新获取。不会动会话和登录信息。";
+
 /* antigravity-browser-cache */
 "Antigravity Browser Cache" = "Antigravity 浏览器缓存";
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity 网页任务浏览器的网页与脚本缓存，加载页面时会重新填充。不会动登录信息、历史记录和扩展。";

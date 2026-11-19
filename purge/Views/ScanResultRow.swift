@@ -29,16 +29,12 @@ struct ScanResultRow: View {
     let reinstallSafety: ReinstallSafetyStatus?
     let showUncommittedRepoChanges: Bool
 
-    /// Clears a legacy manual category override. When nil, the corresponding
-    /// badge is hidden.
-    let onResetToAutomatic: (() -> Void)?
     /// When nil, the row omits the "Exclude from scans" context-menu action.
     var onExcludeFromScans: (() -> Void)?
     /// Folders this row would delete, for the "Show in Finder" context-menu action.
     /// A closure, not an array: it is only evaluated on right-click, so no row pays
     /// for path standardization or size formatting during `body`.
     var revealLocations: (() -> [ScanRowLocation])?
-    let isUserOverride: Bool
     /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
     var allowsBulkSelection: Bool = true
     /// When `false`, hides the row checkbox; selection may still be driven by a parent control (e.g. project group header).
@@ -73,7 +69,7 @@ struct ScanResultRow: View {
     }
 
     private var hasExtraBadges: Bool {
-        isUserOverride || detailCaption != nil || showsReinstallBadge || showUncommittedRepoChanges
+        detailCaption != nil || showsReinstallBadge || showUncommittedRepoChanges
     }
 
     private var explanationMinHeight: CGFloat {
@@ -101,10 +97,8 @@ struct ScanResultRow: View {
         detailCaption: String? = nil,
         reinstallSafety: ReinstallSafetyStatus? = nil,
         showUncommittedRepoChanges: Bool = false,
-        onResetToAutomatic: (() -> Void)? = nil,
         onExcludeFromScans: (() -> Void)? = nil,
         revealLocations: (() -> [ScanRowLocation])? = nil,
-        isUserOverride: Bool = false,
         allowsBulkSelection: Bool = true,
         showsBulkCheckbox: Bool = true,
         isMetadataPending: Bool = false,
@@ -123,10 +117,8 @@ struct ScanResultRow: View {
         self.detailCaption = detailCaption
         self.reinstallSafety = reinstallSafety
         self.showUncommittedRepoChanges = showUncommittedRepoChanges
-        self.onResetToAutomatic = onResetToAutomatic
         self.onExcludeFromScans = onExcludeFromScans
         self.revealLocations = revealLocations
-        self.isUserOverride = isUserOverride
         self.allowsBulkSelection = allowsBulkSelection
         self.showsBulkCheckbox = showsBulkCheckbox
         self.isMetadataPending = isMetadataPending
@@ -342,9 +334,6 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var extraBadges: some View {
-        if isUserOverride {
-            userOverrideBadge
-        }
         if let detailCaption {
             AppBadge(text: detailCaption, tone: .neutral)
         }
@@ -360,21 +349,6 @@ struct ScanResultRow: View {
         }
         if showUncommittedRepoChanges {
             AppBadge(text: String(localized: "Local changes nearby"), tone: .warning)
-        }
-    }
-
-    @ViewBuilder
-    private var userOverrideBadge: some View {
-        if let onResetToAutomatic {
-            Button {
-                onResetToAutomatic()
-            } label: {
-                AppBadge(text: String(localized: "Manual category"), tone: .accent)
-            }
-            .buttonStyle(.plain)
-            .help("Reset to automatic")
-        } else {
-            AppBadge(text: String(localized: "Manual category"), tone: .accent)
         }
     }
 }

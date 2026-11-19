@@ -875,6 +875,9 @@
 "Hermes Agent Cache" = "Hermes Agent Önbelleği";
 "Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay." = "Hermes agent'ın ~/.hermes/cache içindeki indirmeleri ve geçici alanı. Çalışan bir görev kullanıyor olabileceğinden Hermes boştayken temizleyin. Ayarlar, anahtarlar ve oturumlar kalır.";
 
+"opencode Cache" = "opencode Önbelleği";
+"Packages, tools and the model list opencode downloaded. Clean while opencode is idle. It gets them again when needed. Sessions and logins stay." = "opencode'un indirdiği paketler, araçlar ve model listesi. opencode boştayken temizleyin. Gerektiğinde bunları yeniden indirir. Oturumlar ve giriş bilgileri kalır.";
+
 "Antigravity Browser Cache" = "Antigravity Tarayıcı Önbelleği";
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity'nin web görevleri için kullandığı tarayıcının sayfa ve betik önbellekleri; sayfaları yükledikçe yeniden dolar. Oturum açmalarına, geçmişe ve uzantılara dokunulmaz.";
 
