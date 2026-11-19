@@ -453,6 +453,13 @@ enum DeletionSafetyPolicy {
             // packages are links into it. `~/.local/share/uv` holds the tools from
             // `uv tool install` and uv's Python versions, and is not listed.
             "\(home)/.cache/uv",
+            // opencode's cache (#399): the provider and plugin packages it installs,
+            // the tools it downloads into `bin`, and its model list. opencode gets
+            // all of it again by itself. Check First by its explanation: a running
+            // session loads its packages from here, and `bin` holds downloaded tools.
+            // `~/.local/share/opencode` holds sessions, snapshots and `auth.json`, and
+            // `~/.config/opencode` the settings. Neither is listed.
+            "\(home)/.cache/opencode",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",

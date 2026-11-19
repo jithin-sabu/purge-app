@@ -832,6 +832,7 @@ struct EverythingElseCacheAuditTests {
     @Test(arguments: [
         ("Dart Analysis Cache", SafetyLevel.safe),
         ("Hermes Agent Cache", .medium),
+        ("opencode Cache", .medium),
         ("Antigravity Browser Cache", .safe),
         ("Gradle Cache", .medium),
     ])
@@ -1053,6 +1054,67 @@ struct UVCacheTests {
         ".cache",
     ])
     func installsAndSettingsStayOut(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+}
+
+// MARK: - opencode's cache
+
+@Suite("opencode cache (#399): offered, never Safe")
+struct OpencodeCacheTests {
+    /// The current layout (`npm`, `bin`, `models.json`) and the older one
+    /// (`packages`, `bun.lock`), plus a model list write that didn't finish.
+    @Test(arguments: [
+        ".cache/opencode",
+        ".cache/opencode/npm/@ai-sdk/anthropic@latest/1/node_modules/@ai-sdk/anthropic/package.json",
+        ".cache/opencode/packages/opencode-anthropic-auth@latest",
+        ".cache/opencode/bin/rg",
+        ".cache/opencode/models.json",
+        ".cache/opencode/models.json.1a2b3c.tmp",
+        ".cache/opencode/bun.lock",
+    ])
+    func cacheIsOffered(relative: String) {
+        #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+    }
+
+    /// The Dev Tools scan lists the folder, so it is a row and not only allowed.
+    @Test
+    func devToolsScanListsTheFolder() {
+        #expect(DevScanner.claimedGlobalCachePaths().contains(AuditPaths.url(".cache/opencode").standardizedFileURL.path))
+    }
+
+    /// A running session loads its provider and plugin packages from the cache,
+    /// and `bin` holds tools opencode downloaded, so Clean Safe Items and
+    /// scheduled cleans must not take the folder.
+    @Test
+    func rowIsNeverSafe() {
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "opencode Cache", primaryPath: nil).level == .medium)
+        #expect(bundledLevel("opencode-cache") == .medium)
+    }
+
+    /// No alias, so a folder that is only named `opencode` somewhere else is not
+    /// this row.
+    @Test
+    func nameAloneMatchesNothing() {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "opencode") == nil)
+    }
+
+    /// Sessions, undo snapshots, logins, settings and the install itself.
+    @Test(arguments: [
+        ".local/share/opencode",
+        ".local/share/opencode/auth.json",
+        ".local/share/opencode/opencode.db",
+        ".local/share/opencode/snapshot",
+        ".local/share/opencode/storage",
+        ".local/share/opencode/log",
+        ".local/state/opencode",
+        ".config/opencode",
+        ".config/opencode/opencode.json",
+        ".opencode",
+        ".opencode/bin/opencode",
+        ".cache",
+    ])
+    func dataSettingsAndInstallStayOut(relative: String) {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
     }
 }
