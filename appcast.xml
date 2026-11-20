@@ -3,6 +3,32 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.17.0</title>
+      <pubDate>Fri, 20 Nov 2026 01:02:27 +0000</pubDate>
+      <sparkle:version>47</sparkle:version>
+      <sparkle:shortVersionString>1.17.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Scan other folders and drives</strong>: Large Files and Developer Projects now also scan the folders and external drives you add in Settings.</li>
+          <li><strong>Simpler Developer Projects cards</strong>: Each card shows its repository and path, and a single artifact shows its type and date on the card.</li>
+          <li><strong>Old Node.js versions</strong>: Dev Tools lists the Node.js versions nvm and Vite+ keep but nothing uses any more, as Check First.</li>
+          <li><strong>Whole Go module cache</strong>: The Go Module Cache row now covers the whole cache, as Check First. The Go build cache is its own Safe row.</li>
+          <li><strong>opencode cache</strong>: Dev Tools now offers opencode's cache as Check First.</li>
+          <li><strong>Linked folders stay put</strong>: Purge now refuses a cache row when its folder, or a folder above it, is a link.</li>
+          <li><strong>Old manual safety labels</strong>: Safety levels set by hand in Purge 1.0 or 1.1 no longer override Purge's own rules.</li>
+          <li><strong>Ollama models in Large Files</strong>: Large Files no longer lists the single files of an Ollama model store it didn't know.</li>
+          <li><strong>Apple Intelligence on macOS 27.3</strong>: When macOS 27.3 refuses a removal or a Download Again request, Purge now sends it another way.</li>
+          <li><strong>Report a bug</strong>: Report a bug and Request a feature in About now open GitHub forms with your versions filled in.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.17.0/Purgev1.17.0.dmg"
+        sparkle:edSignature="ettAXBvqoybtjh5cD/CEDKWx5hposkKfsu7WKllAR1lywfThfbIfWKfM5W3a/DENImIJktONwumAXbQUEI5JAw=="
+        length="12891167"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.16.2</title>
       <pubDate>Mon, 16 Nov 2026 23:01:28 +0000</pubDate>
       <sparkle:version>46</sparkle:version>
