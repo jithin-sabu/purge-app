@@ -661,6 +661,10 @@ enum DeletionSafetyPolicy {
     /// folder. A simulator device is left alone too, because `simctl` removes it
     /// by its UDID and its path is never moved.
     ///
+    /// A folder emptied entry by entry is never moved itself, so it can't move
+    /// as a link. `~/Library/Logs/DiagnosticReports` as a link would be a row for
+    /// another folder, and it is read too.
+    ///
     /// A folder that can't be read is refused. One that isn't there is not.
     ///
     /// `isOfferedForCleanup` asks this for every row on each scan flush, on the
@@ -680,10 +684,11 @@ enum DeletionSafetyPolicy {
     ) -> Bool {
         guard let entry = allowlistEntry(containing: path, home: home) else { return false }
         if entry.hasSuffix("/Devices"), simulatorDeviceUDID(from: URL(fileURLWithPath: path)) != nil { return false }
-        // The lowest folder that has to be real: the entry for its own row, else
-        // the folder the row sits in.
-        let folder = path == entry
-            ? entry
+        // The lowest folder that has to be real: the row itself when it is the
+        // entry or is emptied entry by entry, else the folder the row sits in.
+        let contentsOnly = home == cachedHomePath ? cachedContentsOnlyPrefixes : contentsOnlyPrefixes(home: home)
+        let folder = path == entry || contentsOnly.contains(path)
+            ? path
             : String(path[..<(path.lastIndex(of: "/") ?? path.endIndex)])
         guard reuseRecentRead else { return PathContainment.reachesThroughLink(folder, home: home) }
 
@@ -784,6 +789,9 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Caches"
         ]
     }
+
+    /// Prebuilt for `cachedHomePath`, like `cachedWhitelistedPrefixes`.
+    private nonisolated static let cachedContentsOnlyPrefixes: [String] = contentsOnlyPrefixes(home: cachedHomePath)
 
     nonisolated static func requiresAdminPrivileges(for url: URL) -> Bool {
         let path = url.standardizedFileURL.path

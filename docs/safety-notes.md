@@ -51,8 +51,10 @@ appeared after the scan. The checks for `~/.cache` and prek are now this one
 check.
 
 A link lower down refuses nothing, because it moves to the Trash as a link. A
-simulator device is left alone, because `simctl` removes it by its UDID and
-its path is never moved.
+folder emptied entry by entry is the exception: it is never moved itself, so
+`~/Library/Logs/DiagnosticReports` as a link is refused too. A simulator
+device is left alone, because `simctl` removes it by its UDID and its path is
+never moved.
 
 A Mac with a link on the way to a row no longer gets that row. That includes a
 cache linked to another drive. Offering those again would need rows that say
@@ -66,7 +68,8 @@ The #420 fixture, run for every entry and not only the ones under `~/.cache`.
 [`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
 builds a temporary home and checks every allowlist entry with its first folder
 linked, its own folder linked and nothing linked, and checks a folder on the
-way, a folder between an entry and a row, and a link inside a folder.
+way, a folder between an entry and a row, a link inside a folder, and a
+linked folder that is emptied entry by entry.
 `everyEntryIsFoundByItsText` fails if the guard misses an entry.
 
 ## 2026-11-19: Rows under `~/.cache` followed a link to another folder

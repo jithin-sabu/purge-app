@@ -1541,6 +1541,36 @@ struct AllowlistLinkTests {
         }
     }
 
+    /// A folder emptied entry by entry is never moved itself, so as a link it
+    /// can't move as a link: the row would stand for the folder behind it.
+    /// `~/Library/Logs/DiagnosticReports` is the one such row inside an entry.
+    @Test
+    func aLinkedFolderEmptiedEntryByEntryIsRefused() throws {
+        let fm = FileManager.default
+        for contentsOnly in DeletionSafetyPolicy.contentsOnlyPrefixes(home: "") {
+            let relative = String(contentsOnly.dropFirst())
+            let (base, home, elsewhere) = try Self.makeHome()
+            defer { try? fm.removeItem(at: base) }
+            try Self.makeFolder(home.appendingPathComponent(relative).deletingLastPathComponent())
+            try Self.makeFolder(home.appendingPathComponent("Library/Logs/Example", isDirectory: true))
+            try Self.makeFolder(elsewhere.appendingPathComponent("inner", isDirectory: true))
+            #expect(!Self.refuses(relative, home: home), "\(relative)")
+            try? fm.removeItem(at: home.appendingPathComponent(relative))
+            try fm.createSymbolicLink(at: home.appendingPathComponent(relative), withDestinationURL: elsewhere)
+            #expect(fm.fileExists(atPath: home.appendingPathComponent("\(relative)/inner").path))
+            #expect(Self.refuses(relative, home: home), "\(relative)")
+            #expect(Self.refuses("\(relative)/inner", home: home), "\(relative)")
+        }
+        // Any other row inside an entry still moves as a link.
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(home.appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true))
+        try fm.createSymbolicLink(at: home.appendingPathComponent("Library/Logs/Example"), withDestinationURL: elsewhere)
+        #expect(!Self.refuses("Library/Logs/Example", home: home))
+        #expect(!Self.refuses("Library/Logs/DiagnosticReports", home: home))
+        #expect(!Self.refuses("Library/Logs/DiagnosticReports/crash.ips", home: home))
+    }
+
     /// `simctl delete` removes a device by its UDID and Purge never moves the
     /// path, so a linked `Devices` folder keeps its device rows. Everything
     /// else there moves by path and is refused.

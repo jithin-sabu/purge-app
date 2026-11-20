@@ -47,9 +47,10 @@ nonisolated enum PathContainment {
         while true {
             let stepEnd = folder[folder.index(after: slash)...].firstIndex(of: "/") ?? folder.endIndex
             var info = stat()
-            if lstat(String(folder[..<stepEnd]), &info) != 0 {
-                return !(errno == ENOENT || errno == ENOTDIR)
-            }
+            // `errno` is read inside the call, before the path's C string is
+            // freed, so nothing can change it first.
+            let failure: Int32? = String(folder[..<stepEnd]).withCString { lstat($0, &info) == 0 ? nil : errno }
+            if let failure { return !(failure == ENOENT || failure == ENOTDIR) }
             if (info.st_mode & S_IFMT) == S_IFLNK { return true }
             guard stepEnd < folder.endIndex else { return false }
             slash = stepEnd
