@@ -589,45 +589,56 @@ enum DeletionSafetyPolicy {
 
     // MARK: - Rows reached through a link (#420, #422)
 
-    /// One allowlist entry, with the text every path inside it starts with.
+    /// One allowlist entry, with its path below home.
     private nonisolated struct AllowlistEntry: Sendable {
         let path: String
-        let insidePrefix: String
+        let relative: String
     }
 
     /// The allowlist's entries by their first folder below home, so a path is
     /// compared only with the few entries that start the same way.
     private nonisolated static func allowlistEntriesByFirstFolder(home: String) -> [Substring: [AllowlistEntry]] {
         var index: [Substring: [AllowlistEntry]] = [:]
-        for path in whitelistedPrefixes(home: home) where PathContainment.isInside(path, home) {
-            guard let first = firstFolder(of: path, belowPrefix: home + "/") else { continue }
-            index[Substring(String(first)), default: []].append(AllowlistEntry(path: path, insidePrefix: path + "/"))
+        for path in whitelistedPrefixes(home: home) {
+            guard let below = pathBelowHome(path, home: home) else { continue }
+            index[Substring(String(firstFolder(of: below))), default: []]
+                .append(AllowlistEntry(path: path, relative: String(below)))
         }
         return index
     }
 
     /// Prebuilt for `cachedHomePath`, like `cachedWhitelistedPrefixes`.
     private nonisolated static let cachedAllowlistEntriesByFirstFolder = allowlistEntriesByFirstFolder(home: cachedHomePath)
-    private nonisolated static let cachedHomePrefix = cachedHomePath + "/"
 
-    /// The first path component after `prefix`, or nil when `path` does not
-    /// start with it. Counted in characters, as `hasPrefix` compares them, so a
-    /// home folder spelled with another form of an accented letter still matches.
-    private nonisolated static func firstFolder(of path: String, belowPrefix prefix: String) -> Substring? {
-        guard path.hasPrefix(prefix) else { return nil }
-        let rest = path.dropFirst(prefix.count)
-        return rest.isEmpty ? nil : rest.prefix { $0 != "/" }
+    /// `path` below `home`, without the `/` between them. Nil when `path` is
+    /// home itself or not under it.
+    private nonisolated static func pathBelowHome(_ path: String, home: String) -> Substring? {
+        guard let separator = PathContainment.separatorIndex(after: home, in: path) else { return nil }
+        let below = path[path.utf8.index(after: separator)...]
+        return below.isEmpty ? nil : below
+    }
+
+    /// Up to the first `/` byte. See `PathContainment.separatorIndex` for why
+    /// this is not a search by character.
+    private nonisolated static func firstFolder(of below: Substring) -> Substring {
+        let bytes = below.utf8
+        return below[..<(bytes.firstIndex(of: UInt8(ascii: "/")) ?? bytes.endIndex)]
     }
 
     /// The allowlist entry `path` is or sits in, by text alone. Nil for a path no
-    /// entry holds, which other rules judge.
+    /// entry holds, which other rules judge. Compared as bytes, one folder name at
+    /// a time, so it finds every path `evaluate` matches with `hasPrefix`, and
+    /// also a path whose next name starts with a combining mark.
     nonisolated static func allowlistEntry(containing path: String, home: String = cachedHomePath) -> String? {
-        let isRealHome = home == cachedHomePath
-        guard let first = firstFolder(of: path, belowPrefix: isRealHome ? cachedHomePrefix : home + "/") else {
-            return nil
-        }
-        let index = isRealHome ? cachedAllowlistEntriesByFirstFolder : allowlistEntriesByFirstFolder(home: home)
-        return index[first]?.first { path == $0.path || path.hasPrefix($0.insidePrefix) }?.path
+        guard let below = pathBelowHome(path, home: home) else { return nil }
+        let index = home == cachedHomePath ? cachedAllowlistEntriesByFirstFolder : allowlistEntriesByFirstFolder(home: home)
+        let bytes = below.utf8
+        return index[firstFolder(of: below)]?.first { entry in
+            let relative = entry.relative.utf8
+            guard bytes.starts(with: relative) else { return false }
+            let end = bytes.index(bytes.startIndex, offsetBy: relative.count)
+            return end == bytes.endIndex || bytes[end] == UInt8(ascii: "/")
+        }?.path
     }
 
     /// The simulator's UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
@@ -687,9 +698,7 @@ enum DeletionSafetyPolicy {
         // The lowest folder that has to be real: the row itself when it is the
         // entry or is emptied entry by entry, else the folder the row sits in.
         let contentsOnly = home == cachedHomePath ? cachedContentsOnlyPrefixes : contentsOnlyPrefixes(home: home)
-        let folder = path == entry || contentsOnly.contains(path)
-            ? path
-            : String(path[..<(path.lastIndex(of: "/") ?? path.endIndex)])
+        let folder = path == entry || contentsOnly.contains(path) ? path : PathContainment.parentFolder(of: path)
         guard reuseRecentRead else { return PathContainment.reachesThroughLink(folder, home: home) }
 
         let now = ProcessInfo.processInfo.systemUptime

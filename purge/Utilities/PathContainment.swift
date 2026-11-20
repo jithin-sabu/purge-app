@@ -31,6 +31,41 @@ nonisolated enum PathContainment {
         return false
     }
 
+    private static let slash = UInt8(ascii: "/")
+
+    /// Where the `/` that follows `root` sits in `path`, or nil when `path` is
+    /// `root` itself or not under it.
+    ///
+    /// Separators are found as bytes, never as characters. Swift joins a `/` and
+    /// a combining mark after it into one character, so a search by character
+    /// walks past the `/` in front of a name that starts with such a mark, and
+    /// a folder on the way is never looked at (#422 review).
+    static func separatorIndex(after root: String, in path: String) -> String.Index? {
+        var rootBytes = root.utf8[...]
+        if rootBytes.last == slash { rootBytes = rootBytes.dropLast() }
+        let bytes = path.utf8
+        if bytes.starts(with: rootBytes) {
+            guard bytes.count > rootBytes.count else { return nil }
+            let index = bytes.index(bytes.startIndex, offsetBy: rootBytes.count)
+            return bytes[index] == slash ? index : nil
+        }
+        // The same root spelled with another form of an accented letter is the
+        // same text with other bytes. Plain ASCII has only one spelling.
+        guard !rootBytes.allSatisfy({ $0 < 0x80 }) else { return nil }
+        let rootText = String(Substring(rootBytes))
+        var search = bytes.startIndex
+        while let index = bytes[search...].firstIndex(of: slash) {
+            if String(path[..<index]) == rootText { return index }
+            search = bytes.index(after: index)
+        }
+        return nil
+    }
+
+    /// The folder `path` sits in: everything before its last `/` byte.
+    static func parentFolder(of path: String) -> String {
+        String(path[..<(path.utf8.lastIndex(of: slash) ?? path.endIndex)])
+    }
+
     /// True when `folder`, or a folder above it up to `home`, is a link or can't
     /// be read, and when `folder` is not under `home` at all. `home` itself is
     /// never read. A step that isn't there ends the walk: nothing below it
@@ -38,22 +73,21 @@ nonisolated enum PathContainment {
     ///
     /// The same walk as `containsSymlinkComponent`, on plain paths with
     /// `lstat`, for callers that ask for every row of a scan (#422): 1 µs for
-    /// two steps, against 12 µs through `URL`.
+    /// two steps, against 12 µs through `URL`. Each step ends at a `/` byte.
     static func reachesThroughLink(_ folder: String, home: String) -> Bool {
         guard folder != home else { return false }
-        guard isInside(folder, home) else { return true }
-        // Counted in characters, as `isInside` compares them.
-        var slash = folder.index(folder.startIndex, offsetBy: home.hasSuffix("/") ? home.count - 1 : home.count)
+        guard var separator = separatorIndex(after: home, in: folder) else { return true }
+        let bytes = folder.utf8
         while true {
-            let stepEnd = folder[folder.index(after: slash)...].firstIndex(of: "/") ?? folder.endIndex
+            let stepEnd = bytes[bytes.index(after: separator)...].firstIndex(of: slash) ?? bytes.endIndex
             var info = stat()
             // `errno` is read inside the call, before the path's C string is
             // freed, so nothing can change it first.
             let failure: Int32? = String(folder[..<stepEnd]).withCString { lstat($0, &info) == 0 ? nil : errno }
             if let failure { return !(failure == ENOENT || failure == ENOTDIR) }
             if (info.st_mode & S_IFMT) == S_IFLNK { return true }
-            guard stepEnd < folder.endIndex else { return false }
-            slash = stepEnd
+            guard stepEnd < bytes.endIndex else { return false }
+            separator = stepEnd
         }
     }
 

@@ -1571,6 +1571,85 @@ struct AllowlistLinkTests {
         #expect(!Self.refuses("Library/Logs/DiagnosticReports/crash.ips", home: home))
     }
 
+    /// Swift joins a `/` and a combining mark after it into one character, so a
+    /// search by character walks past the `/` in front of a name that starts
+    /// with such a mark. The guard then picked the wrong parent, or read two
+    /// folders as one and followed the link between them (#422 review).
+    @Test(arguments: [
+        ("Library/Logs/Example", "\u{301}report"),
+        ("Library/Caches/JetBrains", "\u{301}IDE/caches"),
+        ("Library/Caches/JetBrains", "IDE/\u{301}caches/\u{301}inner"),
+        (".npm", "\u{301}cache"),
+        (".gradle", "caches/\u{301}modules/files"),
+        ("Library", "Caches/\u{301}app"),
+    ])
+    func aNameThatStartsWithACombiningMarkHidesNoFolder(link: String, rest: String) throws {
+        let fm = FileManager.default
+        func refuses(_ home: URL) -> Bool {
+            DeletionSafetyPolicy.allowlistLinkRefusesDeletion(standardizedPath: "\(home.path)/\(link)/\(rest)", home: home.path)
+        }
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(URL(fileURLWithPath: "\(elsewhere.path)/\(rest)", isDirectory: true))
+        try Self.makeFolder(home.appendingPathComponent(link).deletingLastPathComponent())
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        #expect(fm.fileExists(atPath: "\(home.path)/\(link)/\(rest)"))
+        #expect(refuses(home))
+
+        // The same names with no link are offered as before.
+        let (plainBase, plainHome, _) = try Self.makeHome()
+        defer { try? fm.removeItem(at: plainBase) }
+        try Self.makeFolder(URL(fileURLWithPath: "\(plainHome.path)/\(link)/\(rest)", isDirectory: true))
+        #expect(!refuses(plainHome))
+    }
+
+    @Test
+    func separatorsAreFoundAsBytes() {
+        func below(_ root: String, _ path: String) -> String? {
+            PathContainment.separatorIndex(after: root, in: path).map { String(path[$0...]) }
+        }
+        #expect(below("/a/b", "/a/b/c") == "/c")
+        #expect(below("/a/b/", "/a/b/c") == "/c")
+        #expect(below("/a/b", "/a/b/\u{301}c/d") == "/\u{301}c/d")
+        #expect(below("/a/b", "/a/b") == nil)
+        #expect(below("/a/b", "/a/bc/d") == nil)
+        #expect(below("/a/b", "/a/b\u{301}/c") == nil)
+        #expect(below("/a/b", "/x/a/b/c") == nil)
+        // One home, spelled with either form of its accented letter.
+        #expect(below("/Users/jos\u{e9}", "/Users/jose\u{301}/.npm") == "/.npm")
+        #expect(below("/Users/jose\u{301}", "/Users/jos\u{e9}/.npm") == "/.npm")
+        #expect(below("/Users/jos\u{e9}", "/Users/jose/.npm") == nil)
+        #expect(PathContainment.parentFolder(of: "/a/b/\u{301}c") == "/a/b")
+        #expect(PathContainment.parentFolder(of: "/a/b/c") == "/a/b")
+
+        let home = "/Users/someone"
+        #expect(DeletionSafetyPolicy.allowlistEntry(containing: "\(home)/.npm/\u{301}x", home: home) == "\(home)/.npm")
+        #expect(DeletionSafetyPolicy.allowlistEntry(containing: "\(home)/.npm\u{301}/x", home: home) == nil)
+        #expect(DeletionSafetyPolicy.allowlistEntry(containing: "\(home)/\u{301}.npm/x", home: home) == nil)
+    }
+
+    /// A home folder with an accented letter can reach the guard in either
+    /// form. Both name the same folder on disk.
+    @Test(arguments: [("jos\u{e9}", "jose\u{301}"), ("jose\u{301}", "jos\u{e9}")])
+    func aHomeSpelledInAnotherFormIsTheSameHome(onDisk: String, asked: String) throws {
+        let fm = FileManager.default
+        let (base, _, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let home = "\(base.path)/\(onDisk)"
+        let askedHome = "\(base.path)/\(asked)"
+        try Self.makeFolder(URL(fileURLWithPath: "\(home)/.gradle/caches/inner", isDirectory: true))
+        try Self.makeFolder(elsewhere.appendingPathComponent("caches/inner", isDirectory: true))
+        #expect(DeletionSafetyPolicy.allowlistEntry(containing: "\(askedHome)/.gradle/caches/inner", home: home) == "\(home)/.gradle/caches")
+        for path in ["\(askedHome)/.gradle/caches", "\(askedHome)/.gradle/caches/inner"] {
+            #expect(!DeletionSafetyPolicy.allowlistLinkRefusesDeletion(standardizedPath: path, home: home), "\(path)")
+        }
+        try fm.removeItem(atPath: "\(home)/.gradle")
+        try fm.createSymbolicLink(atPath: "\(home)/.gradle", withDestinationPath: elsewhere.path)
+        for path in ["\(askedHome)/.gradle/caches", "\(askedHome)/.gradle/caches/inner"] {
+            #expect(DeletionSafetyPolicy.allowlistLinkRefusesDeletion(standardizedPath: path, home: home), "\(path)")
+        }
+    }
+
     /// `simctl delete` removes a device by its UDID and Purge never moves the
     /// path, so a linked `Devices` folder keeps its device rows. Everything
     /// else there moves by path and is refused.
