@@ -1741,6 +1741,501 @@ struct AllowlistLinkTests {
     }
 }
 
+// MARK: - Shape-matched rows reached through a link (#424)
+
+/// The rules in `evaluate` that allow a path by its shape compare text, like
+/// the allowlist. With an app's `Crashpad` folder a link to `~/Documents`, a
+/// move would take `~/Documents/completed`, so only
+/// `shapeLinkRefusesDeletion` catches it. Every test builds its own home.
+@Suite("Shape-matched rows reached through a link (#424)")
+struct ShapeLinkTests {
+    private static let appSupport = "Library/Application Support"
+    private static let container = "Library/Containers/com.example.app/Data/Library/Caches"
+    private static let telegram = CacheDiscoveryPaths.telegramGroupContainerRelative
+    private static let profile = DeletionSafetyPolicy.chromiumUserDataStores[0].relative
+    private static let workerVersions = "\(DeletionSafetyPolicy.cursorAgentWorkerCLI)/.local/share/cursor-agent/versions"
+
+    /// One path per shape a rule allows, relative to home, with the folder the
+    /// rule names for it. `readsDisk` marks the two rules that also look at
+    /// what is in the folder, so their text can't be asked without one.
+    private static let rows: [(row: String, folder: String, readsDisk: Bool)] = [
+        ("\(appSupport)/Foo/Cache", "\(appSupport)/Foo/Cache", true),
+        ("\(appSupport)/Foo/Code Cache", "\(appSupport)/Foo/Code Cache", true),
+        ("\(appSupport)/Foo/Crashpad/completed", "\(appSupport)/Foo/Crashpad/completed", true),
+        ("\(appSupport)/Foo/web/Crashpad/pending", "\(appSupport)/Foo/web/Crashpad/pending", true),
+        ("\(appSupport)/Foo/User Data/GPUCache", "\(appSupport)/Foo/User Data/GPUCache", true),
+        ("\(appSupport)/Foo/User Data/Default/Code Cache", "\(appSupport)/Foo/User Data/Default/Code Cache", true),
+        ("\(appSupport)/Google/Chrome Beta/Default/Cache", "\(appSupport)/Google/Chrome Beta/Default/Cache", true),
+        ("\(profile)/GPUCache", "\(profile)/GPUCache", true),
+        ("\(profile)/GPUCache/data_0", "\(profile)/GPUCache", true),
+        ("\(profile)/Default/Cache", "\(profile)/Default/Cache", true),
+        ("\(profile)/Default/Cache/Cache_Data/f_0001", "\(profile)/Default/Cache", true),
+        (container, container, false),
+        ("\(container)/com.example.app", container, false),
+        ("\(container)/com.example.app/fsCachedData/a", container, false),
+        ("\(telegram)/stable/account-1/postbox/media", "\(telegram)/stable/account-1/postbox/media", false),
+        ("\(telegram)/stable/account-1/postbox/media/photo.jpg", "\(telegram)/stable/account-1/postbox/media", false),
+        ("\(telegram)/account-2/postbox/media/a/b", "\(telegram)/account-2/postbox/media", false),
+        (".gem/ruby/3.3.0/cache", ".gem/ruby/3.3.0/cache", false),
+        (".gem/ruby/3.3.0/cache/rake-13.0.6.gem", ".gem/ruby/3.3.0/cache", false),
+        ("Downloads/movie.mkv.crdownload", "Downloads/movie.mkv.crdownload", false),
+        ("Downloads/archive.zip.part", "Downloads/archive.zip.part", false),
+        ("Downloads/Big.dmg.download", "Downloads/Big.dmg.download", false),
+        ("Downloads/Big.dmg.download/Info.plist", "Downloads/Big.dmg.download", false),
+        ("\(appSupport)/Code/User/workspaceStorage/0a1b2c3d", "\(appSupport)/Code/User/workspaceStorage/0a1b2c3d", false),
+        ("\(appSupport)/Cursor/User/workspaceStorage/4e5f6a7b", "\(appSupport)/Cursor/User/workspaceStorage/4e5f6a7b", false),
+        (".local/share/claude/versions/2.0.1", ".local/share/claude/versions/2.0.1", false),
+        (".local/share/cursor-agent/versions/2026.01.02-abc/node_modules", ".local/share/cursor-agent/versions/2026.01.02-abc", false),
+        ("\(workerVersions)/2026.01.02-abc", "\(workerVersions)/2026.01.02-abc", false),
+        (".grok/downloads/grok-1.0.13", ".grok/downloads/grok-1.0.13", false),
+        (".gradle/daemon/8.10.2", ".gradle/daemon/8.10.2", false),
+        (".gradle/.tmp", ".gradle/.tmp", false),
+    ]
+
+    /// A temporary home, with a `Developer` folder beside it for links to point at.
+    private static func makeHome() throws -> (base: URL, home: URL, elsewhere: URL) {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("shape-link-\(UUID().uuidString)", isDirectory: true)
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        try fm.createDirectory(at: home, withIntermediateDirectories: true)
+        try fm.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        return (base, home, elsewhere)
+    }
+
+    private static func refuses(_ relative: String, home: URL, reuseRecentRead: Bool = false) -> Bool {
+        DeletionSafetyPolicy.shapeLinkRefusesDeletion(
+            standardizedPath: home.appendingPathComponent(relative).standardizedFileURL.path,
+            home: home.path,
+            reuseRecentRead: reuseRecentRead
+        )
+    }
+
+    private static func makeFolder(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    /// Makes `link`, a folder at or above `row`, a link to a folder elsewhere
+    /// that holds the rest of `row`, as a move would find it.
+    private static func link(_ link: String, above row: String, home: URL, elsewhere: URL) throws {
+        let fm = FileManager.default
+        let target = elsewhere.appendingPathComponent("target-\(UUID().uuidString)", isDirectory: true)
+        let rest = row.dropFirst(link.count).drop { $0 == "/" }
+        try makeFolder(rest.isEmpty ? target : target.appendingPathComponent(String(rest), isDirectory: true))
+        try makeFolder(home.appendingPathComponent(link).deletingLastPathComponent())
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: target)
+        #expect(fm.fileExists(atPath: home.appendingPathComponent(row).path))
+    }
+
+    /// The rules that are text alone, asked the way `evaluate` asks them.
+    private static func aTextRuleAllows(_ path: String, home: String) -> Bool {
+        DeletionSafetyPolicy.isWhitelistedContainerCachePath(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedTelegramMediaCachePath(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedGemDownloadCachePath(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedUnfinishedDownloadPath(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedEditorWorkspaceStorageEntry(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedOldCLIVersionPath(path, home: home)
+            || DeletionSafetyPolicy.gradleLeftover(at: path, home: home) != nil
+    }
+
+    /// The guard finds each rule's rows by their text, and names the folder
+    /// that has to be real.
+    @Test
+    func everyRowIsFoundByItsText() {
+        let home = "/Users/someone"
+        for (row, folder, readsDisk) in Self.rows {
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "\(home)/\(row)", home: home) == "\(home)/\(folder)", "\(row)")
+            #expect(readsDisk || Self.aTextRuleAllows("\(home)/\(row)", home: home), "\(row)")
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "/Users/other/\(row)", home: home) == nil, "\(row)")
+        }
+        // Every store in the policy's own lists is looked in.
+        for store in DeletionSafetyPolicy.cliVersionStores {
+            let name = store.entry == .grokBinary ? "grok-1.0.13" : "1.0.13"
+            let path = "\(home)/\(store.versions)/\(name)"
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: path, home: home) == path, "\(path)")
+        }
+        for root in DeletionSafetyPolicy.chromiumUserDataRoots(home: home) {
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "\(root)/GPUCache", home: home) == "\(root)/GPUCache", "\(root)")
+        }
+        for root in EditorWorkspaceStoragePolicy.roots(home: home) {
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "\(root)/0a1b2c3d", home: home) == "\(root)/0a1b2c3d", "\(root)")
+        }
+        // Every cache name and fixed path the Application Support rule knows.
+        let app = "\(home)/\(Self.appSupport)/Foo"
+        let names = CacheDiscoveryPaths.applicationSupportDirectCacheNames.union(CacheDiscoveryPaths.chromiumProfileCacheNames)
+        for relative in names.sorted() + CacheDiscoveryPaths.applicationSupportRelativeCachePaths {
+            for path in ["\(app)/\(relative)", "\(app)/User Data/Default/\(relative)", "\(app)/Partitions/work/\(relative)"]
+            where relative.contains("/") == false || path == "\(app)/\(relative)" {
+                #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: path, home: home) == path, "\(path)")
+            }
+        }
+    }
+
+    /// Whatever a text rule allows, the guard has a folder for: paths made from
+    /// each rule's own samples, with more names added below them.
+    @Test
+    func everyPathATextRuleAllowsIsGuarded() {
+        let home = "/Users/someone"
+        for (row, _, readsDisk) in Self.rows where !readsDisk {
+            for path in ["\(home)/\(row)", "\(home)/\(row)/inner", "\(home)/\(row)/inner/deeper"] {
+                let allowed = Self.aTextRuleAllows(path, home: home)
+                let folder = DeletionSafetyPolicy.shapeMatchedFolder(containing: path, home: home)
+                #expect(!allowed || folder != nil, "\(path)")
+                if let folder { #expect(PathContainment.isSameOrInside(path, folder), "\(path)") }
+            }
+        }
+    }
+
+    /// Every Application Support cache the scan lists is a row the guard reads,
+    /// and a linked `Application Support` refuses them all.
+    @Test
+    func everyDiscoveredApplicationSupportCacheIsGuarded() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let app = home.appendingPathComponent("\(Self.appSupport)/Foo", isDirectory: true)
+        try Self.makeChromiumDataFolder(app)
+        try Self.makeChromiumDataFolder(app.appendingPathComponent("User Data", isDirectory: true), profile: "Default")
+        try Self.makeChromiumDataFolder(app.appendingPathComponent("Partitions/work", isDirectory: true))
+        for parent in ["", "web", "DesktopProfile/v43"] {
+            let crashpad = app.appendingPathComponent(parent, isDirectory: true).appendingPathComponent("Crashpad", isDirectory: true)
+            for name in ["new", "pending", "completed"] {
+                try Self.makeFolder(crashpad.appendingPathComponent(name, isDirectory: true))
+            }
+            try Data().write(to: crashpad.appendingPathComponent("settings.dat"))
+        }
+
+        let found = CacheDiscoveryPaths.applicationSupportCacheURLs(in: app).map(\.path)
+        let direct = CacheDiscoveryPaths.applicationSupportDirectCacheNames.count
+        #expect(found.count == direct * 3 + CacheDiscoveryPaths.chromiumProfileCacheNames.count + 6)
+        for path in found {
+            #expect(DeletionSafetyPolicy.isWhitelistedApplicationSupportCachePath(path, home: home.path), "\(path)")
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: path, home: home.path) == path, "\(path)")
+            #expect(!DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: path, home: home.path), "\(path)")
+        }
+
+        let real = home.appendingPathComponent(Self.appSupport, isDirectory: true)
+        try fm.moveItem(at: real, to: elsewhere.appendingPathComponent("moved", isDirectory: true))
+        try fm.createSymbolicLink(at: real, withDestinationURL: elsewhere.appendingPathComponent("moved", isDirectory: true))
+        for path in found {
+            #expect(fm.fileExists(atPath: path), "\(path)")
+            #expect(DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: path, home: home.path), "\(path)")
+        }
+    }
+
+    /// The same for a Chromium data folder outside Application Support, where
+    /// the rule also allows what is inside a cache folder.
+    @Test
+    func everyDiscoveredChromiumUserDataCacheIsGuarded() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let userData = home.appendingPathComponent(Self.profile, isDirectory: true)
+        try Self.makeChromiumDataFolder(userData, profile: "Default")
+
+        let found = CacheDiscoveryPaths.chromiumUserDataCacheURLs(userData: userData).map(\.path)
+        #expect(found.count == CacheDiscoveryPaths.applicationSupportDirectCacheNames.count
+            + CacheDiscoveryPaths.chromiumProfileCacheNames.count)
+        for path in found {
+            for inside in [path, "\(path)/data_0", "\(path)/js/index-dir/the-real-index"] {
+                #expect(DeletionSafetyPolicy.isWhitelistedChromiumUserDataCachePath(inside, home: home.path), "\(inside)")
+                #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: inside, home: home.path) == path, "\(inside)")
+                #expect(!DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: inside, home: home.path), "\(inside)")
+            }
+        }
+
+        let gemini = home.appendingPathComponent(".gemini", isDirectory: true)
+        try fm.moveItem(at: gemini, to: elsewhere.appendingPathComponent("moved", isDirectory: true))
+        try fm.createSymbolicLink(at: gemini, withDestinationURL: elsewhere.appendingPathComponent("moved", isDirectory: true))
+        for path in found {
+            #expect(fm.fileExists(atPath: path), "\(path)")
+            #expect(DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: path, home: home.path), "\(path)")
+            #expect(DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: "\(path)/data_0", home: home.path), "\(path)")
+        }
+    }
+
+    /// A Chromium data folder with every cache folder the scan looks for, and
+    /// the same in one profile when `profile` is given.
+    private static func makeChromiumDataFolder(_ folder: URL, profile: String? = nil) throws {
+        func makeCaches(_ names: Set<String>, in parent: URL) throws {
+            for name in names {
+                let cache = parent.appendingPathComponent(name, isDirectory: true)
+                try makeFolder(name == "Cache" ? cache.appendingPathComponent("Cache_Data", isDirectory: true) : cache)
+            }
+        }
+        try makeFolder(folder)
+        try Data("{}".utf8).write(to: folder.appendingPathComponent("Local State"))
+        try makeCaches(CacheDiscoveryPaths.applicationSupportDirectCacheNames, in: folder)
+        if let profile {
+            try makeCaches(CacheDiscoveryPaths.chromiumProfileCacheNames, in: folder.appendingPathComponent(profile, isDirectory: true))
+        }
+    }
+
+    /// A link above the row: the move would take the folder behind it.
+    @Test(arguments: [
+        ("Library", "\(appSupport)/Foo/Cache"),
+        (appSupport, "\(appSupport)/Foo/Code Cache"),
+        ("\(appSupport)/Foo", "\(appSupport)/Foo/GPUCache"),
+        ("\(appSupport)/Foo/Crashpad", "\(appSupport)/Foo/Crashpad/completed"),
+        ("\(appSupport)/Foo/web", "\(appSupport)/Foo/web/Crashpad/pending"),
+        ("\(appSupport)/Foo/User Data", "\(appSupport)/Foo/User Data/GPUCache"),
+        ("\(appSupport)/Foo/User Data/Default", "\(appSupport)/Foo/User Data/Default/Code Cache"),
+        ("\(appSupport)/Google/Chrome Beta", "\(appSupport)/Google/Chrome Beta/Default/Cache"),
+        (".gemini", "\(profile)/GPUCache"),
+        (profile, "\(profile)/Default/Cache"),
+        ("\(profile)/Default", "\(profile)/Default/Cache/Cache_Data"),
+        ("Library/Containers", container),
+        ("Library/Containers/com.example.app", container),
+        ("Library/Containers/com.example.app/Data", "\(container)/com.example.app"),
+        ("Library/Containers/com.example.app/Data/Library", "\(container)/com.example.app"),
+        ("Library/Group Containers", "\(telegram)/stable/account-1/postbox/media"),
+        (telegram, "\(telegram)/stable/account-1/postbox/media"),
+        ("\(telegram)/stable/account-1", "\(telegram)/stable/account-1/postbox/media"),
+        ("\(telegram)/stable/account-1/postbox", "\(telegram)/stable/account-1/postbox/media/photo.jpg"),
+        (".gem", ".gem/ruby/3.3.0/cache"),
+        (".gem/ruby", ".gem/ruby/3.3.0/cache"),
+        (".gem/ruby/3.3.0", ".gem/ruby/3.3.0/cache/rake-13.0.6.gem"),
+        ("Downloads", "Downloads/movie.mkv.crdownload"),
+        ("Downloads", "Downloads/Big.dmg.download"),
+        ("\(appSupport)/Code", "\(appSupport)/Code/User/workspaceStorage/0a1b2c3d"),
+        ("\(appSupport)/Code/User", "\(appSupport)/Code/User/workspaceStorage/0a1b2c3d"),
+        ("\(appSupport)/Cursor/User/workspaceStorage", "\(appSupport)/Cursor/User/workspaceStorage/4e5f6a7b"),
+        (".local", ".local/share/claude/versions/2.0.1"),
+        (".local/share", ".local/share/cursor-agent/versions/2026.01.02-abc"),
+        (".local/share/claude", ".local/share/claude/versions/2.0.1"),
+        (".local/share/claude/versions", ".local/share/claude/versions/2.0.1/claude"),
+        ("\(appSupport)/Cursor/User/globalStorage", "\(workerVersions)/2026.01.02-abc"),
+        (".grok", ".grok/downloads/grok-1.0.13"),
+        (".grok/downloads", ".grok/downloads/grok-1.0.13"),
+        (".gradle", ".gradle/daemon/8.10.2"),
+        (".gradle/daemon", ".gradle/daemon/8.10.2"),
+        (".gradle", ".gradle/.tmp"),
+    ])
+    func aLinkedFolderAboveTheRowRefusesIt(link: String, row: String) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        // A row no link leads to, in the same home.
+        let other = link.hasPrefix(".gem") ? "Downloads/other.iso.part" : ".gem/ruby/3.3.0/cache"
+        try Self.makeFolder(home.appendingPathComponent(other, isDirectory: true))
+        try Self.link(link, above: row, home: home, elsewhere: elsewhere)
+        #expect(Self.refuses(row, home: home))
+        #expect(Self.refuses(row, home: home, reuseRecentRead: true))
+        #expect(!Self.refuses(other, home: home))
+    }
+
+    /// The folder the rule names is itself a link. Its own row would only move
+    /// the link, and a row inside it would take what is behind.
+    @Test(arguments: [
+        ("\(appSupport)/Foo/Cache", "\(appSupport)/Foo/Cache", false),
+        ("\(appSupport)/Foo/Crashpad/completed", "\(appSupport)/Foo/Crashpad/completed", false),
+        ("\(profile)/Default/Cache", "\(profile)/Default/Cache", true),
+        (container, container, true),
+        ("\(telegram)/stable/account-1/postbox/media", "\(telegram)/stable/account-1/postbox/media", true),
+        (".gem/ruby/3.3.0/cache", ".gem/ruby/3.3.0/cache", true),
+        ("Downloads/Big.dmg.download", "Downloads/Big.dmg.download", true),
+        ("Downloads/movie.mkv.crdownload", "Downloads/movie.mkv.crdownload", false),
+        ("\(appSupport)/Code/User/workspaceStorage/0a1b2c3d", "\(appSupport)/Code/User/workspaceStorage/0a1b2c3d", false),
+        (".local/share/claude/versions/2.0.1", ".local/share/claude/versions/2.0.1", true),
+        (".grok/downloads/grok-1.0.13", ".grok/downloads/grok-1.0.13", false),
+        (".gradle/daemon/8.10.2", ".gradle/daemon/8.10.2", false),
+    ])
+    func aLinkedNamedFolderRefusesItsRows(folder: String, row: String, allowsInside: Bool) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.link(folder, above: "\(folder)/inner", home: home, elsewhere: elsewhere)
+        #expect(Self.refuses(row, home: home))
+        if allowsInside {
+            #expect(Self.refuses("\(row)/inner", home: home))
+            #expect(Self.refuses("\(row)/inner/deeper", home: home))
+        }
+    }
+
+    /// A link between the named folder and the row sends the move elsewhere. A
+    /// row whose own last part is the link moves as a link, as before.
+    @Test(arguments: [
+        ("\(container)/com.example.app", "\(container)/com.example.app/fsCachedData", "\(container)/other"),
+        ("\(telegram)/stable/account-1/postbox/media/cache", "\(telegram)/stable/account-1/postbox/media/cache/a.jpg",
+         "\(telegram)/stable/account-1/postbox/media/photo.jpg"),
+        (".gem/ruby/3.3.0/cache/old", ".gem/ruby/3.3.0/cache/old/rake-13.0.6.gem", ".gem/ruby/3.3.0/cache/rake-13.0.6.gem"),
+        ("Downloads/Big.dmg.download/parts", "Downloads/Big.dmg.download/parts/1", "Downloads/Big.dmg.download/Info.plist"),
+        (".local/share/claude/versions/2.0.1/lib", ".local/share/claude/versions/2.0.1/lib/a", ".local/share/claude/versions/2.0.0"),
+        ("\(profile)/Default/Cache/Cache_Data", "\(profile)/Default/Cache/Cache_Data/f_0001", "\(profile)/Default/Cache/index"),
+    ])
+    func aLinkInsideTheNamedFolderOnlyRefusesWhatIsBehindIt(link: String, behind: String, sibling: String) throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(home.appendingPathComponent(sibling, isDirectory: true))
+        try Self.link(link, above: behind, home: home, elsewhere: elsewhere)
+        #expect(Self.refuses(behind, home: home))
+        #expect(!Self.refuses(link, home: home))
+        #expect(!Self.refuses(sibling, home: home))
+        #expect(!Self.refuses((link as NSString).deletingLastPathComponent, home: home))
+    }
+
+    /// Swift joins a `/` and a combining mark after it into one character, and
+    /// the rules split a path by character. The walk finds folders as bytes, so
+    /// a name that starts with such a mark hides no folder above it (#422 review).
+    @Test(arguments: [
+        ("\(appSupport)/Foo", "\u{301}x/Cache"),
+        ("\(container)/Example", "\u{301}report"),
+        ("Library/Containers/com.example.app", "\u{301}x/Data/Library/Caches"),
+        ("\(telegram)/stable/account-1/postbox/media/cache", "\u{301}a.jpg"),
+        (".gem/ruby/3.3.0/cache/old", "\u{301}rake.gem"),
+        ("Downloads/Big.dmg.download/parts", "\u{301}1"),
+        (".local/share/claude/versions/2.0.1/lib", "\u{301}a"),
+        ("\(profile)/Default/Cache/Cache_Data", "\u{301}f_0001"),
+    ])
+    func aNameThatStartsWithACombiningMarkHidesNoFolder(link: String, rest: String) throws {
+        let fm = FileManager.default
+        func refuses(_ home: URL) -> Bool {
+            DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: "\(home.path)/\(link)/\(rest)", home: home.path)
+        }
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        try Self.makeFolder(URL(fileURLWithPath: "\(elsewhere.path)/\(rest)", isDirectory: true))
+        try Self.makeFolder(home.appendingPathComponent(link).deletingLastPathComponent())
+        try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        #expect(fm.fileExists(atPath: "\(home.path)/\(link)/\(rest)"))
+        #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "\(home.path)/\(link)/\(rest)", home: home.path) != nil)
+        #expect(refuses(home))
+
+        // The same names with no link are offered as before.
+        let (plainBase, plainHome, _) = try Self.makeHome()
+        defer { try? fm.removeItem(at: plainBase) }
+        try Self.makeFolder(URL(fileURLWithPath: "\(plainHome.path)/\(link)/\(rest)", isDirectory: true))
+        #expect(!refuses(plainHome))
+    }
+
+    /// A home folder with an accented letter can be spelled two ways. Both are
+    /// the same home to the rules, so both are to the guard.
+    @Test(arguments: [("caf\u{E9}", "cafe\u{301}"), ("cafe\u{301}", "caf\u{E9}")])
+    func aHomeSpelledInAnotherFormIsTheSameHome(onDisk: String, asked: String) throws {
+        let fm = FileManager.default
+        let (base, _, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let home = "\(base.path)/\(onDisk)"
+        let askedHome = "\(base.path)/\(asked)"
+        let rows = [Self.container, "\(Self.container)/com.example.app", "\(Self.appSupport)/Foo/GPUCache", ".gem/ruby/3.3.0/cache"]
+        for row in rows {
+            try Self.makeFolder(URL(fileURLWithPath: "\(home)/\(row)", isDirectory: true))
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "\(askedHome)/\(row)", home: home) != nil, "\(row)")
+            #expect(!DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: "\(askedHome)/\(row)", home: home), "\(row)")
+        }
+        try fm.moveItem(atPath: "\(home)/Library", toPath: elsewhere.appendingPathComponent("Library").path)
+        try fm.createSymbolicLink(atPath: "\(home)/Library", withDestinationPath: elsewhere.appendingPathComponent("Library").path)
+        try fm.moveItem(atPath: "\(home)/.gem", toPath: elsewhere.appendingPathComponent("gem").path)
+        try fm.createSymbolicLink(atPath: "\(home)/.gem", withDestinationPath: elsewhere.appendingPathComponent("gem").path)
+        for row in rows {
+            #expect(DeletionSafetyPolicy.shapeLinkRefusesDeletion(standardizedPath: "\(askedHome)/\(row)", home: home), "\(row)")
+        }
+    }
+
+    /// Every root is plain ASCII, which has one spelling, so comparing bytes
+    /// finds every path a rule matches with `hasPrefix`.
+    @Test
+    func everyRootIsPlainASCII() {
+        #expect(DeletionSafetyPolicy.shapeRuleRoots.count >= 6)
+        for root in DeletionSafetyPolicy.shapeRuleRoots {
+            #expect(root.utf8.allSatisfy { $0 < 0x80 } && root.hasSuffix("/") && !root.hasPrefix("/"), "\(root)")
+        }
+    }
+
+    /// A home with no link offers what it did before, whether or not the
+    /// folders are on disk.
+    @Test(arguments: [true, false])
+    func nothingIsRefusedWithoutALink(foldersExist: Bool) throws {
+        let fm = FileManager.default
+        let (base, home, _) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        for (row, _, _) in Self.rows {
+            if foldersExist, !fm.fileExists(atPath: home.appendingPathComponent(row).path) {
+                try Self.makeFolder(home.appendingPathComponent(row, isDirectory: true))
+            }
+            for path in [row, "\(row)/inner", "\(row)/inner/deeper"] {
+                #expect(!Self.refuses(path, home: home), "\(path)")
+                #expect(!Self.refuses(path, home: home, reuseRecentRead: true), "\(path)")
+            }
+        }
+    }
+
+    /// macOS links `Desktop`, `Downloads` and the rest into every sandboxed
+    /// app's `Data` folder, and `Fonts`, `Mail` and others into its `Library`.
+    /// None is on the way to `Data/Library/Caches`, so they refuse nothing.
+    @Test
+    func theLinksMacOSMakesInAContainerRefuseNothing() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let data = home.appendingPathComponent("Library/Containers/com.example.app/Data", isDirectory: true)
+        try Self.makeFolder(data.appendingPathComponent("Library/Caches/com.example.app/fsCachedData", isDirectory: true))
+        for name in ["Desktop", "Documents", "Downloads", "Movies", "Music", "Pictures",
+                     "Library/Fonts", "Library/Mail", "Library/Keychains", "Library/Audio"] {
+            try fm.createSymbolicLink(at: data.appendingPathComponent(name), withDestinationURL: elsewhere)
+        }
+        for path in [Self.container, "\(Self.container)/com.example.app", "\(Self.container)/com.example.app/fsCachedData"] {
+            #expect(!Self.refuses(path, home: home), "\(path)")
+        }
+    }
+
+    /// The on-screen filter may answer from a read of the last few seconds. A
+    /// move never does.
+    @Test
+    func onlyTheOnScreenFilterReusesARecentRead() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        let data = home.appendingPathComponent("Library/Containers/com.example.app/Data", isDirectory: true)
+        try Self.makeFolder(data.appendingPathComponent("Library/Caches/com.example.app", isDirectory: true))
+        try Self.makeFolder(elsewhere.appendingPathComponent("Library/Caches/com.example.app", isDirectory: true))
+        let row = "\(Self.container)/com.example.app"
+        #expect(!Self.refuses(row, home: home, reuseRecentRead: true))
+        try fm.removeItem(at: data)
+        try fm.createSymbolicLink(at: data, withDestinationURL: elsewhere)
+        #expect(Self.refuses(row, home: home))
+        #expect(!Self.refuses(row, home: home, reuseRecentRead: true))
+    }
+
+    /// The guard answers only for the nine shape rules. Allowlist entries have
+    /// their own guard, the rules that check links themselves are left to
+    /// them, and a project on a linked drive still cleans (#190).
+    @Test
+    func otherPathsAreLeftAlone() throws {
+        let fm = FileManager.default
+        let (base, home, elsewhere) = try Self.makeHome()
+        defer { try? fm.removeItem(at: base) }
+        for link in ["Library", "Developer", "Downloads", ".gem", ".gradle", ".local", ".npm", ".cursor", ".nvm", "go"] {
+            try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
+        }
+        for path in [
+            // Allowlist entries.
+            "Library/Caches/com.example.app", "Library/Logs/Example", ".npm/_cacache", ".gem/specs", ".gradle/caches",
+            "Library/Containers/com.apple.mail/Data/Library/Mail Downloads", "\(Self.appSupport)/Adobe/Common/Media Cache",
+            // Rules with their own link checks.
+            "\(Self.appSupport)/Figma/DesktopProfile/v43", "Library/Caches/ms-playwright/chromium-1187", "go/pkg/mod",
+            ".nvm/versions/node/v20.11.0", ".cursor/projects/tmp-1", ".cursor/worktrees/app/a1b2",
+            // Projects.
+            "Developer/app/node_modules", "Developer/app/.gradle", "Developer/app/build",
+            // Next to a shape, never one.
+            "Library", Self.appSupport, "\(Self.appSupport)/Foo", "\(Self.appSupport)/Foo/Preferences",
+            "\(Self.appSupport)/Foo/Cache/Cache_Data", "\(Self.appSupport)/Foo/Crashpad", "\(Self.appSupport)/Foo/Crashpad/new",
+            "\(Self.appSupport)/Code/User/workspaceStorage", "\(Self.appSupport)/Code/User/workspaceStorage/0a1b2c3d/state.vscdb",
+            "Library/Containers/com.example.app/Data/Documents", "Library/Containers/com.example.app/Data/Library/Preferences",
+            "\(Self.telegram)/stable/account-1/postbox", "\(Self.telegram)/stable/account-1/postbox/db",
+            ".gem/ruby/3.3.0/gems", ".gem/ruby/3.3.0", "Downloads", "Downloads/report.pdf", "Downloads/Notes.part/a.txt",
+            ".local/share/claude", ".local/share/claude/versions", ".local/bin/claude", ".local/share/uv",
+            ".grok/downloads/manifest.json", ".gradle", ".gradle/jdks", ".gradle/daemon", ".gradle/daemon/CACHEDIR.TAG", "",
+        ] {
+            #expect(DeletionSafetyPolicy.shapeMatchedFolder(containing: "\(home.path)/\(path)", home: home.path) == nil, "\(path)")
+            #expect(!Self.refuses(path, home: home), "\(path)")
+        }
+        #expect(!DeletionSafetyPolicy.shapeLinkRefusesDeletion(elsewhere.appendingPathComponent(Self.container), home: home.path))
+        #expect(!DeletionSafetyPolicy.shapeLinkRefusesDeletion(URL(fileURLWithPath: "/Library/Caches/a"), home: home.path))
+    }
+}
+
 // MARK: - The list itself
 
 @Suite("Allowlist audit: one entry per place")

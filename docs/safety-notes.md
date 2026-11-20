@@ -11,6 +11,78 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-20: Shape-matched cache rows followed a link to another folder
+
+**Found internally** while fixing [#422](https://github.com/jithin-sabu/purge-app/issues/422) ([#424](https://github.com/jithin-sabu/purge-app/issues/424)), no report. **Fixed:** [#425](https://github.com/jithin-sabu/purge-app/pull/425), not shipped yet. **Affected:** v1.1.2 to v1.16.2.
+
+### What happened
+
+The fix for #422 covered the entries in the allowlist. Nine rules allow a path
+by its shape and have no entry, so they kept the same gap: Application Support
+caches, Chromium caches in `~/.gemini`, container caches, Telegram media, gem
+downloads, unfinished downloads, editor workspace storage, old CLI versions and
+Gradle's daemon logs. Each compares path text and never checked whether a
+folder on the way was a link.
+
+If an app's `Crashpad` folder in Application Support was a link to
+`~/Documents`, the row named `Crashpad/completed`, the name matched, and the
+move took `~/Documents/completed`. A container whose `Data` folder was a link,
+a linked `~/.gem`, or VS Code's `User` folder kept in a dotfiles folder did the
+same: the scan listed rows through the link and the move took what was behind
+it.
+
+Where the scan lists a folder itself, as it does `~/Downloads` and
+`Application Support`, a link there gave no rows. The gate still allowed the
+path by its text, so a link made after the scan was followed.
+
+Gradle's daemon logs and temp folder were the one group already safe:
+`gradleLeftoverRefusesDeletion` asks for real folders at every step.
+
+### Who was affected
+
+Nobody reported a loss. It took a link on the way to a row, and macOS makes
+none there. The links it puts in every app container (`Data/Desktop`,
+`Data/Library/Fonts` and the rest) are not on the way to `Data/Library/Caches`:
+on the Mac this was checked on, all 788 containers had a real `Data`,
+`Data/Library` and `Data/Library/Caches`. A link of the user's own usually led
+to the real cache on another drive. Anything moved went to the Trash and could
+be put back.
+
+### What changed
+
+`DeletionSafetyPolicy.shapeLinkRefusesDeletion` refuses a path one of the nine
+rules can allow when the folder the rule names, or any folder above the path up
+to home, is a link. `shapeMatchedFolder` finds that folder by text: the cache
+folder, a container's `Caches`, Telegram's `media`, a gem `cache` folder, or
+the entry itself for a download, a workspace or a CLI version.
+`isOfferedForCleanup` asks it outside its saved answers, next to the allowlist
+guard, so the scan drops the row and `FileDeleter` refuses the move even when
+the link appeared after the scan.
+
+A link lower down refuses nothing, because it moves to the Trash as a link.
+Telegram's `media` folder is emptied entry by entry and never moved, so it is
+refused when it is a link itself. Folders above a row are found as bytes, as
+in #423, so a name that starts with a combining mark hides none of them.
+
+A Mac with a link on the way to one of these rows no longer gets that row. The
+issue lists them. Nothing changes for unfinished downloads or Gradle, which
+were not offered through a link before.
+
+### What would have caught it earlier
+
+The #422 fixture, run for the rules that have no allowlist entry.
+`ShapeLinkTests` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+builds a temporary home and checks each rule with a folder above the row
+linked, the named folder linked, a link inside it and nothing linked.
+`everyDiscoveredApplicationSupportCacheIsGuarded` and
+`everyDiscoveredChromiumUserDataCacheIsGuarded` fail if the scan lists a cache
+the guard does not read, and `everyPathATextRuleAllowsIsGuarded` fails if a
+text rule allows a path the guard has no folder for.
+`theLinksMacOSMakesInAContainerRefuseNothing` keeps the guard off a normal Mac.
+`aNameThatStartsWithACombiningMarkHidesNoFolder` checks the byte walk for each
+rule.
+
 ## 2026-11-19: Allowlisted rows followed a link to another folder
 
 **Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** [#423](https://github.com/jithin-sabu/purge-app/pull/423), not shipped yet. **Affected:** v1.1.0 to v1.16.2.

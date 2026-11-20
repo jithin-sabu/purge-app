@@ -519,6 +519,8 @@ enum DeletionSafetyPolicy {
         // the scan (#420, #422). Same split as Playwright: the on-screen filter may
         // reuse a read from the last few seconds, and a move reads the disk again.
         if allowlistLinkRefusesDeletion(standardizedPath: key, reuseRecentRead: Thread.isMainThread) { return false }
+        // The rules that allow a path by its shape compare text too (#424).
+        if shapeLinkRefusesDeletion(standardizedPath: key, reuseRecentRead: Thread.isMainThread) { return false }
         if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
@@ -698,7 +700,25 @@ enum DeletionSafetyPolicy {
         // The lowest folder that has to be real: the row itself when it is the
         // entry or is emptied entry by entry, else the folder the row sits in.
         let contentsOnly = home == cachedHomePath ? cachedContentsOnlyPrefixes : contentsOnlyPrefixes(home: home)
-        let folder = path == entry || contentsOnly.contains(path) ? path : PathContainment.parentFolder(of: path)
+        return rowReachesThroughLink(
+            path,
+            readsRowItself: path == entry || contentsOnly.contains(path),
+            home: home,
+            reuseRecentRead: reuseRecentRead
+        )
+    }
+
+    /// The walk both link guards share. `readsRowItself` is true for a row that
+    /// is the folder its rule names, an allowlist entry or the folder a shape
+    /// rule matched, and for a folder emptied entry by entry. Any other row
+    /// may be a link itself, so the walk stops at the folder it sits in.
+    private nonisolated static func rowReachesThroughLink(
+        _ path: String,
+        readsRowItself: Bool,
+        home: String,
+        reuseRecentRead: Bool
+    ) -> Bool {
+        let folder = readsRowItself ? path : PathContainment.parentFolder(of: path)
         guard reuseRecentRead else { return PathContainment.reachesThroughLink(folder, home: home) }
 
         let now = ProcessInfo.processInfo.systemUptime
@@ -714,6 +734,204 @@ enum DeletionSafetyPolicy {
         recentLinkReadsLock.unlock()
         return refuses
     }
+
+    // MARK: - Shape-matched rows reached through a link (#424)
+
+    /// The folders the shape rules below look in, relative to home and ending
+    /// in `/`. A path under none of them matches none of the rules. The stores
+    /// come from their own lists, so a new one is covered when it is added.
+    nonisolated static let shapeRuleRoots: [String] = [
+        "Library/Application Support/",
+        "Library/Containers/",
+        "\(CacheDiscoveryPaths.telegramGroupContainerRelative)/",
+        "Downloads/",
+        ".gem/ruby/",
+        ".gradle/"
+    ]
+        + chromiumUserDataStores.map { "\($0.relative)/" }
+        + cliVersionStores.map { "\($0.versions)/" }
+        + EditorWorkspaceStoragePolicy.relativeRoots.map { "\($0.relative)/" }
+
+    /// `shapeRuleRoots` by their first folder, so a row in `~/Library/Caches` or
+    /// in a project costs one lookup and three comparisons. A root inside
+    /// another is left out.
+    private nonisolated static let shapeRuleRootsByFirstFolder: [Substring: [String]] = {
+        var index: [Substring: [String]] = [:]
+        for root in shapeRuleRoots where !shapeRuleRoots.contains(where: { $0 != root && root.hasPrefix($0) }) {
+            index[Substring(String(firstFolder(of: root[...]))), default: []].append(root)
+        }
+        return index
+    }()
+
+    /// Every name an Application Support cache row can end in: the cache names
+    /// `CacheDiscoveryPaths.isApplicationSupportCachePath` accepts. Crash report
+    /// folders are matched by their last two names, and the fixed paths in
+    /// `applicationSupportRelativeCachePaths` whole.
+    private nonisolated static let applicationSupportCacheFolderNames: Set<String> =
+        CacheDiscoveryPaths.applicationSupportDirectCacheNames.union(CacheDiscoveryPaths.chromiumProfileCacheNames)
+
+    /// `path` when it could be a row of `isWhitelistedApplicationSupportCachePath`,
+    /// by its names alone. That rule reads the disk and allows only the cache or
+    /// crash report folder itself, never a path inside one, so the row is the
+    /// folder the rule names. Wider than the rule on purpose: it never reads.
+    private nonisolated static func applicationSupportCacheFolder(_ path: String, home: String) -> String? {
+        let prefix = "\(home)/Library/Application Support/"
+        guard path.hasPrefix(prefix) else { return nil }
+        // Split as the rule splits it: the app's folder, then the names it judges.
+        let parts = path.dropFirst(prefix.count).split(separator: "/")
+        guard parts.count >= 2, let name = parts.last else { return nil }
+        if applicationSupportCacheFolderNames.contains(String(name)) { return path }
+        if CacheDiscoveryPaths.applicationSupportRelativeCachePaths.contains(parts.dropFirst().joined(separator: "/")) {
+            return path
+        }
+        let isReportFolder = name == CacheDiscoveryPaths.crashpadCompletedName || name == CacheDiscoveryPaths.crashpadPendingName
+        return isReportFolder && parts[parts.count - 2] == CacheDiscoveryPaths.crashpadFolderName ? path : nil
+    }
+
+    /// The cache folder `isWhitelistedChromiumUserDataCachePath` could allow
+    /// `path` for, by its names alone: `<root>/<cache>`, else
+    /// `<root>/<profile>/<cache>`.
+    private nonisolated static func chromiumUserDataCacheFolder(_ path: String, home: String) -> String? {
+        for root in chromiumUserDataRoots(home: home) {
+            guard PathContainment.isInside(path, root) else { continue }
+            let parts = path.dropFirst(root.count + 1).split(separator: "/", maxSplits: 2)
+            guard let first = parts.first else { return nil }
+            if parts.count == 1 || CacheDiscoveryPaths.applicationSupportDirectCacheNames.contains(String(first)) {
+                return "\(root)/\(first)"
+            }
+            return "\(root)/\(first)/\(parts[1])"
+        }
+        return nil
+    }
+
+    /// `path` cut after its first `count` names below `prefix`, which it starts with.
+    private nonisolated static func firstNames(_ count: Int, of path: String, below prefix: String) -> String {
+        prefix + path.dropFirst(prefix.count).split(separator: "/").prefix(count).joined(separator: "/")
+    }
+
+    /// Whether `path` is under one of `shapeRuleRoots`. The cheap test every row
+    /// gets: no other path can match a shape rule. Compared as bytes, like
+    /// `allowlistEntry`. The roots are plain ASCII, so this finds every path a
+    /// rule matches with `hasPrefix`.
+    private nonisolated static func isUnderShapeRuleRoot(_ path: String, home: String) -> Bool {
+        guard let below = pathBelowHome(path, home: home) else { return false }
+        let bytes = below.utf8
+        return shapeRuleRootsByFirstFolder[firstFolder(of: below)]?.contains { bytes.starts(with: $0.utf8) } == true
+    }
+
+    /// The folder a shape rule in `evaluate` names for `path`, by text alone.
+    /// Nil for a path none of these rules can allow.
+    ///
+    /// | Rule | Folder |
+    /// | --- | --- |
+    /// | `isWhitelistedApplicationSupportCachePath` | the cache or crash report folder, which is the row |
+    /// | `isWhitelistedChromiumUserDataCachePath` | the cache folder |
+    /// | `isWhitelistedContainerCachePath` | `Containers/<id>/Data/Library/Caches` |
+    /// | `isWhitelistedTelegramMediaCachePath` | `account-*/postbox/media` |
+    /// | `isWhitelistedGemDownloadCachePath` | `~/.gem/ruby/<version>/cache` |
+    /// | `isWhitelistedUnfinishedDownloadPath` | the entry in `~/Downloads` |
+    /// | `isWhitelistedEditorWorkspaceStorageEntry` | the entry in `workspaceStorage` |
+    /// | `isWhitelistedOldCLIVersionPath` | the version entry |
+    /// | `gradleLeftover` | the folder |
+    ///
+    /// The first two rules read the disk, so they are matched here by their
+    /// names. The rest are text and are asked themselves.
+    ///
+    /// The folder is found the way the rules split a path, by character. That
+    /// only decides whether the row is the named folder. The folders above the
+    /// row are found as bytes by the walk (`PathContainment.parentFolder`), so
+    /// a name that starts with a combining mark hides none of them.
+    nonisolated static func shapeMatchedFolder(containing path: String, home: String = cachedHomePath) -> String? {
+        guard isUnderShapeRuleRoot(path, home: home) else { return nil }
+        if let folder = applicationSupportCacheFolder(path, home: home) { return folder }
+        if let folder = chromiumUserDataCacheFolder(path, home: home) { return folder }
+        if isWhitelistedContainerCachePath(path, home: home) {
+            return firstNames(4, of: path, below: "\(home)/Library/Containers/")
+        }
+        if let parts = telegramGroupContainerRelativeParts(path, home: home),
+           let start = telegramMediaSuffixStart(parts) {
+            return firstNames(start + 3, of: path, below: "\(home)/\(CacheDiscoveryPaths.telegramGroupContainerRelative)/")
+        }
+        if isWhitelistedGemDownloadCachePath(path, home: home) {
+            return firstNames(2, of: path, below: "\(home)/.gem/ruby/")
+        }
+        if isWhitelistedUnfinishedDownloadPath(path, home: home) {
+            return firstNames(1, of: path, below: "\(home)/Downloads/")
+        }
+        if isWhitelistedEditorWorkspaceStorageEntry(path, home: home) { return path }
+        if let match = cliVersion(containing: path, home: home) { return "\(match.versionsRoot)/\(match.version)" }
+        if gradleLeftover(at: path, home: home) != nil { return path }
+        return nil
+    }
+
+    /// The rules in `evaluate` that allow a path by its shape compare path text,
+    /// like the allowlist. If an app's `Crashpad` folder were a link to
+    /// `~/Documents`, the row would name `Crashpad/completed` while the move
+    /// took `~/Documents/completed` (#424). A path one of the rules in
+    /// `shapeMatchedFolder` can allow is refused when the folder the rule
+    /// names, or any folder above the path up to home, is a link.
+    ///
+    /// Not refused: a link below that. The last part of a path inside the named
+    /// folder moves to the Trash as a link, like an entry in Telegram's `media`
+    /// or a child of a container's `Caches`. `media` itself is emptied entry by
+    /// entry and never moved, so as a link it is refused.
+    ///
+    /// The links macOS makes in every app container (`Data/Desktop`,
+    /// `Data/Library/Fonts` and the rest) are not on the way to
+    /// `Data/Library/Caches`, so a Mac with no link of the user's own is offered
+    /// what it was.
+    ///
+    /// `isOfferedForCleanup` asks this for every row on each scan flush, on the
+    /// main thread. A path under none of `shapeRuleRoots` costs a dictionary
+    /// lookup and reads nothing. Finding the named folder of a path that is
+    /// under one costs more than the `lstat` walk does, so `reuseRecentRead`
+    /// keeps the answer for the path itself, for `linkReadLifetime` seconds.
+    /// Only the on-screen filter passes it. A move always reads again.
+    nonisolated static func shapeLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        shapeLinkRefusesDeletion(standardizedPath: url.standardizedFileURL.path, home: home)
+    }
+
+    nonisolated static func shapeLinkRefusesDeletion(
+        standardizedPath path: String,
+        home: String = cachedHomePath,
+        reuseRecentRead: Bool = false
+    ) -> Bool {
+        guard isUnderShapeRuleRoot(path, home: home) else { return false }
+        /// Read from the disk now.
+        func refusesNow() -> Bool? {
+            guard let folder = shapeMatchedFolder(containing: path, home: home) else { return nil }
+            // Telegram's `media` is emptied entry by entry and never moved, so
+            // it can't move as a link. It is the named folder, and is asked
+            // again here so the two can't drift apart.
+            return rowReachesThroughLink(
+                path,
+                readsRowItself: path == folder || isTelegramMediaCacheDirectory(path, home: home),
+                home: home,
+                reuseRecentRead: false
+            )
+        }
+        guard reuseRecentRead else { return refusesNow() ?? false }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        recentLinkReadsLock.lock()
+        let recent = recentShapeAnswers[path]
+        recentLinkReadsLock.unlock()
+        if let recent, now - recent.at < linkReadLifetime { return recent.refuses }
+
+        // A path no rule matches is kept too. That answer is text alone, so it
+        // never changes.
+        let refuses = refusesNow() ?? false
+        recentLinkReadsLock.lock()
+        if recentShapeAnswers.count >= recentLinkReadsLimit { recentShapeAnswers.removeAll(keepingCapacity: true) }
+        recentShapeAnswers[path] = (now, refuses)
+        recentLinkReadsLock.unlock()
+        return refuses
+    }
+
+    /// Recent answers of `shapeLinkRefusesDeletion`, by the row's own path.
+    /// Kept apart from `recentLinkReads`, whose keys are folders: a row that is
+    /// a link is not refused, while a folder that is a link refuses what is in it.
+    private nonisolated(unsafe) static var recentShapeAnswers: [String: (at: TimeInterval, refuses: Bool)] = [:]
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
     /// Moves on with each clear, so a verdict that started before it is not kept.
