@@ -143,6 +143,10 @@ and the one change it makes that outlasts the app:
   it to release the model sets, the other asks for them back. They run in a
   separate helper, `io.getpurge.assetworker`, started once per call and gone
   after it, so a change in a future macOS crashes that helper and not Purge.
+  When that service refuses or drops the connection, the helper sends the
+  same request once more through Apple's `com.apple.siri.uaf.service`, which
+  passes it on. From macOS 27.3 the first service refuses every app Apple
+  didn't sign, so there each request takes the second route.
   Purge checks that macOS still names each set as expected before sending
   anything, and never sends a release with an empty list, which macOS would
   read as every asset on the Mac.

@@ -535,6 +535,35 @@ struct AppleIntelligenceModelStoreTests {
         #expect(fine.result["assetType"] as? String == "x")
     }
 
+    /// From macOS 27.3 the worker sends a refused request once more through
+    /// siriknowledged. When that fails too, the reply carries the second
+    /// error's domain and code and names the first try somewhere in its text,
+    /// so the row and the lock check read the service's own answer and the
+    /// details include the first try.
+    @Test func aReplyAfterTheSecondServiceReadsAsThatServicesAnswer() {
+        let firstTry = "PurgeFirstTry: com.apple.siri.uaf.subscription.service refused the connection first (NSCocoaErrorDomain 4097)"
+        let locked = AppleIntelligenceWorker.outcome(fromReply: [
+            "ok": false,
+            "error": "com.apple.UnifiedAssetFramework -1: Could not eliminate as there are current locks; \(firstTry)",
+            "errorDomain": "com.apple.UnifiedAssetFramework",
+            "errorCode": -1,
+            "errorSummary": "com.apple.UnifiedAssetFramework -1: Could not eliminate as there are current locks",
+        ])
+        #expect(!locked.isConnectionDrop)
+        #expect(locked.problem == "com.apple.UnifiedAssetFramework -1: Could not eliminate as there are current locks")
+        #expect(locked.detailLine(op: "reset", subject: "a").contains(firstTry))
+
+        let refusedTwice = AppleIntelligenceWorker.outcome(fromReply: [
+            "ok": false,
+            "error": "NSCocoaErrorDomain 4099: x; \(firstTry)",
+            "errorDomain": NSCocoaErrorDomain,
+            "errorCode": 4099,
+            "errorSummary": "NSCocoaErrorDomain 4099: x",
+        ])
+        #expect(refusedTwice.isConnectionDrop)
+        #expect(refusedTwice.problem == String(localized: "macOS's asset service couldn't be reached"))
+    }
+
     /// The row has room for one short reason. The three ways the connection to
     /// the service fails get plain words; any other error keeps its own first
     /// part and drops the userInfo, which is in the details.

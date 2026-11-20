@@ -14,7 +14,6 @@ enum UnifiedAssetCalls {
 
     static let frameworkPath =
         "/System/Library/PrivateFrameworks/UnifiedAssetFramework.framework/UnifiedAssetFramework"
-    static let serviceName = "com.apple.siri.uaf.subscription.service"
 
     static func load() throws {
         guard dlopen(frameworkPath, RTLD_NOW) != nil else {
@@ -78,6 +77,10 @@ enum UnifiedAssetCalls {
     /// Sends one operation to the subscription service and waits for its reply.
     /// `config` carries "Operation" and its arguments. Throws on a missing
     /// interface, a transport error, a timeout, or an error reply.
+    ///
+    /// `AppleIntelligenceModelRoute` picks the service. When the subscription
+    /// service refuses or drops the connection, as it does from macOS 27.3,
+    /// the same request goes out once more through siriknowledged's service.
     static func send(_ config: [String: Any], timeout: TimeInterval) throws {
         try load()
         guard let interfaceClass = NSClassFromString("UAFXPCProxyServiceInterface"),
@@ -89,7 +92,23 @@ enum UnifiedAssetCalls {
             || protocol_getMethodDescription(interface.protocol, selector, false, true).name != nil
         guard described else { throw CallError("the service interface no longer has operationWithConfig:completion:") }
 
-        let connection = NSXPCConnection(machServiceName: serviceName, options: [])
+        do {
+            try AppleIntelligenceModelRoute.send(timeout: timeout) { service, timeout in
+                try send(config, to: service, interface: interface, selector: selector, timeout: timeout)
+            }
+        } catch let failure as AppleIntelligenceModelRoute.SecondTryFailure {
+            // A worker refusal has no domain or code, so the first try joins its text.
+            if let second = failure.error as? CallError {
+                throw CallError("\(second.description); \(failure.firstTry)")
+            }
+            throw failure.withFirstTry
+        }
+    }
+
+    /// One try at one Mach service.
+    private static func send(_ config: [String: Any], to service: String, interface: NSXPCInterface,
+                             selector: Selector, timeout: TimeInterval) throws {
+        let connection = NSXPCConnection(machServiceName: service, options: [])
         connection.remoteObjectInterface = interface
         connection.resume()
 
@@ -115,7 +134,7 @@ enum UnifiedAssetCalls {
         let waited = done.wait(timeout: .now() + timeout)
         connection.invalidate()
         guard waited == .success else {
-            throw CallError("no reply from \(serviceName) in \(Int(timeout)) seconds; the request may still have run")
+            throw CallError("no reply from \(service) in \(Int(timeout)) seconds; the request may still have run")
         }
         if let replyError { throw replyError }
     }
