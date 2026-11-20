@@ -14,9 +14,6 @@ enum UnifiedAssetCalls {
 
     static let frameworkPath =
         "/System/Library/PrivateFrameworks/UnifiedAssetFramework.framework/UnifiedAssetFramework"
-    static let serviceName = "com.apple.siri.uaf.subscription.service"
-    /// siriknowledged's service, which passes each operation on to `serviceName`.
-    static let forwardingServiceName = "com.apple.siri.uaf.service"
 
     static func load() throws {
         guard dlopen(frameworkPath, RTLD_NOW) != nil else {
@@ -81,14 +78,9 @@ enum UnifiedAssetCalls {
     /// `config` carries "Operation" and its arguments. Throws on a missing
     /// interface, a transport error, a timeout, or an error reply.
     ///
-    /// From macOS 27.3 the subscription service takes connections only from
-    /// clients Apple signed and drops Purge's. siriknowledged's service has the
-    /// same interface and passes `operationWithConfig:` on unchanged, so a
-    /// refused request goes out once more through it. Found by pdfux and
-    /// shipped first by RemoveMacAI (github.com/omlahore/RemoveMacAI, MIT,
-    /// its issue 123). Both tries share `timeout`, so the wait is no longer
-    /// than before. An error reply is the service's own answer and a timeout
-    /// may mean the request ran, so neither is sent again.
+    /// `AppleIntelligenceModelRoute` picks the service. When the subscription
+    /// service refuses or drops the connection, as it does from macOS 27.3,
+    /// the same request goes out once more through siriknowledged's service.
     static func send(_ config: [String: Any], timeout: TimeInterval) throws {
         try load()
         guard let interfaceClass = NSClassFromString("UAFXPCProxyServiceInterface"),
@@ -100,36 +92,17 @@ enum UnifiedAssetCalls {
             || protocol_getMethodDescription(interface.protocol, selector, false, true).name != nil
         guard described else { throw CallError("the service interface no longer has operationWithConfig:completion:") }
 
-        let deadline = Date().addingTimeInterval(timeout)
         do {
-            try send(config, to: serviceName, interface: interface, selector: selector, timeout: timeout)
-        } catch {
-            let remaining = deadline.timeIntervalSinceNow
-            guard isRefusedConnection(error), remaining >= 1 else { throw error }
-            let refused = error as NSError
-            let first = "\(serviceName) refused the connection first (\(refused.domain) \(refused.code))"
-            do {
-                try send(config, to: forwardingServiceName, interface: interface, selector: selector, timeout: remaining)
-            } catch let second as CallError {
-                throw CallError("\(second.description); \(first)")
-            } catch {
-                // The second error keeps its domain and code, which Purge reads,
-                // and carries the first in its userInfo for the details.
-                let second = error as NSError
-                var userInfo = second.userInfo
-                userInfo["PurgeFirstTry"] = first
-                throw NSError(domain: second.domain, code: second.code, userInfo: userInfo)
+            try AppleIntelligenceModelRoute.send(timeout: timeout) { service, timeout in
+                try send(config, to: service, interface: interface, selector: selector, timeout: timeout)
             }
+        } catch let failure as AppleIntelligenceModelRoute.SecondTryFailure {
+            // A worker refusal has no domain or code, so the first try joins its text.
+            if let second = failure.error as? CallError {
+                throw CallError("\(second.description); \(failure.firstTry)")
+            }
+            throw failure.withFirstTry
         }
-    }
-
-    /// Whether `error` says the connection was dropped or never made, rather
-    /// than the service answering or the wait running out.
-    static func isRefusedConnection(_ error: Error) -> Bool {
-        guard !(error is CallError) else { return false }
-        let nsError = error as NSError
-        return nsError.domain == NSCocoaErrorDomain
-            && (nsError.code == NSXPCConnectionInterrupted || nsError.code == NSXPCConnectionInvalid)
     }
 
     /// One try at one Mach service.
