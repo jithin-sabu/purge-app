@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-19: Allowlisted rows followed a link to another folder
 
-**Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** [#423](https://github.com/jithin-sabu/purge-app/pull/423), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+**Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** [#423](https://github.com/jithin-sabu/purge-app/pull/423), shipped in v1.17.0 (2026-11-20). **Affected:** v1.1.0 to v1.16.2.
 
 ### What happened
 
@@ -74,7 +74,7 @@ linked folder that is emptied entry by entry.
 
 ## 2026-11-19: Rows under `~/.cache` followed a link to another folder
 
-**Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** [#421](https://github.com/jithin-sabu/purge-app/pull/421), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+**Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** [#421](https://github.com/jithin-sabu/purge-app/pull/421), shipped in v1.17.0 (2026-11-20). **Affected:** v1.1.0 to v1.16.2.
 
 ### What happened
 
@@ -121,7 +121,7 @@ inside the folder.
 
 ## 2026-11-19: Old manual safety labels outranked Check First
 
-**Found internally** while reviewing contributor PR [#414](https://github.com/jithin-sabu/purge-app/pull/414) ([#415](https://github.com/jithin-sabu/purge-app/issues/415)), no report. **Fixed:** [#416](https://github.com/jithin-sabu/purge-app/pull/416), not shipped yet. **Affected:** every release up to v1.16.2, on Macs where someone set a level by hand in Purge 1.0 or 1.1.
+**Found internally** while reviewing contributor PR [#414](https://github.com/jithin-sabu/purge-app/pull/414) ([#415](https://github.com/jithin-sabu/purge-app/issues/415)), no report. **Fixed:** [#416](https://github.com/jithin-sabu/purge-app/pull/416), shipped in v1.17.0 (2026-11-20). **Affected:** every release up to v1.16.2, on Macs where someone set a level by hand in Purge 1.0 or 1.1.
 
 ### What happened
 
@@ -170,7 +170,7 @@ kept that empty result.
 
 ## 2026-11-17: Large Files offered single Ollama blobs from a store Purge didn't know
 
-**Found internally** while testing [#318](https://github.com/jithin-sabu/purge-app/issues/318) ([#395](https://github.com/jithin-sabu/purge-app/issues/395)), no report. **Fixed:** [#396](https://github.com/jithin-sabu/purge-app/pull/396), not shipped yet. **Affected:** every release up to v1.16.2.
+**Found internally** while testing [#318](https://github.com/jithin-sabu/purge-app/issues/318) ([#395](https://github.com/jithin-sabu/purge-app/issues/395)), no report. **Fixed:** [#396](https://github.com/jithin-sabu/purge-app/pull/396), shipped in v1.17.0 (2026-11-20). **Affected:** every release up to v1.16.2.
 
 ### What happened
 
