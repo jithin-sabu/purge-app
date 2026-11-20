@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-20: Shape-matched cache rows followed a link to another folder
 
-**Found internally** while fixing [#422](https://github.com/jithin-sabu/purge-app/issues/422) ([#424](https://github.com/jithin-sabu/purge-app/issues/424)), no report. **Fixed:** not shipped yet. **Affected:** v1.1.2 to v1.16.2.
+**Found internally** while fixing [#422](https://github.com/jithin-sabu/purge-app/issues/422) ([#424](https://github.com/jithin-sabu/purge-app/issues/424)), no report. **Fixed:** [#425](https://github.com/jithin-sabu/purge-app/pull/425), not shipped yet. **Affected:** v1.1.2 to v1.16.2.
 
 ### What happened
 
