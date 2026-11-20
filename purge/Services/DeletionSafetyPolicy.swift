@@ -459,7 +459,7 @@ enum DeletionSafetyPolicy {
             // session loads its packages from here, and `bin` holds downloaded tools.
             // `~/.local/share/opencode` holds sessions, snapshots and `auth.json`, and
             // `~/.config/opencode` the settings. Neither is listed. Refused when
-            // reached through a link; see `dotCacheLinkRefusesDeletion`.
+            // reached through a link; see `allowlistLinkRefusesDeletion`.
             "\(home)/.cache/opencode",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
@@ -515,10 +515,10 @@ enum DeletionSafetyPolicy {
         // The Go module cache is moved whole only while it still holds nothing
         // but modules. Same split as Playwright: a move reads the folder again.
         if GoModuleCacheScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
-        // `~/.cache` or a cache folder in it can become a link after the scan (#420).
-        if dotCacheLinkRefusesDeletion(standardizedPath: key) { return false }
-        // Recheck before a move in case the prek store was redirected since the scan.
-        if prekStoreLinkRefusesDeletion(url) { return false }
+        // An allowlisted folder, or a folder above the row, can become a link after
+        // the scan (#420, #422). Same split as Playwright: the on-screen filter may
+        // reuse a read from the last few seconds, and a move reads the disk again.
+        if allowlistLinkRefusesDeletion(standardizedPath: key, reuseRecentRead: Thread.isMainThread) { return false }
         if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
@@ -550,12 +550,12 @@ enum DeletionSafetyPolicy {
         return verdict
     }
 
-    /// The allowlist compares path text, so if `~/.cache/prek` or `~/.cache` were a
-    /// link to `~/Developer`, its `repos`, `tools` and `cache` would be the user's own
-    /// folders. Any link on the way down from home refuses the path.
+    /// `allowlistLinkRefusesDeletion` asked for prek's store alone: `repos`,
+    /// `hooks`, `tools` and `cache` under `~/.cache/prek`.
     nonisolated static func prekStoreLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
-        guard PathContainment.isInside(url.standardizedFileURL.path, "\(home)/.cache/prek") else { return false }
-        return PathContainment.containsSymlinkComponent(url, home: home)
+        let path = url.standardizedFileURL.path
+        guard PathContainment.isInside(path, "\(home)/.cache/prek") else { return false }
+        return allowlistLinkRefusesDeletion(standardizedPath: path, home: home)
     }
 
     /// Installed prek hooks can retain absolute paths to managed Rust tools.
@@ -572,39 +572,147 @@ enum DeletionSafetyPolicy {
         return isExcluded(root.appendingPathComponent("hooks", isDirectory: true))
     }
 
-    /// The allowlist entries under `~/.cache`, taken from the list itself, so a
-    /// new one is covered by `dotCacheLinkRefusesDeletion` the day it is added.
+    /// The allowlist entries under `~/.cache`, taken from the list itself.
     nonisolated static func dotCacheEntries(home: String) -> [String] {
         whitelistedPrefixes(home: home).filter { PathContainment.isInside($0, "\(home)/.cache") }
     }
 
-    /// Prebuilt for `cachedHomePath`, like `cachedWhitelistedPrefixes`.
-    private nonisolated static let cachedDotCacheEntries: [String] = dotCacheEntries(home: cachedHomePath)
-    private nonisolated static let cachedDotCachePrefix = "\(cachedHomePath)/.cache/"
-
-    /// The allowlist compares path text. If `~/.cache`, a cache folder in it, or a
-    /// folder between the two were a link to `~/Developer`, the row would name
-    /// `~/.cache/uv` while the move took `~/Developer/uv` (#420), or
-    /// `~/Developer/opencode`, which could be a clone of that repository. A link anywhere
-    /// from home down to the entry's folder refuses the folder and everything in
-    /// it. Links inside the folder don't count: they move to the Trash as links.
-    ///
-    /// `isOfferedForCleanup` asks this for every row on each scan flush, on the
-    /// main thread, so a path outside `~/.cache` costs one text comparison and
-    /// only an entry's own path is read from disk.
+    /// `allowlistLinkRefusesDeletion` asked for the entries under `~/.cache`
+    /// alone (#420). With `~/.cache` a link to `~/Developer`, the move would take
+    /// `~/Developer/uv`, or `~/Developer/opencode`, which could be a clone of
+    /// that repository.
     nonisolated static func dotCacheLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
-        dotCacheLinkRefusesDeletion(standardizedPath: url.standardizedFileURL.path, home: home)
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix("\(home)/.cache/") else { return false }
+        return allowlistLinkRefusesDeletion(standardizedPath: path, home: home)
     }
 
-    nonisolated static func dotCacheLinkRefusesDeletion(
+    // MARK: - Rows reached through a link (#420, #422)
+
+    /// One allowlist entry, with its path below home.
+    private nonisolated struct AllowlistEntry: Sendable {
+        let path: String
+        let relative: String
+    }
+
+    /// The allowlist's entries by their first folder below home, so a path is
+    /// compared only with the few entries that start the same way.
+    private nonisolated static func allowlistEntriesByFirstFolder(home: String) -> [Substring: [AllowlistEntry]] {
+        var index: [Substring: [AllowlistEntry]] = [:]
+        for path in whitelistedPrefixes(home: home) {
+            guard let below = pathBelowHome(path, home: home) else { continue }
+            index[Substring(String(firstFolder(of: below))), default: []]
+                .append(AllowlistEntry(path: path, relative: String(below)))
+        }
+        return index
+    }
+
+    /// Prebuilt for `cachedHomePath`, like `cachedWhitelistedPrefixes`.
+    private nonisolated static let cachedAllowlistEntriesByFirstFolder = allowlistEntriesByFirstFolder(home: cachedHomePath)
+
+    /// `path` below `home`, without the `/` between them. Nil when `path` is
+    /// home itself or not under it.
+    private nonisolated static func pathBelowHome(_ path: String, home: String) -> Substring? {
+        guard let separator = PathContainment.separatorIndex(after: home, in: path) else { return nil }
+        let below = path[path.utf8.index(after: separator)...]
+        return below.isEmpty ? nil : below
+    }
+
+    /// Up to the first `/` byte. See `PathContainment.separatorIndex` for why
+    /// this is not a search by character.
+    private nonisolated static func firstFolder(of below: Substring) -> Substring {
+        let bytes = below.utf8
+        return below[..<(bytes.firstIndex(of: UInt8(ascii: "/")) ?? bytes.endIndex)]
+    }
+
+    /// The allowlist entry `path` is or sits in, by text alone. Nil for a path no
+    /// entry holds, which other rules judge. Compared as bytes, one folder name at
+    /// a time, so it finds every path `evaluate` matches with `hasPrefix`, and
+    /// also a path whose next name starts with a combining mark.
+    nonisolated static func allowlistEntry(containing path: String, home: String = cachedHomePath) -> String? {
+        guard let below = pathBelowHome(path, home: home) else { return nil }
+        let index = home == cachedHomePath ? cachedAllowlistEntriesByFirstFolder : allowlistEntriesByFirstFolder(home: home)
+        let bytes = below.utf8
+        return index[firstFolder(of: below)]?.first { entry in
+            let relative = entry.relative.utf8
+            guard bytes.starts(with: relative) else { return false }
+            let end = bytes.index(bytes.startIndex, offsetBy: relative.count)
+            return end == bytes.endIndex || bytes[end] == UInt8(ascii: "/")
+        }?.path
+    }
+
+    /// The simulator's UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
+    /// `FileDeleter` hands such a row to `simctl delete` and never moves its path,
+    /// so the link guard below leaves it alone. Both ask here, so the two cannot
+    /// drift apart.
+    nonisolated static func simulatorDeviceUDID(from url: URL) -> String? {
+        let std = url.standardizedFileURL
+        let name = std.lastPathComponent
+        guard UUID(uuidString: name) != nil else { return nil }
+        guard std.deletingLastPathComponent().lastPathComponent == "Devices" else { return nil }
+        guard std.path.contains("CoreSimulator/Devices") else { return nil }
+        return name
+    }
+
+    /// How long `allowlistLinkRefusesDeletion(reuseRecentRead: true)` may answer
+    /// from an earlier read of a folder.
+    nonisolated static let linkReadLifetime: TimeInterval = 10
+    private nonisolated static let recentLinkReadsLimit = 4_000
+    private nonisolated static let recentLinkReadsLock = NSLock()
+    private nonisolated(unsafe) static var recentLinkReads: [String: (at: TimeInterval, refuses: Bool)] = [:]
+
+    /// The allowlist compares path text. If `~/.gradle` were a link to
+    /// `~/Developer`, the row would name `~/.gradle/caches` while the move took
+    /// `~/Developer/caches` (#420 for `~/.cache`, #422 for the rest). A path that
+    /// is the same as or inside an allowlist entry is refused when the entry, or
+    /// any folder above the path up to home, is a link.
+    ///
+    /// Not refused: a link below that. The last part of a path inside an entry
+    /// moves to the Trash as a link, and a link deeper in a folder goes with the
+    /// folder. A simulator device is left alone too, because `simctl` removes it
+    /// by its UDID and its path is never moved.
+    ///
+    /// A folder emptied entry by entry is never moved itself, so it can't move
+    /// as a link. `~/Library/Logs/DiagnosticReports` as a link would be a row for
+    /// another folder, and it is read too.
+    ///
+    /// A folder that can't be read is refused. One that isn't there is not.
+    ///
+    /// `isOfferedForCleanup` asks this for every row on each scan flush, on the
+    /// main thread. A path in no entry costs a dictionary lookup and reads
+    /// nothing. Any other reads each folder above it with `lstat`, about 1 µs for
+    /// a row in `~/Library/Caches`. `reuseRecentRead` lets the answer come from a
+    /// read of the same folder in the last `linkReadLifetime` seconds. Only the
+    /// on-screen filter passes it. A move always reads again.
+    nonisolated static func allowlistLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        allowlistLinkRefusesDeletion(standardizedPath: url.standardizedFileURL.path, home: home)
+    }
+
+    nonisolated static func allowlistLinkRefusesDeletion(
         standardizedPath path: String,
-        home: String = cachedHomePath
+        home: String = cachedHomePath,
+        reuseRecentRead: Bool = false
     ) -> Bool {
-        let isRealHome = home == cachedHomePath
-        guard path.hasPrefix(isRealHome ? cachedDotCachePrefix : "\(home)/.cache/") else { return false }
-        let entries = isRealHome ? cachedDotCacheEntries : dotCacheEntries(home: home)
-        guard let entry = entries.first(where: { PathContainment.isSameOrInside(path, $0) }) else { return false }
-        return PathContainment.containsSymlinkComponent(URL(fileURLWithPath: entry, isDirectory: true), home: home)
+        guard let entry = allowlistEntry(containing: path, home: home) else { return false }
+        if entry.hasSuffix("/Devices"), simulatorDeviceUDID(from: URL(fileURLWithPath: path)) != nil { return false }
+        // The lowest folder that has to be real: the row itself when it is the
+        // entry or is emptied entry by entry, else the folder the row sits in.
+        let contentsOnly = home == cachedHomePath ? cachedContentsOnlyPrefixes : contentsOnlyPrefixes(home: home)
+        let folder = path == entry || contentsOnly.contains(path) ? path : PathContainment.parentFolder(of: path)
+        guard reuseRecentRead else { return PathContainment.reachesThroughLink(folder, home: home) }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        recentLinkReadsLock.lock()
+        let recent = recentLinkReads[folder]
+        recentLinkReadsLock.unlock()
+        if let recent, now - recent.at < linkReadLifetime { return recent.refuses }
+
+        let refuses = PathContainment.reachesThroughLink(folder, home: home)
+        recentLinkReadsLock.lock()
+        if recentLinkReads.count >= recentLinkReadsLimit { recentLinkReads.removeAll(keepingCapacity: true) }
+        recentLinkReads[folder] = (now, refuses)
+        recentLinkReadsLock.unlock()
+        return refuses
     }
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
@@ -690,6 +798,9 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Caches"
         ]
     }
+
+    /// Prebuilt for `cachedHomePath`, like `cachedWhitelistedPrefixes`.
+    private nonisolated static let cachedContentsOnlyPrefixes: [String] = contentsOnlyPrefixes(home: cachedHomePath)
 
     nonisolated static func requiresAdminPrivileges(for url: URL) -> Bool {
         let path = url.standardizedFileURL.path

@@ -11,6 +11,67 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-19: Allowlisted rows followed a link to another folder
+
+**Found internally** while fixing [#420](https://github.com/jithin-sabu/purge-app/issues/420) ([#422](https://github.com/jithin-sabu/purge-app/issues/422)), no report. **Fixed:** [#423](https://github.com/jithin-sabu/purge-app/pull/423), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
+
+### What happened
+
+The fix for #420 covered the allowlist entries under `~/.cache`. Every other
+entry had the same gap. The allowlist compares path text, and never checked
+whether a folder on the way was a link.
+
+If `~/.gradle` was a link to `~/Developer`, the row named `~/.gradle/caches`,
+the text matched, and the move took `~/Developer/caches`. The same held for a
+row inside an entry, such as `~/.npm/_cacache` with `~/.npm` linked, or a
+JetBrains cache with `~/Library/Caches/JetBrains` linked.
+
+Many of these rows are Safe to Clean, so Clean Safe Items or a scheduled clean
+could have moved the folder behind the link without asking.
+
+An entry that was itself a link, and its own row, did less harm: the move took
+only the link. The row was still wrong. Nothing was freed, and the tool made a
+new folder on the startup disk.
+
+### Who was affected
+
+Nobody reported a loss. It took a tool folder linked to a place that held a
+folder named like a cache: `caches`, `repository`, `registry`, `pkgs`. The
+common setup, a tool folder linked to another drive, moved the cache the tool
+really used. Anything moved went to the Trash and could be put back.
+
+### What changed
+
+`DeletionSafetyPolicy.allowlistLinkRefusesDeletion` refuses a path in an
+allowlist entry when the entry, or any folder above the path up to home, is a
+link. It finds the entry in the allowlist itself, so a new row is covered when
+it is added. `isOfferedForCleanup` asks it outside its saved answers, so the
+scan drops the row and `FileDeleter` refuses the move even when the link
+appeared after the scan. The checks for `~/.cache` and prek are now this one
+check.
+
+A link lower down refuses nothing, because it moves to the Trash as a link. A
+folder emptied entry by entry is the exception: it is never moved itself, so
+`~/Library/Logs/DiagnosticReports` as a link is refused too. A simulator
+device is left alone, because `simctl` removes it by its UDID and its path is
+never moved.
+
+A Mac with a link on the way to a row no longer gets that row. That includes a
+cache linked to another drive. Offering those again would need rows that say
+where they really are, and that never go into Clean Safe Items or a scheduled
+clean.
+
+### What would have caught it earlier
+
+The #420 fixture, run for every entry and not only the ones under `~/.cache`.
+`AllowlistLinkTests` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+builds a temporary home and checks every allowlist entry with its first folder
+linked, its own folder linked and nothing linked, and checks a folder on the
+way, a folder between an entry and a row, a link inside a folder, and a
+linked folder that is emptied entry by entry.
+`everyEntryIsFoundByItsText` fails if the guard misses an entry.
+
 ## 2026-11-19: Rows under `~/.cache` followed a link to another folder
 
 **Found internally** in review of [#417](https://github.com/jithin-sabu/purge-app/pull/417) ([#420](https://github.com/jithin-sabu/purge-app/issues/420)), no report. **Fixed:** [#421](https://github.com/jithin-sabu/purge-app/pull/421), not shipped yet. **Affected:** v1.1.0 to v1.16.2.
