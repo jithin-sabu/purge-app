@@ -70,6 +70,33 @@ struct LaunchContextTests {
         )
     }
 
+    // MARK: Reveal decision
+
+    /// macOS does not activate an accessory app at launch, so its window opens
+    /// behind the front app or off screen. After Restart to Update that looked
+    /// like Purge closed and never came back (#428).
+    @Test(
+        "Only a launch with the Dock icon hidden that shows a window brings it forward",
+        arguments: [
+            (true, false, true),
+            (true, true, false),
+            (false, false, false),
+            (false, true, false),
+        ]
+    )
+    func revealNeedsAHiddenDockIconAndAWindow(
+        hidesDockIcon: Bool,
+        startsWindowless: Bool,
+        expected: Bool
+    ) {
+        #expect(
+            LaunchContext.shouldRevealInitialWindow(
+                hidesDockIcon: hidesDockIcon,
+                startsWindowless: startsWindowless
+            ) == expected
+        )
+    }
+
     // MARK: Login-launch detection
 
     @Test("A login-item open event is recognised")
