@@ -164,6 +164,21 @@ nonisolated final class DevScanner {
                 )
             )
         }
+        // One row per uv Python version, named by its version (#405).
+        if let folder = UvPythonVersionPolicy.folder(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: UvPythonVersionPolicy.explanationKey,
+                friendlyFallback: toolLabel
+            )
+            let version = UvPythonVersionPolicy.displayVersion(ofFolderName: folder)
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Python \(version) (uv)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: UvPythonVersionPolicy.reinstallCommand(forFolderName: folder)
+            )
+        }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -809,7 +824,8 @@ nonisolated final class DevScanner {
             // Check First: tools started with `uvx` run from environments in here, and
             // an environment installed in symlink mode has its packages here (#345).
             // Tools from `uv tool install` and uv's Python versions are in
-            // `~/.local/share/uv`, which is never listed.
+            // `~/.local/share/uv`, which is never listed. Old Python versions
+            // there get a row each from `OldToolVersionScanPolicy` (#405).
             ("uv Package Cache", [home.appendingPathComponent(".cache/uv", isDirectory: true)]),
             ("Expo Cache", [
                 "android-apk-cache", "ios-simulator-app-cache", "native-modules-cache",
@@ -1277,6 +1293,14 @@ nonisolated final class DevScanner {
             // way, and they keep the toolchains they name (#406).
             RustupToolchainPolicy.ledger.record(
                 RustupToolchainPolicy.pinFiles(inProjectRoots: discoveredRoots.map(\.0)),
+                home: home.standardizedFileURL.path,
+                fullAccess: access == .full,
+                mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }
+            )
+            // uv reads `.python-version` the same way, and a project's `.venv`
+            // or `venv` may run from an old patch version (#405).
+            UvPythonVersionPolicy.ledger.record(
+                UvPythonVersionPolicy.recordedFiles(inProjectRoots: discoveredRoots.map(\.0)),
                 home: home.standardizedFileURL.path,
                 fullAccess: access == .full,
                 mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }

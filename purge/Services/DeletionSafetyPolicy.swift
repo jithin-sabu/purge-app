@@ -451,7 +451,9 @@ enum DeletionSafetyPolicy {
             // First by its explanation: a tool started with `uvx` runs from an
             // environment in here, and with `link-mode = "symlink"` an environment's
             // packages are links into it. `~/.local/share/uv` holds the tools from
-            // `uv tool install` and uv's Python versions, and is not listed.
+            // `uv tool install` and uv's Python versions, and is not listed. Old
+            // patch versions there have their own shape rule (#405,
+            // `UvPythonVersionPolicy`).
             "\(home)/.cache/uv",
             // opencode's cache (#399): the provider and plugin packages it installs,
             // the tools it downloads into `bin`, and its model list. opencode gets

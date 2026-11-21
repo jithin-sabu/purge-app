@@ -5,8 +5,9 @@ import Foundation
 /// agent-CLI installs, old Claude Code downloads, Android NDK versions, Android
 /// system images no emulator uses, Figma profiles Figma has migrated away
 /// from, Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
-/// uses, with the folders an unfinished Vite+ install leaves, and Rust
-/// toolchains rustup keeps that nothing uses (#406).
+/// uses, with the folders an unfinished Vite+ install leaves, Rust
+/// toolchains rustup keeps that nothing uses (#406), and Python versions uv
+/// keeps next to its minor-version links that nothing uses (#405).
 ///
 /// Every row is Check First. These are installed tools and profiles, not data an
 /// app rebuilds by itself, and whether one is unused depends on the disk at the
@@ -37,6 +38,8 @@ nonisolated enum OldToolVersionScanPolicy {
         case vitePlusInstallLeftover
         /// `~/.rustup/toolchains/<name>` (#406), judged by `RustupToolchainPolicy`.
         case rustupToolchain
+        /// `~/.local/share/uv/python/cpython-<version>-…` (#405), judged by `UvPythonVersionPolicy`.
+        case uvPythonVersion
     }
 
     // MARK: Rows
@@ -116,6 +119,9 @@ nonisolated enum OldToolVersionScanPolicy {
         }
         if RustupToolchainPolicy.isToolchainPath(path, home: home) {
             return .rustupToolchain
+        }
+        if UvPythonVersionPolicy.isVersionPath(path, home: home) {
+            return .uvPythonVersion
         }
         switch VitePlusNodeVersionPolicy.kind(of: path, home: home) {
         case .version: return .vitePlusNodeVersion
@@ -220,7 +226,8 @@ nonisolated enum OldToolVersionScanPolicy {
         android: AndroidContext? = nil,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
-        rustup: RustupToolchainPolicy.Context? = nil
+        rustup: RustupToolchainPolicy.Context? = nil,
+        uv: UvPythonVersionPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
@@ -230,11 +237,12 @@ nonisolated enum OldToolVersionScanPolicy {
             nvm: nvm,
             vitePlus: vitePlus,
             rustup: rustup,
+            uv: uv,
             nvmCheck: .quick
         )
     }
 
-    /// `nvmCheck` says how far an nvm, Vite+ (#398) or rustup (#406) entry is judged:
+    /// `nvmCheck` says how far an nvm, Vite+ (#398), rustup (#406) or uv (#405) entry is judged:
     /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
     /// `FileDeleter` runs the rest right before the move
     /// (`passesImmediateTrashBoundary` in each policy).
@@ -247,6 +255,7 @@ nonisolated enum OldToolVersionScanPolicy {
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
+        uv: UvPythonVersionPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -299,6 +308,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case .rustupToolchain:
             return RustupToolchainPolicy.isOffered(
                 path, home: home, now: now, context: rustup ?? .current(home: home), check: nvmCheck
+            )
+        case .uvPythonVersion:
+            return UvPythonVersionPolicy.isOffered(
+                path, home: home, now: now, context: uv ?? .current(home: home), check: nvmCheck
             )
         }
     }
@@ -412,6 +425,56 @@ nonisolated enum OldToolVersionScanPolicy {
             }
         }
         return pinned
+    }
+
+    /// A program's load commands sit at its start, well inside this many bytes.
+    static let programHeaderBytes = 256 * 1024
+
+    /// Whether a program directly in one of `folders` (relative ones are in
+    /// home) holds one of `needles` in its first `programHeaderBytes`, where
+    /// its load commands name the libraries it loads. Links are skipped: they
+    /// are `isLinkedFromBinFolder`'s to judge. Nil when a folder or a program
+    /// can't be read. rustup (#406) and uv (#405) use it.
+    static func programHeaders(
+        in folders: [String], home: String, mayRead: (String) -> Bool, contain needles: [Data]
+    ) -> Bool? {
+        guard !needles.isEmpty else { return false }
+        for relative in folders {
+            let folder = relative.hasPrefix("/") ? relative : "\(home)/\(relative)"
+            guard mayRead(folder) else { return nil }
+            let names: [String]
+            do {
+                names = try FileManager.default.contentsOfDirectory(atPath: folder)
+            } catch {
+                if NvmNodeVersionPolicy.isMissing(folder) { continue }
+                return nil
+            }
+            for name in names {
+                let program = "\(folder)/\(name)"
+                guard isRegularFile(program) else { continue }
+                guard let handle = FileHandle(forReadingAtPath: program) else { return nil }
+                defer { try? handle.close() }
+                let header: Data
+                do {
+                    // Nil at the end of the file, which an empty one reaches at once.
+                    header = try handle.read(upToCount: programHeaderBytes) ?? Data()
+                } catch {
+                    return nil
+                }
+                if needles.contains(where: { header.range(of: $0) != nil }) { return true }
+            }
+        }
+        return false
+    }
+
+    /// Whether a process whose program is named one of `names` runs. True when
+    /// the process list can't be read. rustup (#406) and uv (#405) use it.
+    static func isProcessRunning(named names: Set<String>) -> Bool {
+        guard let pids = ProcessWorkingDirectories.allProcessIDs() else { return true }
+        return pids.contains { pid in
+            guard let path = ProcessWorkingDirectories.executablePath(of: pid) else { return false }
+            return names.contains(URL(fileURLWithPath: path).lastPathComponent)
+        }
     }
 
     /// `path` as written and with its links resolved, both in lowercase, since
@@ -561,13 +624,15 @@ nonisolated enum OldToolVersionScanPolicy {
         android: AndroidContext? = nil,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
-        rustup: RustupToolchainPolicy.Context? = nil
+        rustup: RustupToolchainPolicy.Context? = nil,
+        uv: UvPythonVersionPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
         let nvm = nvm ?? .current(home: homePath)
         let vitePlus = vitePlus ?? .current(home: homePath)
         let rustup = rustup ?? .current(home: homePath)
+        let uv = uv ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -584,7 +649,7 @@ nonisolated enum OldToolVersionScanPolicy {
                 guard let kind = kind(of: path, home: homePath) else { return false }
                 return isOffered(
                     path, kind: kind, home: homePath, now: now,
-                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup
+                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup, uv: uv
                 )
             }
             .sorted { isLower($0, than: $1) }
@@ -633,6 +698,14 @@ nonisolated enum OldToolVersionScanPolicy {
         if ProtectedLocations.isReadable(rustupRoot, access: .limited, home: home) {
             for toolchain in RustupToolchainPolicy.offeredFolders(home: homePath, now: now, context: rustup) {
                 add(RustupToolchainPolicy.labelPrefix + URL(fileURLWithPath: toolchain).lastPathComponent, [toolchain])
+            }
+        }
+        // One row per uv Python patch version no minor link points at, labelled
+        // with its whole folder name (#405). Its own list, like rustup's.
+        let uvRoot = URL(fileURLWithPath: "\(homePath)/\(UvPythonVersionPolicy.pythonRoot)")
+        if ProtectedLocations.isReadable(uvRoot, access: .limited, home: home) {
+            for version in UvPythonVersionPolicy.offeredFolders(home: homePath, now: now, context: uv) {
+                add(UvPythonVersionPolicy.labelPrefix + URL(fileURLWithPath: version).lastPathComponent, [version])
             }
         }
         return rows

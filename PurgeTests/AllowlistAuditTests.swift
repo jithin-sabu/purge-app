@@ -1043,18 +1043,36 @@ struct UVCacheTests {
         #expect(ExplanationDatabase.matchBundledDatabase(folderName: "uv")?.safetyLevel == .medium)
     }
 
-    /// Tools from `uv tool install`, uv's Python versions and its settings.
+    /// Tools from `uv tool install`, uv's Python versions and its settings. An
+    /// old patch folder has the shape `UvPythonVersionPolicy` judges since #405,
+    /// so `evaluate` allows it by shape, and the policy decides at the move
+    /// (`UvPythonVersionTests`). Its minor link and everything inside a
+    /// version still stay out.
     @Test(arguments: [
         ".local/share/uv",
         ".local/share/uv/tools",
         ".local/share/uv/tools/ruff",
-        ".local/share/uv/python/cpython-3.13.1-macos-aarch64-none",
+        ".local/share/uv/python",
+        ".local/share/uv/python/cpython-3.13-macos-aarch64-none",
+        ".local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib",
         ".config/uv",
         ".config/uv/uv.toml",
         ".cache",
     ])
     func installsAndSettingsStayOut(relative: String) {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+
+    /// The one uv folder `evaluate` allows, by shape alone (#405). It is never
+    /// Safe: its row is Check First.
+    @Test
+    func anOldPythonPatchFolderIsAllowedByShapeOnly() {
+        #expect(AuditPaths.evaluate(".local/share/uv/python/cpython-3.13.1-macos-aarch64-none") == .allow)
+        let info = DevScanner.automaticSafetyInfo(
+            forDevToolLabel: "uv Python cpython-3.13.1-macos-aarch64-none", primaryPath: nil
+        )
+        #expect(info.level == .medium)
+        #expect(bundledLevel(UvPythonVersionPolicy.explanationKey) == .medium)
     }
 }
 
@@ -2219,6 +2237,7 @@ struct ShapeLinkTests {
             "\(Self.appSupport)/Figma/DesktopProfile/v43", "Library/Caches/ms-playwright/chromium-1187", "go/pkg/mod",
             ".nvm/versions/node/v20.11.0", ".cursor/projects/tmp-1", ".cursor/worktrees/app/a1b2",
             ".rustup/toolchains/1.84.0-aarch64-apple-darwin",
+            ".local/share/uv/python/cpython-3.12.4-macos-aarch64-none",
             // Projects.
             "Developer/app/node_modules", "Developer/app/.gradle", "Developer/app/build",
             // Next to a shape, never one.

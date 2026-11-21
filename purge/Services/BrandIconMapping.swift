@@ -264,6 +264,10 @@ enum BrandIconMapping {
         if RustupToolchainPolicy.toolchain(inLabel: key) != nil {
             return "rust"
         }
+        // Each uv Python row's key is its label, `uv Python <folder name>` (#405).
+        if UvPythonVersionPolicy.folder(inLabel: key) != nil {
+            return "python"
+        }
         return nil
     }
 

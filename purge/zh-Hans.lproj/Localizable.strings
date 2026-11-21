@@ -91,6 +91,7 @@
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
 "Rust %@ (rustup)" = "Rust %@ (rustup)";
+"Python %@ (uv)" = "Python %@ (uv)";
 "Also in this cleanup" = "此次清理中的其他项目";
 "Also select" = "同时选择";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ 由管理员安装，因此 macOS 需要获得许可才能将其移到废纸篓。";
