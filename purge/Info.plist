@@ -48,8 +48,10 @@
 	</array>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/jithin-sabu/purge-app/main/appcast.xml</string>
+	<string>https://updates.purgemac.com/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>rkjBm25Uagl/vCfXNQ5DtKZSBhO8EDt29ucUJhF98qI=</string>
 	<key>SUScheduledCheckInterval</key>
