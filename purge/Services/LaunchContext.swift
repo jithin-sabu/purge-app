@@ -60,4 +60,15 @@ enum LaunchContext {
     ) -> Bool {
         showsMenuBarIcon && launchedAsLoginItem && hasCompletedOnboarding
     }
+
+    /// Whether the launch window has to be brought forward by Purge itself.
+    ///
+    /// macOS activates a new app with a Dock icon, and its window opens in
+    /// front. It does not activate an accessory app, so with the Dock icon
+    /// hidden the window opens behind the front app or stays off screen. That
+    /// covers a launch from Finder or Spotlight and the relaunch after an
+    /// update (#428). A windowless launch has no window to bring forward.
+    static func shouldRevealInitialWindow(hidesDockIcon: Bool, startsWindowless: Bool) -> Bool {
+        hidesDockIcon && !startsWindowless
+    }
 }

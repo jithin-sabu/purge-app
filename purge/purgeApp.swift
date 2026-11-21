@@ -35,17 +35,25 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesProvider = uninstallService
         ServicesMenuRegistration.refreshIfNeeded()
 
-        if LaunchContext.shouldSuppressInitialWindow(
+        let startsWindowless = LaunchContext.shouldSuppressInitialWindow(
             // Read the key directly rather than touching `.shared`: building the
             // store calls `SMAppService.mainApp.status`, an out-of-process read we
             // have no use for at launch.
             showsMenuBarIcon: StartupPreferenceStore.persistedShowsMenuBarIcon(),
             launchedAsLoginItem: LaunchContext.launchedAsLoginItem,
             hasCompletedOnboarding: FirstRunGate.hasCompletedOnboarding
-        ) || RemovedAppMonitor.startsWindowless {
+        ) || RemovedAppMonitor.startsWindowless
+        if startsWindowless {
             // Started by the deleted-apps watcher: the window appears only if
             // there is something to review (`RemovedAppMonitor`).
             InitialWindowSuppressor.suppressInitialWindow()
+        } else if LaunchContext.shouldRevealInitialWindow(
+            hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
+            startsWindowless: startsWindowless
+        ) {
+            // With the Dock icon hidden, macOS leaves a new launch inactive and
+            // its window behind the front app or off screen (#428).
+            InitialWindowRevealer.revealInitialWindow()
         }
     }
 
