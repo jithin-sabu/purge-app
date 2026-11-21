@@ -284,6 +284,7 @@ struct UvPythonVersionShapeTests {
         #expect(files.contains("/.python-version"))
         #expect(files.contains("/Users/me/code/app/.venv/pyvenv.cfg"))
         #expect(files.contains("/Users/me/code/app/venv/pyvenv.cfg"))
+        #expect(files.contains("/Users/me/code/app/*"))
         #expect(!files.contains("/Users/me/code/.venv/pyvenv.cfg"))
     }
 }
@@ -523,14 +524,27 @@ struct UvPythonVersionKeepTests {
     }
 
     /// `UV_PROJECT_ENVIRONMENT` may give a project's environment another name.
+    /// The project is listed again at the scan and the move, so one made after
+    /// the walk counts too.
     @Test
     func aProjectEnvironmentWithAnotherNameKeepsItsVersion() throws {
         let home = try UV.makeUv()
         defer { try? FileManager.default.removeItem(at: home) }
-        try UV.write("home = \(UV.path(home, UV.older))/bin\n", home, "code/app/env/pyvenv.cfg")
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent("code/app/src"), withIntermediateDirectories: true
+        )
         let recorded = UV.recorded(home, project: "code/app")
-        #expect(recorded.contains(home.appendingPathComponent("code/app/env/pyvenv.cfg").path))
-        #expect(UV.offered(home, UV.context(recorded: recorded)) == [UV.oldest])
+        #expect(recorded.contains(home.appendingPathComponent("code/app/*").path))
+        let context = UV.context(recorded: recorded)
+        #expect(UV.offered(home, context) == [UV.oldest, UV.older])
+        try UV.write("home = \(UV.path(home, UV.older))/bin\n", home, "code/app/env/pyvenv.cfg")
+        #expect(UV.offered(home, context) == [UV.oldest])
+        #expect(!UV.movable(home, UV.older, context))
+        // A project Purge can't list keeps every version. One that is gone keeps none.
+        let project = home.appendingPathComponent("code/app").path
+        #expect(UV.offered(home, UV.context(recorded: recorded, mayRead: { $0 != project })).isEmpty)
+        try FileManager.default.removeItem(atPath: project)
+        #expect(UV.offered(home, context) == [UV.oldest, UV.older])
     }
 
     /// A `bin/python` Purge can't look at may be a link into a version.
@@ -642,6 +656,20 @@ struct UvPythonVersionOutsideTests {
         try UV.link(home, ".local/bin/python3.12", to: "\(UV.path(home, UV.older))/bin/python3.12")
         #expect(UV.offered(home) == [UV.oldest])
         #expect(!UV.movable(home, UV.older))
+    }
+
+    /// A folder of programs that lists but can't be searched gives no answer.
+    @Test
+    func aProgramFolderThatCantBeSearchedKeepsEverything() throws {
+        let home = try UV.makeUv()
+        let programs = home.appendingPathComponent(".cargo/bin")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: programs.path)
+            try? FileManager.default.removeItem(at: home)
+        }
+        try UV.write("x", home, ".cargo/bin/tool")
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: programs.path)
+        #expect(UV.offered(home).isEmpty)
     }
 
     /// uv names `libpython` by its whole path, so a program linked against it

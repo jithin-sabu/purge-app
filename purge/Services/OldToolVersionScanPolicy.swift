@@ -453,7 +453,10 @@ nonisolated enum OldToolVersionScanPolicy {
             }
             for name in names {
                 let program = "\(folder)/\(name)"
-                guard isRegularFile(program) else { continue }
+                var info = stat()
+                // A folder that lists but can't be searched gives no answer.
+                guard lstat(program, &info) == 0 else { return nil }
+                guard (info.st_mode & S_IFMT) == S_IFREG else { continue }
                 guard let handle = FileHandle(forReadingAtPath: program) else { return nil }
                 defer { try? handle.close() }
                 do {

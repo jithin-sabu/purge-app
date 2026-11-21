@@ -512,13 +512,42 @@ nonisolated enum UvPythonVersionPolicy {
         return false
     }
 
+    /// The ledger entry for "any folder in this project", `<project>/*`.
+    static let anyFolderEntry = "*"
+
     /// Every environment folder Purge reads: the projects' from the ledger,
+    /// each folder in a recorded project that holds a `pyvenv.cfg` now,
     /// `~/.venv`, and each folder in `venvFolders`. Nil when one of those
     /// folders is there but can't be listed.
     static func environmentFolders(home: String, recorded: [String], mayRead: (String) -> Bool) -> [String]? {
         var folders = recorded
             .filter { URL(fileURLWithPath: $0).lastPathComponent == venvConfigName }
             .map { ($0 as NSString).deletingLastPathComponent }
+        // `UV_PROJECT_ENVIRONMENT` may give a project's environment any name,
+        // so each recorded project is listed again here, not only by the walk.
+        for entry in recorded where URL(fileURLWithPath: entry).lastPathComponent == anyFolderEntry {
+            let project = (entry as NSString).deletingLastPathComponent
+            guard mayRead(project) else { return nil }
+            let names: [String]
+            do {
+                names = try FileManager.default.contentsOfDirectory(atPath: project)
+            } catch {
+                // A project that is gone holds no environment. One on a drive
+                // that may only be unplugged, or one that can't be listed, may.
+                guard NvmNodeVersionPolicy.isGone(project, home: home) == true,
+                      NvmNodeVersionPolicy.isMissing(project) else { return nil }
+                continue
+            }
+            for name in names {
+                let config = "\(project)/\(name)/\(venvConfigName)"
+                var info = stat()
+                if lstat(config, &info) == 0 {
+                    folders.append("\(project)/\(name)")
+                } else {
+                    guard errno == ENOENT || errno == ENOTDIR else { return nil }
+                }
+            }
+        }
         folders += homeVenvs.map { "\(home)/\($0)" }
         for relative in venvFolders {
             let folder = "\(home)/\(relative)"
@@ -652,11 +681,11 @@ nonisolated enum UvPythonVersionPolicy {
     // MARK: Scan
 
     /// The paths uv reads for `roots`, for the ledger: `.python-version` in each
-    /// project and every folder above it, up to `/`, and the `pyvenv.cfg` of each
-    /// project's `.venv` and `venv`, and of any other folder in the project that
-    /// holds one now (`UV_PROJECT_ENVIRONMENT` may name another). Each default
-    /// is listed whether a file is there now or not, so one added after the
-    /// scan still counts at the move.
+    /// project and every folder above it, up to `/`, the `pyvenv.cfg` of each
+    /// project's `.venv` and `venv`, and `<project>/*`, which has the scan and
+    /// the move list the project again for an environment with another name
+    /// (`UV_PROJECT_ENVIRONMENT`). Each is listed whether a file is there now
+    /// or not, so one added after the scan still counts at the move.
     static func recordedFiles(inProjectRoots roots: [URL]) -> [String] {
         let pins = NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: roots).map { nvmrc -> String in
             let folder = (nvmrc as NSString).deletingLastPathComponent
@@ -665,11 +694,7 @@ nonisolated enum UvPythonVersionPolicy {
         var seen = Set<String>()
         let venvs = roots.flatMap { root -> [String] in
             let path = root.standardizedFileURL.path
-            let others = ((try? FileManager.default.contentsOfDirectory(atPath: path)) ?? [])
-                .map { "\(path)/\($0)/\(venvConfigName)" }
-                .filter { OldToolVersionScanPolicy.isRegularFile($0) }
-                .sorted()
-            return projectVenvNames.map { "\(path)/\($0)/\(venvConfigName)" } + others
+            return projectVenvNames.map { "\(path)/\($0)/\(venvConfigName)" } + ["\(path)/\(anyFolderEntry)"]
         }
         return (pins + venvs).filter { seen.insert($0).inserted }
     }
