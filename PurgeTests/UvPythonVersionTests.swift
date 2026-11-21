@@ -212,6 +212,23 @@ struct UvPythonVersionShapeTests {
         #expect(try !name("3.12.4").isOlder(than: name("3.12.4")))
     }
 
+    /// A Java class file shares the universal magic, followed by its version.
+    @Test
+    func universalHeadersAreToldFromOtherFiles() {
+        func bytes(_ words: [UInt32]) -> Data {
+            Data(words.flatMap { withUnsafeBytes(of: $0.bigEndian, Array.init) })
+        }
+        typealias Policy = OldToolVersionScanPolicy
+        #expect(Policy.fatSlices(in: bytes([0xCAFE_BABE, 1, 0x0100_000C, 0, 4096, 100, 14]))
+            == .slices([Policy.FatSlice(offset: 4096, size: 100)]))
+        #expect(Policy.fatSlices(in: bytes([0xCAFE_BABF, 1, 0x0100_000C, 0, 0, 8192, 0, 64, 14, 0]))
+            == .slices([Policy.FatSlice(offset: 8192, size: 64)]))
+        #expect(Policy.fatSlices(in: bytes([0xCAFE_BABE, 0x0000_0034])) == .notFat)
+        #expect(Policy.fatSlices(in: bytes([0xFEED_FACF, 0x0100_000C])) == .notFat)
+        #expect(Policy.fatSlices(in: Data("#!/bin/sh\n".utf8)) == .notFat)
+        #expect(Policy.fatSlices(in: bytes([0xCAFE_BABE, 2, 0x0100_000C, 0, 4096])) == .malformed)
+    }
+
     @Test
     func eachBuildHasItsOwnMinorLink() throws {
         let plain = try #require(UvPythonVersionPolicy.parse(folderName: "cpython-3.12.4-macos-aarch64-none"))
@@ -403,6 +420,8 @@ struct UvPythonVersionKeepTests {
     @Test(arguments: [
         ("3.12.6", true), ("cpython-3.12.6", true), ("3.12.6+freethreaded", true), ("cpython@3.12.6", true),
         ("# a comment\n3.12.6\n", true), ("==3.12.6", true),
+        // A range or a wildcard may be met by this version alone, and Purge doesn't work ranges out.
+        (">=3.12.3,<3.12.5", true), ("3.12.*", true), ("~=3.11", true),
         ("3.12", false), ("3", false), ("3.12.60", false), ("13.12.6", false), ("3.12.6.1", false), ("", false),
     ])
     func whatAPinNames(text: String, keeps: Bool) throws {
@@ -432,6 +451,20 @@ struct UvPythonVersionKeepTests {
         #expect(UV.movable(home, UV.older, context))
     }
 
+    /// uv also takes a path to an interpreter, which may be a link into a version.
+    @Test
+    func aPinThatIsAPathKeepsWhereItLeads() throws {
+        let home = try UV.makeUv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try UV.link(home, "tools/python-for-app", to: "\(UV.path(home, UV.older))/bin/python3.12")
+        try UV.write("../../tools/python-for-app\n", home, "code/app/.python-version")
+        let context = UV.context(recorded: UV.recorded(home, project: "code/app"))
+        #expect(UV.offered(home, context) == [UV.oldest])
+        // A path Purge may not follow keeps every version.
+        let tools = home.appendingPathComponent("tools/python-for-app").path
+        #expect(UV.offered(home, UV.context(recorded: context.recordedFiles(), mayRead: { $0 != tools })).isEmpty)
+    }
+
     @Test
     func aPinNamingTheMinorKeepsNothing() throws {
         let home = try UV.makeUv()
@@ -456,6 +489,7 @@ struct UvPythonVersionKeepTests {
 
     @Test(arguments: [
         ".local/pipx/venvs/black", ".local/share/pipx/venvs/black", ".virtualenvs/work",
+        ".local/share/virtualenvs/app-AbC12345", "Library/Application Support/pdm/venvs/app-AbC123-3.12",
         "Library/Caches/pypoetry/virtualenvs/app-abc123-py3.12", ".venv",
     ])
     func environmentsInHomeKeepTheirVersion(folder: String) throws {
@@ -486,6 +520,32 @@ struct UvPythonVersionKeepTests {
         // One made after the scan stops the move.
         try UV.write("home = \(UV.path(home, UV.older))/bin\n", home, "code/app/venv/pyvenv.cfg")
         #expect(!UV.movable(home, UV.older, context))
+    }
+
+    /// `UV_PROJECT_ENVIRONMENT` may give a project's environment another name.
+    @Test
+    func aProjectEnvironmentWithAnotherNameKeepsItsVersion() throws {
+        let home = try UV.makeUv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try UV.write("home = \(UV.path(home, UV.older))/bin\n", home, "code/app/env/pyvenv.cfg")
+        let recorded = UV.recorded(home, project: "code/app")
+        #expect(recorded.contains(home.appendingPathComponent("code/app/env/pyvenv.cfg").path))
+        #expect(UV.offered(home, UV.context(recorded: recorded)) == [UV.oldest])
+    }
+
+    /// A `bin/python` Purge can't look at may be a link into a version.
+    @Test
+    func anEnvironmentWhosePythonCantBeCheckedKeepsEverything() throws {
+        let home = try UV.makeUv()
+        let bin = home.appendingPathComponent(".virtualenvs/work/bin")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bin.path)
+            try? FileManager.default.removeItem(at: home)
+        }
+        try UV.write("home = /nowhere\n", home, ".virtualenvs/work/pyvenv.cfg")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: bin.path)
+        #expect(UV.offered(home).isEmpty)
     }
 
     /// An environment made through the minor link follows it to the newest patch.
@@ -543,6 +603,26 @@ struct UvPythonVersionOutsideTests {
         #expect(!UV.movable(home, UV.oldest))
     }
 
+    /// PyCharm keeps the interpreters it knows in each JetBrains IDE's SDK
+    /// table, and a Jupyter kernel spec starts with an interpreter path.
+    @Test(arguments: [
+        ("Library/Application Support/JetBrains/PyCharm2026.2/options/jdk.table.xml",
+         "<jdk><homePath value=\"$USER_HOME$/.local/share/uv/python/\(UV.older)/bin/python3.12\" /></jdk>"),
+        ("Library/Jupyter/kernels/py312/kernel.json",
+         "{\"argv\": [\"/opt/py/\(UV.older)/bin/python3.12\", \"-m\", \"ipykernel_launcher\"]}"),
+    ])
+    func anInterpreterSettingKeepsItsVersion(file: String, text: String) throws {
+        let home = try UV.makeUv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try UV.write(text, home, file)
+        #expect(UV.offered(home) == [UV.oldest])
+        #expect(!UV.movable(home, UV.older))
+        // A folder of them Purge can't list keeps every version.
+        let parent = file.split(separator: "/").prefix(3).joined(separator: "/")
+        let blocked = home.appendingPathComponent(parent).path
+        #expect(UV.offered(home, UV.context(mayRead: { $0 != blocked })).isEmpty)
+    }
+
     @Test
     func aLaunchAgentNamingTheFolderKeepsIt() throws {
         let home = try UV.makeUv()
@@ -578,6 +658,35 @@ struct UvPythonVersionOutsideTests {
         #expect(!UV.movable(home, UV.oldest))
     }
 
+    /// A universal program keeps each slice's load commands at its own
+    /// offset, which can begin far past the first read.
+    @Test
+    func aLaterSliceOfAUniversalProgramCounts() throws {
+        let home = try UV.makeUv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let needle = Data("\(UV.path(home, UV.oldest))/lib/libpython3.12.dylib".utf8)
+        let first = UInt32(4096), firstSize = UInt32(300_000)
+        let second = first + firstSize, secondSize = UInt32(8192)
+        var file = Data()
+        func put(_ value: UInt32) { file.append(contentsOf: withUnsafeBytes(of: value.bigEndian, Array.init)) }
+        put(0xCAFE_BABE); put(2)
+        put(0x0100_0007); put(3); put(first); put(firstSize); put(12)
+        put(0x0100_000C); put(0); put(second); put(secondSize); put(14)
+        file.append(Data(count: Int(second) - file.count))
+        file.append(needle)
+        file.append(Data(count: Int(secondSize) - needle.count))
+        let program = home.appendingPathComponent(".cargo/bin/pyo3-tool")
+        try FileManager.default.createDirectory(at: program.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try file.write(to: program)
+        #expect(UV.offered(home) == [UV.older])
+        #expect(!UV.movable(home, UV.oldest))
+        // A header naming a slice past the end of the file can't be read whole.
+        var broken = file.prefix(Int(second))
+        broken.append(Data(count: 16))
+        try broken.write(to: program)
+        #expect(UV.offered(home).isEmpty)
+    }
+
     @Test
     func theMoveWaitsForUvAndOpenFiles() throws {
         let home = try UV.makeUv()
@@ -591,6 +700,29 @@ struct UvPythonVersionOutsideTests {
         #expect(UV.movable(home, UV.oldest, UV.context(lsof: "p123\nn\(other)\n")))
         // The scan reads neither.
         #expect(UV.offered(home, UV.context(lsof: nil, uvIsRunning: true)) == [UV.oldest, UV.older])
+    }
+
+    /// The link is read again last, so uv moving it onto the version while the
+    /// other checks ran stops the move.
+    @Test
+    func theMoveReadsTheLinkAgainLast() throws {
+        let home = try UV.makeUv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let link = home.appendingPathComponent("\(UV.root)/\(UV.minorLink)").path
+        let older = UV.path(home, UV.older)
+        let context = UvPythonVersionPolicy.Context(
+            recordedFiles: { [] },
+            mayRead: { _ in true },
+            openFiles: {
+                try? FileManager.default.removeItem(atPath: link)
+                try? FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: older)
+                return ""
+            },
+            uvIsRunning: { false },
+            linkFolders: [".local/bin"],
+            programFolders: [".cargo/bin"]
+        )
+        #expect(!UV.movable(home, UV.older, context))
     }
 
     @Test

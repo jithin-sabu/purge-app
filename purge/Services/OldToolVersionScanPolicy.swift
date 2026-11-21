@@ -431,10 +431,12 @@ nonisolated enum OldToolVersionScanPolicy {
     static let programHeaderBytes = 256 * 1024
 
     /// Whether a program directly in one of `folders` (relative ones are in
-    /// home) holds one of `needles` in its first `programHeaderBytes`, where
-    /// its load commands name the libraries it loads. Links are skipped: they
-    /// are `isLinkedFromBinFolder`'s to judge. Nil when a folder or a program
-    /// can't be read. rustup (#406) and uv (#405) use it.
+    /// home) holds one of `needles` in its first `programHeaderBytes`, or in
+    /// the first `programHeaderBytes` of each slice of a universal program,
+    /// where its load commands name the libraries it loads. Links are skipped:
+    /// they are `isLinkedFromBinFolder`'s to judge. Nil when a folder or a
+    /// program can't be read, or a universal header can't be read whole.
+    /// rustup (#406) and uv (#405) use it.
     static func programHeaders(
         in folders: [String], home: String, mayRead: (String) -> Bool, contain needles: [Data]
     ) -> Bool? {
@@ -454,17 +456,80 @@ nonisolated enum OldToolVersionScanPolicy {
                 guard isRegularFile(program) else { continue }
                 guard let handle = FileHandle(forReadingAtPath: program) else { return nil }
                 defer { try? handle.close() }
-                let header: Data
                 do {
                     // Nil at the end of the file, which an empty one reaches at once.
-                    header = try handle.read(upToCount: programHeaderBytes) ?? Data()
+                    let header = try handle.read(upToCount: programHeaderBytes) ?? Data()
+                    if needles.contains(where: { header.range(of: $0) != nil }) { return true }
+                    // A universal program keeps each architecture's load
+                    // commands at the start of its own slice, which may begin
+                    // far past the first read.
+                    switch fatSlices(in: header) {
+                    case .notFat:
+                        continue
+                    case .malformed:
+                        return nil
+                    case .slices(let slices):
+                        let fileSize = try handle.seekToEnd()
+                        for slice in slices {
+                            guard slice.offset <= fileSize, slice.size <= fileSize - slice.offset else { return nil }
+                            try handle.seek(toOffset: slice.offset)
+                            let start = try handle.read(upToCount: Int(min(slice.size, UInt64(programHeaderBytes)))) ?? Data()
+                            if needles.contains(where: { start.range(of: $0) != nil }) { return true }
+                        }
+                    }
                 } catch {
                     return nil
                 }
-                if needles.contains(where: { header.range(of: $0) != nil }) { return true }
             }
         }
         return false
+    }
+
+    /// What a program's first bytes say about its architecture slices.
+    nonisolated enum FatHeader: Equatable {
+        /// A single-architecture program, a script, or anything else.
+        case notFat
+        /// A universal program, with each slice's place in the file.
+        case slices([FatSlice])
+        /// A universal header Purge can't read whole.
+        case malformed
+    }
+
+    nonisolated struct FatSlice: Equatable {
+        var offset: UInt64
+        var size: UInt64
+    }
+
+    /// The slices of a universal program, read from its header
+    /// (`<mach-o/fat.h>`, big-endian). Java class files share the 32-bit magic;
+    /// theirs is followed by a version of 45 or more, where a universal header
+    /// counts its slices, which are never that many.
+    static func fatSlices(in header: Data) -> FatHeader {
+        func word(_ at: Int) -> UInt32? {
+            guard at >= 0, at + 4 <= header.count else { return nil }
+            let start = header.startIndex + at
+            return header[start..<start + 4].reduce(0) { $0 << 8 | UInt32($1) }
+        }
+        func doubleWord(_ at: Int) -> UInt64? {
+            guard let high = word(at), let low = word(at + 4) else { return nil }
+            return UInt64(high) << 32 | UInt64(low)
+        }
+        guard let magic = word(0), magic == 0xCAFE_BABE || magic == 0xCAFE_BABF,
+              let count = word(4), count > 0, count < 45 else { return .notFat }
+        let is64 = magic == 0xCAFE_BABF
+        let entrySize = is64 ? 32 : 20
+        var slices: [FatSlice] = []
+        for index in 0..<Int(count) {
+            let entry = 8 + index * entrySize
+            if is64 {
+                guard let offset = doubleWord(entry + 8), let size = doubleWord(entry + 16) else { return .malformed }
+                slices.append(FatSlice(offset: offset, size: size))
+            } else {
+                guard let offset = word(entry + 8), let size = word(entry + 12) else { return .malformed }
+                slices.append(FatSlice(offset: UInt64(offset), size: UInt64(size)))
+            }
+        }
+        return .slices(slices)
     }
 
     /// Whether a process whose program is named one of `names` runs. True when

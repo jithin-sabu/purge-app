@@ -60,13 +60,15 @@ nonisolated enum UvPythonVersionPolicy {
     /// The environments a project keeps, which uv and `python -m venv` make.
     static let projectVenvNames = [".venv", "venv"]
     /// Folders in home where each folder is an environment: uv's tools, pipx's
-    /// (old and new place), virtualenvwrapper's and Poetry's.
+    /// (old and new place), virtualenvwrapper's, pipenv's, Poetry's and PDM's.
     static let venvFolders = [
         ".local/share/uv/tools",
         ".local/pipx/venvs",
         ".local/share/pipx/venvs",
         ".virtualenvs",
+        ".local/share/virtualenvs",
         "Library/Caches/pypoetry/virtualenvs",
+        "Library/Application Support/pdm/venvs",
     ]
     static let homeVenvs = [".venv"]
 
@@ -74,6 +76,14 @@ nonisolated enum UvPythonVersionPolicy {
     /// nvm's rule reads, uv's own config, and Zed's.
     static let referenceFiles = NvmNodeVersionPolicy.referenceFiles + [
         ".config/uv/uv.toml", ".config/zed/settings.json",
+    ]
+    /// Files one level down that may name an interpreter: the SDK table of each
+    /// JetBrains IDE, where PyCharm keeps the interpreters it knows, and each
+    /// Jupyter kernel spec, whose `argv` starts with an interpreter path. As
+    /// (folder in home, path inside each of its folders).
+    static let referenceFilesInEachFolder = [
+        ("Library/Application Support/JetBrains", "options/jdk.table.xml"),
+        ("Library/Jupyter/kernels", "kernel.json"),
     ]
     /// `bin` folders where a link may point into a version, uv's own
     /// `~/.local/bin/python3.12` among them.
@@ -292,9 +302,11 @@ nonisolated enum UvPythonVersionPolicy {
         case .quick, .scan:
             return true
         case .move:
-            // The process list first: it is the cheaper read.
+            // The process list first: it is the cheaper read. The link last, so
+            // one uv moved onto this version meanwhile stops the move.
             return !context.uvIsRunning()
                 && OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free
+                && isBehindMinorLink(name, root: url.deletingLastPathComponent().path)
         }
     }
 
@@ -405,6 +417,14 @@ nonisolated enum UvPythonVersionPolicy {
                 for folder in candidates where !kept.contains(folder) {
                     if pinNames(text, folder: folder) { kept.insert(folder) }
                 }
+                // uv also takes a path to an interpreter, which may be a link
+                // into a version from anywhere.
+                let pinFolder = (file as NSString).deletingLastPathComponent
+                for request in requests(in: text) where request.contains("/") {
+                    guard let reached = folders(reachedBy: request, from: pinFolder, candidates: candidates,
+                                                root: root, mayRead: context.mayRead) else { return nil }
+                    kept.formUnion(reached)
+                }
             }
         }
 
@@ -454,11 +474,25 @@ nonisolated enum UvPythonVersionPolicy {
     /// Whether a `.python-version`'s `text` names the version: its version
     /// number with no digit or `.` on either side (`3.12.4`, `cpython-3.12.4`,
     /// `3.12.4+freethreaded`), or a path inside its folder. The number alone
-    /// keeps every build of it, which errs on keeping.
+    /// keeps every build of it, which errs on keeping. A version range
+    /// (`>=3.12.3,<3.12.5`) may be met by this version alone, and Purge doesn't
+    /// work ranges out, so one keeps every version.
     static func pinNames(_ text: String, folder: String) -> Bool {
         guard let name = parse(folderName: folder) else { return true }
         if NvmNodeVersionPolicy.names(text, versionFolder: folder, in: pythonRoot) { return true }
+        if requests(in: text).contains(where: { $0.contains(where: rangeCharacters.contains) }) { return true }
         return containsVersion(name.version.lowercased(), in: text.lowercased())
+    }
+
+    /// What marks a version range or a wildcard in a request.
+    static let rangeCharacters: Set<Character> = ["<", ">", "=", "~", "!", "*", ","]
+
+    /// The requests in a `.python-version`: one per line, without comments,
+    /// blank lines and surrounding spaces.
+    static func requests(in text: String) -> [String] {
+        text.unicodeScalars.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .map { String(String.UnicodeScalarView($0)).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 
     /// Whether `version` stands in `text` with no digit or `.` before or after
@@ -533,7 +567,10 @@ nonisolated enum UvPythonVersionPolicy {
         guard mayRead(bin) else { return nil }
         let python = "\(bin)/python"
         var info = stat()
-        if lstat(python, &info) == 0, (info.st_mode & S_IFMT) == S_IFLNK {
+        if lstat(python, &info) != 0 {
+            // Only a missing link is no link.
+            guard errno == ENOENT || errno == ENOTDIR else { return nil }
+        } else if (info.st_mode & S_IFMT) == S_IFLNK {
             guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: python),
                   let reached = folders(reachedBy: target, from: bin, candidates: candidates, root: root,
                                         mayRead: mayRead) else { return nil }
@@ -568,6 +605,17 @@ nonisolated enum UvPythonVersionPolicy {
     static func isUsedFromOutside(_ path: String, home: String, context: Context) -> Bool? {
         let folder = URL(fileURLWithPath: path).lastPathComponent
         var files = referenceFiles.map { "\(home)/\($0)" }
+        for (parent, inside) in referenceFilesInEachFolder {
+            let parentPath = "\(home)/\(parent)"
+            guard context.mayRead(parentPath) else { return nil }
+            do {
+                files += try FileManager.default.contentsOfDirectory(atPath: parentPath)
+                    .filter { !$0.hasPrefix(".") }
+                    .map { "\(parentPath)/\($0)/\(inside)" }
+            } catch {
+                guard NvmNodeVersionPolicy.isMissing(parentPath) else { return nil }
+            }
+        }
         let agents = "\(home)/\(NvmNodeVersionPolicy.launchAgents)"
         guard context.mayRead(agents) else { return nil }
         do {
@@ -605,16 +653,23 @@ nonisolated enum UvPythonVersionPolicy {
 
     /// The paths uv reads for `roots`, for the ledger: `.python-version` in each
     /// project and every folder above it, up to `/`, and the `pyvenv.cfg` of each
-    /// project's `.venv` and `venv`. Each is listed whether a file is there now
-    /// or not, so one added after the scan still counts at the move.
+    /// project's `.venv` and `venv`, and of any other folder in the project that
+    /// holds one now (`UV_PROJECT_ENVIRONMENT` may name another). Each default
+    /// is listed whether a file is there now or not, so one added after the
+    /// scan still counts at the move.
     static func recordedFiles(inProjectRoots roots: [URL]) -> [String] {
         let pins = NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: roots).map { nvmrc -> String in
             let folder = (nvmrc as NSString).deletingLastPathComponent
             return folder == "/" ? "/\(pinFileName)" : "\(folder)/\(pinFileName)"
         }
         var seen = Set<String>()
-        let venvs = roots.flatMap { root in
-            projectVenvNames.map { "\(root.standardizedFileURL.path)/\($0)/\(venvConfigName)" }
+        let venvs = roots.flatMap { root -> [String] in
+            let path = root.standardizedFileURL.path
+            let others = ((try? FileManager.default.contentsOfDirectory(atPath: path)) ?? [])
+                .map { "\(path)/\($0)/\(venvConfigName)" }
+                .filter { OldToolVersionScanPolicy.isRegularFile($0) }
+                .sorted()
+            return projectVenvNames.map { "\(path)/\($0)/\(venvConfigName)" } + others
         }
         return (pins + venvs).filter { seen.insert($0).inserted }
     }

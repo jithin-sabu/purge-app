@@ -3609,7 +3609,7 @@
     "key": "uv-python-version",
     "display_name": "uv Python Version",
     "tag": "medium",
-    "explanation": "An older Python patch version uv kept after an upgrade. uv's link for this minor version points at a newer one, and no environment or .python-version file Purge found uses it. An environment Purge didn't see stops working until uv sync or uv venv rebuilds it. uv python install brings it back.",
+    "explanation": "An older Python patch version uv kept after an upgrade. uv's link for this minor version points at a newer one, and no environment, .python-version file or interpreter setting Purge found uses it. Anything else that runs it stops working until you put the folder back from the Trash, or the tool that made it sets it up again. uv python install brings the version back.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"
