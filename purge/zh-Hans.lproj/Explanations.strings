@@ -1236,4 +1236,4 @@
 "An older Python patch version uv kept after an upgrade. uv's link for this minor version points at a newer one, and no environment, .python-version file or interpreter setting Purge found uses it. Anything else that runs it stops working until you put the folder back from the Trash, or the tool that made it sets it up again. uv python install brings the version back." = "uv 升级后保留下来的较旧 Python 补丁版本。uv 为这个次版本建立的链接指向更新的版本，Purge 找到的虚拟环境、.python-version 文件和解释器设置都没有使用它。其他用到它的东西会无法运行，直到你从废纸篓把文件夹放回原处，或由创建它的工具重新设置。用 uv python install 可以把这个版本装回来。";
 /* pyenv-python-version */
 "pyenv Python Version" = "pyenv Python 版本";
-"An older Python from pyenv. Not the newest of its minor, no version file, environment or config Purge found uses it, and it hasn't run for 90 days. pyenv install brings it back." = "pyenv 安装的较旧 Python。它不是同一次版本号下最新的，Purge 找到的版本文件、虚拟环境或配置都没有使用它，且 90 天内没有运行过。用 pyenv install 可以装回来。";
+"A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv 安装的 Python，90 天内没有运行过，也不是同一次版本号下最新的。Purge 找到的版本文件、虚拟环境或配置都没有使用它。用 pyenv install 可以装回来。";

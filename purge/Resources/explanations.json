@@ -3600,7 +3600,7 @@
     "key": "pyenv-python-version",
     "display_name": "pyenv Python Version",
     "tag": "medium",
-    "explanation": "An older Python from pyenv. Not the newest of its minor, no version file, environment or config Purge found uses it, and it hasn't run for 90 days. pyenv install brings it back.",
+    "explanation": "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"
