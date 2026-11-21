@@ -2225,7 +2225,8 @@ struct ShapeLinkTests {
         let (base, home, elsewhere) = try Self.makeHome()
         defer { try? fm.removeItem(at: base) }
         for link in [
-            "Library", "Developer", "Downloads", ".gem", ".gradle", ".local", ".npm", ".cursor", ".nvm", ".rustup", "go",
+            "Library", "Developer", "Downloads", ".gem", ".gradle", ".local", ".npm", ".cursor", ".nvm", ".rustup",
+            ".pyenv", "go",
         ] {
             try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
         }
@@ -2238,6 +2239,7 @@ struct ShapeLinkTests {
             ".nvm/versions/node/v20.11.0", ".cursor/projects/tmp-1", ".cursor/worktrees/app/a1b2",
             ".rustup/toolchains/1.84.0-aarch64-apple-darwin",
             ".local/share/uv/python/cpython-3.12.4-macos-aarch64-none",
+            ".pyenv/versions/3.11.9",
             // Projects.
             "Developer/app/node_modules", "Developer/app/.gradle", "Developer/app/build",
             // Next to a shape, never one.

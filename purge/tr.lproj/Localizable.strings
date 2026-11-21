@@ -92,6 +92,7 @@
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
 "Rust %@ (rustup)" = "Rust %@ (rustup)";
 "Python %@ (uv)" = "Python %@ (uv)";
+"Python %@ (pyenv)" = "Python %@ (pyenv)";
 "Also in this cleanup" = "Bu temizlikte ayrıca";
 "Also select" = "Ayrıca seç";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ uygulamasını bir yönetici yüklediği için Çöp Sepeti'ne taşınabilmesi macOS'in izninizi almasını gerektirir.";

@@ -6,8 +6,9 @@ import Foundation
 /// system images no emulator uses, Figma profiles Figma has migrated away
 /// from, Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
 /// uses, with the folders an unfinished Vite+ install leaves, Rust
-/// toolchains rustup keeps that nothing uses (#406), and Python versions uv
-/// keeps next to its minor-version links that nothing uses (#405).
+/// toolchains rustup keeps that nothing uses (#406), Python versions uv
+/// keeps next to its minor-version links that nothing uses (#405), and Python
+/// versions pyenv keeps that nothing uses (#404).
 ///
 /// Every row is Check First. These are installed tools and profiles, not data an
 /// app rebuilds by itself, and whether one is unused depends on the disk at the
@@ -40,6 +41,8 @@ nonisolated enum OldToolVersionScanPolicy {
         case rustupToolchain
         /// `~/.local/share/uv/python/cpython-<version>-…` (#405), judged by `UvPythonVersionPolicy`.
         case uvPythonVersion
+        /// `~/.pyenv/versions/<X.Y.Z>` (#404), judged by `PyenvPythonVersionPolicy`.
+        case pyenvPythonVersion
     }
 
     // MARK: Rows
@@ -122,6 +125,9 @@ nonisolated enum OldToolVersionScanPolicy {
         }
         if UvPythonVersionPolicy.isVersionPath(path, home: home) {
             return .uvPythonVersion
+        }
+        if PyenvPythonVersionPolicy.isVersionPath(path, home: home) {
+            return .pyenvPythonVersion
         }
         switch VitePlusNodeVersionPolicy.kind(of: path, home: home) {
         case .version: return .vitePlusNodeVersion
@@ -227,7 +233,8 @@ nonisolated enum OldToolVersionScanPolicy {
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
-        uv: UvPythonVersionPolicy.Context? = nil
+        uv: UvPythonVersionPolicy.Context? = nil,
+        pyenv: PyenvPythonVersionPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
@@ -238,11 +245,12 @@ nonisolated enum OldToolVersionScanPolicy {
             vitePlus: vitePlus,
             rustup: rustup,
             uv: uv,
+            pyenv: pyenv,
             nvmCheck: .quick
         )
     }
 
-    /// `nvmCheck` says how far an nvm, Vite+ (#398), rustup (#406) or uv (#405) entry is judged:
+    /// `nvmCheck` says how far an nvm, Vite+ (#398), rustup (#406), uv (#405) or pyenv (#404) entry is judged:
     /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
     /// `FileDeleter` runs the rest right before the move
     /// (`passesImmediateTrashBoundary` in each policy).
@@ -256,6 +264,7 @@ nonisolated enum OldToolVersionScanPolicy {
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
         uv: UvPythonVersionPolicy.Context? = nil,
+        pyenv: PyenvPythonVersionPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -312,6 +321,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case .uvPythonVersion:
             return UvPythonVersionPolicy.isOffered(
                 path, home: home, now: now, context: uv ?? .current(home: home), check: nvmCheck
+            )
+        case .pyenvPythonVersion:
+            return PyenvPythonVersionPolicy.isOffered(
+                path, home: home, now: now, context: pyenv ?? .current(home: home), check: nvmCheck
             )
         }
     }
@@ -693,7 +706,8 @@ nonisolated enum OldToolVersionScanPolicy {
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
-        uv: UvPythonVersionPolicy.Context? = nil
+        uv: UvPythonVersionPolicy.Context? = nil,
+        pyenv: PyenvPythonVersionPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
@@ -701,6 +715,7 @@ nonisolated enum OldToolVersionScanPolicy {
         let vitePlus = vitePlus ?? .current(home: homePath)
         let rustup = rustup ?? .current(home: homePath)
         let uv = uv ?? .current(home: homePath)
+        let pyenv = pyenv ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -717,7 +732,7 @@ nonisolated enum OldToolVersionScanPolicy {
                 guard let kind = kind(of: path, home: homePath) else { return false }
                 return isOffered(
                     path, kind: kind, home: homePath, now: now,
-                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup, uv: uv
+                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup, uv: uv, pyenv: pyenv
                 )
             }
             .sorted { isLower($0, than: $1) }
@@ -774,6 +789,13 @@ nonisolated enum OldToolVersionScanPolicy {
         if ProtectedLocations.isReadable(uvRoot, access: .limited, home: home) {
             for version in UvPythonVersionPolicy.offeredFolders(home: homePath, now: now, context: uv) {
                 add(UvPythonVersionPolicy.labelPrefix + URL(fileURLWithPath: version).lastPathComponent, [version])
+            }
+        }
+        // One row per pyenv version (#404), from its own list like rustup's.
+        let pyenvRoot = URL(fileURLWithPath: "\(homePath)/\(PyenvPythonVersionPolicy.versionsRoot)")
+        if ProtectedLocations.isReadable(pyenvRoot, access: .limited, home: home) {
+            for version in PyenvPythonVersionPolicy.offeredFolders(home: homePath, now: now, context: pyenv) {
+                add(PyenvPythonVersionPolicy.labelPrefix + URL(fileURLWithPath: version).lastPathComponent, [version])
             }
         }
         return rows

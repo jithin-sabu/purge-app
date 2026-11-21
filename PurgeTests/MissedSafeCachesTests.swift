@@ -599,8 +599,9 @@ struct MissedCacheAllowlistTests {
     /// nvm itself and the rest of `~/.cache` stay out. A Node version folder is
     /// allowed by its shape since #400, and `NvmNodeVersionPolicy` decides at the
     /// move, but nothing inside one is. The same holds for rustup (#406): only a
-    /// versioned or dated toolchain folder has the shape, and for uv (#405): only
-    /// a CPython patch folder, never its minor link.
+    /// versioned or dated toolchain folder has the shape, for uv (#405) only a
+    /// CPython patch folder, never its minor link, and for pyenv (#404) only a
+    /// plain CPython release.
     @Test(arguments: [
         ".nvm", ".nvm/versions", ".nvm/versions/node", ".nvm/versions/node/v22.14.0/bin", ".nvm/nvm.sh", ".nvm/alias",
         ".rustup", ".rustup/toolchains", ".rustup/toolchains/stable-aarch64-apple-darwin",
@@ -611,6 +612,9 @@ struct MissedCacheAllowlistTests {
         ".local/share/uv/python/cpython-3.12.4-macos-aarch64-none/bin",
         ".local/share/uv/python/pypy-3.10.14-macos-aarch64-none", ".local/share/uv/tools",
         ".local/share/uv/tools/ruff",
+        ".pyenv", ".pyenv/versions", ".pyenv/versions/3.11.9/bin", ".pyenv/versions/3.11.9/envs/app",
+        ".pyenv/versions/system", ".pyenv/versions/3.13.0t", ".pyenv/versions/3.14-dev", ".pyenv/versions/3.14.0rc1",
+        ".pyenv/versions/pypy3.10-7.3.15", ".pyenv/versions/miniconda3-latest", ".pyenv/shims", ".pyenv/version",
         ".cache/firebase", ".cache/codex-runtimes", ".cache/hyperframes", ".cache/gh",
     ])
     func neighboursStayOut(relative: String) {

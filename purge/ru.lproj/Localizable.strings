@@ -198,6 +198,7 @@
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
 "Rust %@ (rustup)" = "Rust %@ (rustup)";
 "Python %@ (uv)" = "Python %@ (uv)";
+"Python %@ (pyenv)" = "Python %@ (pyenv)";
 "Angular cache" = "Кэш Angular";
 "Another app you still have installed uses this too, so Purge kept it." = "Это использует и другое приложение, которое у вас всё ещё установлено, поэтому Purge оставил это.";
 "Another copy of Purge is on this Mac, so they stay." = "На этом Mac есть ещё одна копия Purge, поэтому они остаются.";
