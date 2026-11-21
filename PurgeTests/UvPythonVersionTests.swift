@@ -464,6 +464,10 @@ struct UvPythonVersionKeepTests {
         // A path Purge may not follow keeps every version.
         let tools = home.appendingPathComponent("tools/python-for-app").path
         #expect(UV.offered(home, UV.context(recorded: context.recordedFiles(), mayRead: { $0 != tools })).isEmpty)
+        // Even one written inside a version: a link on the way may lead elsewhere.
+        let inside = "\(UV.path(home, UV.older))/bin/python3"
+        try UV.write("\(inside)\n", home, "code/app/.python-version")
+        #expect(UV.offered(home, UV.context(recorded: context.recordedFiles(), mayRead: { $0 != inside })).isEmpty)
     }
 
     @Test

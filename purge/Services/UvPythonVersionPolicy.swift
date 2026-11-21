@@ -622,10 +622,11 @@ nonisolated enum UvPythonVersionPolicy {
                 return spellings.contains { spelling in targets.contains { PathContainment.isSameOrInside(spelling, $0) } }
             })
         }
-        let asWritten = reached([path.lowercased()])
         // Following the path's own links reads it, which macOS may ask about.
-        guard mayRead(path) else { return asWritten.isEmpty ? nil : asWritten }
-        return asWritten.union(reached(OldToolVersionScanPolicy.comparableSpellings(of: path)))
+        // A link further on may lead into another version, so a path Purge
+        // may not follow keeps every version, even one it names as written.
+        guard mayRead(path) else { return nil }
+        return reached([path.lowercased()]).union(reached(OldToolVersionScanPolicy.comparableSpellings(of: path)))
     }
 
     /// Whether something outside uv's own folder uses the version: a reference
