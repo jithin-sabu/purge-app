@@ -19,6 +19,22 @@ struct LaunchdEnvironmentTests {
         #expect(LaunchdEnvironment.value(of: "OLLAMA_MODELS", runner: { _, _ in nil }) == nil)
     }
 
+    @Test("A read that failed is told apart from an unset name (#406)")
+    func aFailedReadIsNotUnset() {
+        let name = "RUSTUP_TOOLCHAIN"
+        #expect(LaunchdEnvironment.read(name, runner: runner(stdout: "1.84.0\n")) == .value("1.84.0"))
+        #expect(LaunchdEnvironment.read(name, runner: runner(stdout: "\n")) == .unset)
+        #expect(LaunchdEnvironment.read(name, runner: runner(status: 1, stdout: "")) == .failed)
+        #expect(LaunchdEnvironment.read(name, runner: { _, _ in nil }) == .failed)
+        let timedOut: LaunchdEnvironment.Runner = { _, _ in
+            ProcessRunner.Output(status: 0, stdout: Data("1.84.0".utf8), stderr: Data(), timedOut: true)
+        }
+        #expect(LaunchdEnvironment.read(name, runner: timedOut) == .failed)
+        #expect(LaunchdEnvironment.readNow(name, runner: timedOut) == .failed)
+        #expect(LaunchdEnvironment.readNow(name, runner: runner(stdout: "nightly\n")) == .value("nightly"))
+        #expect(LaunchdEnvironment.names.contains(name))
+    }
+
     @Test("launchd fills a name Purge started without, and never replaces one it has")
     func merging() {
         let launchd = ["OLLAMA_MODELS": "/Volumes/T7/models"]

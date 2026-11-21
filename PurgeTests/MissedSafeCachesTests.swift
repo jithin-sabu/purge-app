@@ -598,9 +598,13 @@ struct MissedCacheAllowlistTests {
 
     /// nvm itself and the rest of `~/.cache` stay out. A Node version folder is
     /// allowed by its shape since #400, and `NvmNodeVersionPolicy` decides at the
-    /// move, but nothing inside one is.
+    /// move, but nothing inside one is. The same holds for rustup (#406): only a
+    /// versioned or dated toolchain folder has the shape.
     @Test(arguments: [
         ".nvm", ".nvm/versions", ".nvm/versions/node", ".nvm/versions/node/v22.14.0/bin", ".nvm/nvm.sh", ".nvm/alias",
+        ".rustup", ".rustup/toolchains", ".rustup/toolchains/stable-aarch64-apple-darwin",
+        ".rustup/toolchains/1.84.0-aarch64-apple-darwin/bin", ".rustup/toolchains/stage1",
+        ".rustup/update-hashes", ".rustup/update-hashes/1.84.0-aarch64-apple-darwin", ".rustup/settings.toml",
         ".cache/firebase", ".cache/codex-runtimes", ".cache/hyperframes", ".cache/gh",
     ])
     func neighboursStayOut(relative: String) {

@@ -3597,6 +3597,15 @@
     "kind": "packages"
   },
   {
+    "key": "rustup-toolchain",
+    "display_name": "rustup Rust Toolchain",
+    "tag": "medium",
+    "explanation": "An older Rust toolchain from rustup. Not the default, and no override or rust-toolchain file Purge found names it. rustup toolchain install brings it back.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
     "key": "giget-cache",
     "display_name": "giget Template Cache",
     "tag": "safe",

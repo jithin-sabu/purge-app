@@ -1226,3 +1226,7 @@
 /* vite-plus-node-install-leftovers */
 "Unfinished Vite+ Node Downloads" = "未完成的 Vite+ Node 下载";
 "Folders a stopped Vite+ install left while downloading Node.js. Only folders untouched for a day are listed. Installed versions stay." = "Vite+ 下载 Node.js 时中途停止的安装留下的文件夹。只列出一天内未改动的文件夹。已安装的版本会保留。";
+
+/* rustup-toolchain */
+"rustup Rust Toolchain" = "rustup Rust 工具链";
+"An older Rust toolchain from rustup. Not the default, and no override or rust-toolchain file Purge found names it. rustup toolchain install brings it back." = "rustup 安装的较旧 Rust 工具链。它不是默认工具链，也没有目录覆盖或 Purge 找到的 rust-toolchain 文件指定它。用 rustup toolchain install 可以装回来。";

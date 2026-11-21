@@ -14,16 +14,43 @@ import os
 nonisolated enum LaunchdEnvironment {
     typealias Runner = @Sendable (_ executablePath: String, _ arguments: [String]) -> ProcessRunner.Output?
 
-    /// The names read: Ollama's store, and where Go keeps its module cache
-    /// (#397).
-    static let names = ["OLLAMA_MODELS", "GOMODCACHE", "GOPATH", "GOENV"]
+    /// The names read: Ollama's store, where Go keeps its module cache
+    /// (#397), and the toolchain rustup is told to use (#406).
+    static let names = ["OLLAMA_MODELS", "GOMODCACHE", "GOPATH", "GOENV", "RUSTUP_TOOLCHAIN"]
 
     static let launchctlPath = "/bin/launchctl"
+
+    /// What one read of a name found. A read that failed is not an unset name:
+    /// rustup's rule keeps every toolchain on it (#406).
+    nonisolated enum Read: Equatable, Sendable {
+        case value(String)
+        case unset
+        /// `launchctl` couldn't start, timed out, or exited with an error.
+        case failed
+    }
 
     /// The values as last read. Empty in the test host until a test refreshes
     /// with its own runner.
     static var values: [String: String] {
-        store.withLock { $0 }
+        store.withLock { $0.values }
+    }
+
+    /// What the last `refresh()` found for `name`. Unset before any refresh.
+    static func lastRead(_ name: String) -> Read {
+        store.withLock { state in
+            if state.failed.contains(name) { return .failed }
+            return state.values[name].map { .value($0) } ?? .unset
+        }
+    }
+
+    /// Reads one name from launchd now, for a check that can't trust a read
+    /// from the start of a clean. Runs `launchctl`, so never on the main
+    /// thread. The test host answers from the last refresh unless the test
+    /// passes a runner.
+    static func readNow(_ name: String, runner: Runner? = nil) -> Read {
+        if let runner { return read(name, runner: runner) }
+        guard !RemovedAppHandoff.runsInTestHost else { return lastRead(name) }
+        return read(name, runner: liveRunner)
     }
 
     /// Reads each name from launchd. The test host never runs `launchctl`
@@ -37,20 +64,31 @@ nonisolated enum LaunchdEnvironment {
             guard !RemovedAppHandoff.runsInTestHost else { return values }
             run = liveRunner
         }
-        var read: [String: String] = [:]
+        var state = State()
         for name in names {
-            if let value = value(of: name, runner: run) { read[name] = value }
+            switch read(name, runner: run) {
+            case .value(let value): state.values[name] = value
+            case .unset: break
+            case .failed: state.failed.insert(name)
+            }
         }
-        let result = read
+        let result = state
         store.withLock { $0 = result }
-        return result
+        return result.values
     }
 
-    /// `launchctl getenv NAME` prints the value, or nothing when it is unset.
-    static func value(of name: String, runner: Runner) -> String? {
-        guard let output = runner(launchctlPath, ["getenv", name]), output.succeeded else { return nil }
+    /// `launchctl getenv NAME` prints the value, or nothing when it is unset,
+    /// and exits with 0 either way.
+    static func read(_ name: String, runner: Runner) -> Read {
+        guard let output = runner(launchctlPath, ["getenv", name]), output.succeeded else { return .failed }
         let value = output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
+        return value.isEmpty ? .unset : .value(value)
+    }
+
+    /// The value of `name`, or nil when it is unset or couldn't be read.
+    static func value(of name: String, runner: Runner) -> String? {
+        if case .value(let value) = read(name, runner: runner) { return value }
+        return nil
     }
 
     /// `environment` with each name it lacks filled in from launchd. A value
@@ -66,7 +104,13 @@ nonisolated enum LaunchdEnvironment {
         return result
     }
 
-    private static let store = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
+    private struct State: Sendable {
+        var values: [String: String] = [:]
+        /// Names whose last read failed.
+        var failed: Set<String> = []
+    }
+
+    private static let store = OSAllocatedUnfairLock<State>(initialState: State())
 
     private static let liveRunner: Runner = { path, arguments in
         ProcessRunner.run(executablePath: path, arguments: arguments, timeout: 2)

@@ -260,6 +260,10 @@ enum BrandIconMapping {
         if VitePlusNodeVersionPolicy.version(inLabel: key) != nil {
             return "vite"
         }
+        // Each rustup row's key is its label, `rustup toolchain <folder name>` (#406).
+        if RustupToolchainPolicy.toolchain(inLabel: key) != nil {
+            return "rust"
+        }
         return nil
     }
 
