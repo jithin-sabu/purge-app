@@ -39,7 +39,9 @@ private enum RT {
             try write("x", home, "\(folder)/\(name)/bin/rustc")
             try write("x", home, "\(folder)/\(name)/lib/rustlib/aarch64-apple-darwin/lib/libstd.rlib")
             for record in Policy.installRecords {
-                try write("x", home, "\(folder)/\(name)/\(record)")
+                let text = record.hasSuffix("/components")
+                    ? "cargo-aarch64-apple-darwin\nrust-std-aarch64-apple-darwin\nrustc-aarch64-apple-darwin\n" : "x"
+                try write(text, home, "\(folder)/\(name)/\(record)")
                 try FileManager.default.setAttributes(
                     [.modificationDate: Date().addingTimeInterval(-age)],
                     ofItemAtPath: home.appendingPathComponent("\(folder)/\(name)/\(record)").path
@@ -75,15 +77,19 @@ private enum RT {
         mayRead: @escaping @Sendable (String) -> Bool = { _ in true },
         lsof: String? = "",
         onLsof: @escaping @Sendable () -> Void = {},
-        environment: [String] = [],
+        environment: [String]? = [],
+        freshEnvironment: [String]?? = .none,
         rustupIsRunning: Bool = false,
         onProcessList: @escaping @Sendable () -> Void = {}
     ) -> Policy.Context {
-        Policy.Context(
+        // What a move reads from launchd again, when a test sets it apart
+        // from what the scan read.
+        let fresh: [String]? = freshEnvironment ?? environment
+        return Policy.Context(
             pinFiles: { pins },
             mayRead: mayRead,
             openFiles: { onLsof(); return lsof },
-            environment: { environment },
+            environment: { $0 ? fresh : environment },
             rustupIsRunning: { onProcessList(); return rustupIsRunning },
             linkFolders: [".local/bin"]
         )
@@ -253,6 +259,42 @@ struct RustupToolchainShapeTests {
         )
         #expect(info.reinstallCommand
             == "rustup toolchain install \(RT.nightly) --target thumbv7em-none-eabihf,wasm32-unknown-unknown")
+    }
+
+    /// A component beyond rustup's current profile, such as `rust-src`, does
+    /// not come back by itself either.
+    @Test
+    func theReinstallCommandNamesAddedComponents() throws {
+        let home = try RT.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try RT.install(home, RT.nightly)
+        let toolchain = home.appendingPathComponent("\(RT.root)/\(RT.nightly)")
+        try RT.write("x", home, "\(RT.root)/\(RT.nightly)/lib/rustlib/wasm32-unknown-unknown/lib/libcore.rlib")
+        try RT.write(
+            """
+            cargo-aarch64-apple-darwin
+            rust-std-aarch64-apple-darwin
+            rustc-aarch64-apple-darwin
+            rust-std-wasm32-unknown-unknown
+            clippy-preview-aarch64-apple-darwin
+            rust-docs-aarch64-apple-darwin
+            rust-src
+            not a component!
+
+            """,
+            home, "\(RT.root)/\(RT.nightly)/lib/rustlib/components"
+        )
+        func command() -> String? {
+            DevScanner.automaticSafetyInfo(
+                forDevToolLabel: "rustup toolchain \(RT.nightly)", primaryPath: toolchain
+            ).reinstallCommand
+        }
+        let base = "rustup toolchain install \(RT.nightly) --target wasm32-unknown-unknown"
+        // No profile Purge can read: everything beyond the minimal three.
+        #expect(command() == "\(base) --component clippy-preview,rust-docs,rust-src")
+        // The default profile brings clippy and the docs back by itself.
+        try RT.settings(home)
+        #expect(command() == "\(base) --component rust-src")
     }
 
     @Test(arguments: [
@@ -437,6 +479,9 @@ struct RustupToolchainKeepTests {
         ("rust-toolchain", "1.84.0\n"),
         ("rust-toolchain", "1.84.0"),
         ("rust-toolchain", "  1.84.0-aarch64-apple-darwin  \n"),
+        // Windows line endings, as a checkout with autocrlf leaves them.
+        ("rust-toolchain", "1.84.0\r\n"),
+        ("rust-toolchain", "[toolchain]\r\nchannel = \"1.84.0\"\r\n"),
         ("rust-toolchain", "[toolchain]\nchannel = \"1.84.0\"\n"),
         ("rust-toolchain.toml", "[toolchain]\nchannel = \"1.84.0\"\n"),
         ("rust-toolchain.toml", "[toolchain]\nchannel = '1.84.0'\nprofile = \"minimal\"\n"),
@@ -506,6 +551,13 @@ struct RustupToolchainKeepTests {
         ("rust-toolchain.toml", "stable\n"),
         // Two lines are TOML to rustup, and this isn't.
         ("rust-toolchain", "stable\n1.84.0\n"),
+        // The same with Windows line endings. Swift reads `\r\n` as one
+        // character, so splitting by character would see one line and take
+        // the whole text for a bare name that keeps nothing.
+        ("rust-toolchain", "stable\r\n1.84.0\r\n"),
+        ("rust-toolchain", "# pin\r\ntoolchain = { channel = \"1.84.0\" }\r\n"),
+        // A bare word is not TOML. rustup refuses the file, and so does Purge.
+        ("rust-toolchain.toml", "[toolchain]\nchannel = nightly\n"),
         ("rust-toolchain", "stable\u{0}\n"),
     ])
     func aPinPurgeCannotUnderstandKeepsEverything(name: String, text: String) throws {
@@ -565,6 +617,12 @@ struct RustupToolchainKeepTests {
         try FileManager.default.removeItem(
             at: home.appendingPathComponent("\(RT.root)/1.82.0-aarch64-apple-darwin/\(RustupToolchainPolicy.releaseManifest)")
         )
+        // An install that stopped after the manifest: an old one, and no
+        // component list beside it.
+        try RT.install(home, "1.79.0-aarch64-apple-darwin")
+        try FileManager.default.removeItem(
+            at: home.appendingPathComponent("\(RT.root)/1.79.0-aarch64-apple-darwin/lib/rustlib/multirust-config.toml")
+        )
         #expect(Set(RT.offered(home)) == [RT.old, RT.nightly])
         // The hour-old one is offered once its day has passed.
         let later = Date().addingTimeInterval(RT.day)
@@ -597,6 +655,19 @@ struct RustupToolchainKeepTests {
         (".config/zed/settings.json", #"{"lsp":{"rust-analyzer":{"binary":{"path":"~\/.rustup\/toolchains\/1.84.0-aarch64-apple-darwin\/bin\/rust-analyzer"}}}}"#),
         ("Library/LaunchAgents/dev.example.build.plist",
          "<plist><dict><key>ProgramArguments</key><array><string>cargo</string><string>+1.84.0</string></array></dict></plist>"),
+        // `rustup run <toolchain>` names it with no `+` and no path.
+        (".zshrc", "alias ct='rustup run 1.84.0 cargo test'\n"),
+        (".config/helix/languages.toml",
+         "[language-server.rust-analyzer]\ncommand = \"rustup\"\nargs = [\"run\", \"1.84.0\", \"rust-analyzer\"]\n"),
+        ("Library/LaunchAgents/dev.example.job.plist",
+         "<plist><dict><key>ProgramArguments</key><array><string>rustup</string><string>run</string><string>1.84.0</string><string>cargo</string></array></dict></plist>"),
+        // The shell hands `+1.84.0` to cargo whatever the quotes.
+        (".zshrc", "ct() { cargo +\"1.84.0\" test; }\n"),
+        (".zshrc", "ct() { cargo +'1.84.0' test; }\n"),
+        // mise, asdf and proto select a toolchain by name, in a shell Purge never sees.
+        (".config/mise/config.toml", "[tools]\nrust = \"1.84.0\"\n"),
+        (".tool-versions", "nodejs 22.1.0\nrust 1.84.0\n"),
+        (".prototools", "rust = \"1.84.0\"\n"),
     ])
     func aReferenceFileKeepsTheToolchainItNames(file: String, text: String) throws {
         let home = try RT.makeRustup()
@@ -621,7 +692,11 @@ struct RustupToolchainKeepTests {
     func aLongerNameInAReferenceFileIsNotThisToolchain() throws {
         let home = try RT.makeRustup()
         defer { try? FileManager.default.removeItem(at: home) }
-        try RT.write("cargo +1.84.01 build\ncargo +1.84 build\ncargo +1.84.0.1 x\n", home, ".zshrc")
+        try RT.write(
+            "cargo +1.84.01 build\ncargo +1.84 build\ncargo +1.84.0.1 x\nrustup run 21.84.0 x\nv1.84.0\nx-1.84.0\n"
+                + "nightly-2024-05-011\nmy-nightly-2024-05-01\n",
+            home, ".zshrc"
+        )
         #expect(Set(RT.offered(home)) == [RT.old, RT.nightly])
     }
 
@@ -631,6 +706,103 @@ struct RustupToolchainKeepTests {
         defer { try? FileManager.default.removeItem(at: home) }
         let agents = home.appendingPathComponent("Library/LaunchAgents").path
         #expect(RT.offered(home, RT.context(mayRead: { $0 != agents })).isEmpty)
+    }
+
+    /// cargo reads `.cargo/config.toml` beside a project and above it, and one
+    /// may point `rustc` or a linker into a toolchain no pin file names.
+    @Test(arguments: [
+        ("code/app/.cargo/config.toml", "[build]\nrustc = \"~/.rustup/toolchains/1.84.0-aarch64-apple-darwin/bin/rustc\"\n"),
+        ("code/.cargo/config.toml", "[target.aarch64-apple-darwin]\nlinker = \"/x/.rustup/toolchains/1.84.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-lld\"\n"),
+        ("code/app/.cargo/config", "[alias]\nold = \"+1.84.0 build\"\n"),
+    ])
+    func aProjectCargoConfigKeepsTheToolchainItNames(file: String, text: String) throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try RT.write(text, home, file)
+        let pins = RT.pins(home, project: "code/app")
+        #expect(RT.offered(home, RT.context(pins: pins)) == [RT.nightly], "\(file)")
+        // No project recorded there, so nothing reads the file.
+        #expect(Set(RT.offered(home)) == [RT.old, RT.nightly])
+        // One Purge may not read could name any toolchain.
+        let config = home.appendingPathComponent(file).path
+        #expect(RT.offered(home, RT.context(pins: pins, mayRead: { $0 != config })).isEmpty)
+    }
+
+    @Test
+    func aProjectCargoConfigSettingTheVariableKeepsEverything() throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try RT.write("[env]\nRUSTUP_TOOLCHAIN = \"1.84.0\"\n", home, "code/app/.cargo/config.toml")
+        #expect(RT.offered(home, RT.context(pins: RT.pins(home, project: "code/app"))).isEmpty)
+    }
+
+    /// A launchd read that failed is not an unset variable.
+    @Test
+    func anEnvironmentPurgeCouldNotReadKeepsEverything() throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(RT.offered(home, RT.context(environment: nil)).isEmpty)
+        #expect(!RT.gateKeeps(home, RT.old, RT.context(environment: nil)))
+        #expect(!RT.movable(home, RT.old, RT.context(environment: nil)))
+    }
+
+    /// mise installs through rustup and keeps a link per version. It selects
+    /// the toolchain with `RUSTUP_TOOLCHAIN` only in the shell it activates.
+    @Test
+    func miseAndProtoKeepTheToolchainsTheyManage() throws {
+        let mise = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: mise) }
+        try RT.link(
+            mise, "\(RustupToolchainPolicy.miseInstalls)/1.84.0",
+            to: mise.appendingPathComponent("\(RT.root)/\(RT.old)").path
+        )
+        #expect(RT.offered(mise) == [RT.nightly])
+        // Anything there that is not a link is a layout Purge doesn't know.
+        try RT.write("x", mise, "\(RustupToolchainPolicy.miseInstalls)/nightly/bin/rustc")
+        #expect(RT.offered(mise).isEmpty)
+
+        let proto = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: proto) }
+        try RT.write("x", proto, "\(RustupToolchainPolicy.protoRust)/1.84.0/manifest.json")
+        #expect(RT.offered(proto).isEmpty)
+    }
+
+    /// A tool built against one nightly's compiler sits in `~/.cargo/bin` as a
+    /// real program, not a link, and loads that toolchain's `librustc_driver`.
+    @Test
+    func aProgramBuiltAgainstANightlyKeepsIt() throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try RT.write("x", home, "\(RT.root)/\(RT.nightly)/lib/librustc_driver-0a1b2c3d4e5f6071.dylib")
+        try RT.write("x", home, "\(RT.root)/\(RT.old)/lib/librustc_driver-ffffffffffffffff.dylib")
+        // Programs that load neither: rustup's proxies, and an ordinary tool.
+        try RT.write("\u{0}\u{1}/usr/lib/libSystem.B.dylib\u{0}", home, ".cargo/bin/cargo")
+        try RT.write("", home, ".cargo/bin/empty")
+        #expect(Set(RT.offered(home)) == [RT.old, RT.nightly])
+
+        try RT.write(
+            "\u{0}\u{1}@rpath/librustc_driver-0a1b2c3d4e5f6071.dylib\u{0}/usr/lib/libSystem.B.dylib\u{0}",
+            home, ".cargo/bin/flowistry-driver"
+        )
+        #expect(RT.offered(home) == [RT.old])
+        #expect(!RT.movable(home, RT.nightly))
+        #expect(RT.movable(home, RT.old))
+        // A folder Purge may not read could hold such a program.
+        let bin = home.appendingPathComponent(".cargo/bin").path
+        #expect(RT.offered(home, RT.context(mayRead: { $0 != bin })).isEmpty)
+    }
+
+    /// A scan reads what keeps a toolchain once, not once for each toolchain.
+    @Test
+    func aScanReadsThePinFilesOnce() throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try RT.install(home, "1.70.0-aarch64-apple-darwin", "1.71.0-aarch64-apple-darwin")
+        let reads = Counter()
+        var context = RT.context()
+        context.pinFiles = { reads.add(); return [] }
+        #expect(RT.offered(home, context).count == 4)
+        #expect(reads.value == 1)
     }
 
     @Test
@@ -682,6 +854,45 @@ struct RustupToolchainMoveTests {
         // Another toolchain in use holds nothing back.
         let other = home.appendingPathComponent("\(RT.root)/\(RT.stable)/bin/rustc").path
         #expect(RT.movable(home, RT.old, RT.context(lsof: "p123\nn\(other)\n")))
+    }
+
+    /// `launchctl setenv RUSTUP_TOOLCHAIN` after the clean began: the move asks
+    /// launchd again, and the list gate and the scan never do.
+    @Test
+    func theMoveReadsTheVariableAgain() throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let setSince = RT.context(freshEnvironment: ["1.84.0"])
+        #expect(Set(RT.offered(home, setSince)) == [RT.old, RT.nightly])
+        #expect(RT.gateKeeps(home, RT.old, setSince))
+        #expect(!RT.movable(home, RT.old, setSince))
+        #expect(RT.movable(home, RT.nightly, setSince))
+        // A read that fails at the move stops it.
+        #expect(!RT.movable(home, RT.old, RT.context(freshEnvironment: .some(nil))))
+
+        let fresh = Counter(), earlier = Counter()
+        var context = RT.context()
+        context.environment = { isFresh in
+            (isFresh ? fresh : earlier).add()
+            return []
+        }
+        _ = RT.offered(home, context)
+        _ = RT.gateKeeps(home, RT.nightly, context)
+        #expect(fresh.value == 0)
+        #expect(earlier.value > 0)
+        #expect(RT.movable(home, RT.old, context))
+        #expect(fresh.value == 1)
+    }
+
+    @Test
+    func aQuotedOverrideInAShellFileStopsTheScanAndTheMove() throws {
+        let home = try RT.makeRustup()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(RT.movable(home, RT.old))
+        try RT.write("t() { cargo +\"1.84.0\" test; }\n", home, ".zshrc")
+        #expect(RT.offered(home) == [RT.nightly])
+        #expect(!RT.movable(home, RT.old))
+        #expect(RT.movable(home, RT.nightly))
     }
 
     @Test
@@ -826,6 +1037,11 @@ struct RustupTOMLTests {
         "a = [1]\n",
         "a = \"x\"\rb = \"y\"\n",
         "a = \"x\"\u{0B}\n",
+        // Bare words are not TOML values.
+        "a = nightly\n",
+        "channel = stable-2024-05-02\n",
+        "a = _1\n",
+        "a = +\n",
         "a = \"x\"\u{85}\n",
         "\u{FEFF}a = \"x\"\n",
         "just words\n",
@@ -838,12 +1054,27 @@ struct RustupTOMLTests {
     }
 
     @Test
+    func readsNumbersBooleansAndDatesAsNoString() {
+        let text = "a = true\nb = false\nc = 12\nd = -0.5\ne = +1e6\nf = 1979-05-27T07:32:00Z\ng = 07:32:00\nh = \"x\"\n"
+        let read = RustupTOML.read(text, tables: [], allowsArrays: false)
+        #expect(read?.strings == ["x"])
+        #expect(read?.otherTopLevelKeys == ["a", "b", "c", "d", "e", "f", "g"])
+    }
+
+    @Test
     func theLegacyFileIsReadBothWays() {
         #expect(RustupToolchainPolicy.pinStrings("nightly-2021-01-21\n", legacyNameAllowed: true) == ["nightly-2021-01-21"])
         #expect(RustupToolchainPolicy.pinStrings("", legacyNameAllowed: true) == [])
         #expect(RustupToolchainPolicy.pinStrings("\n", legacyNameAllowed: true) == [""])
         #expect(RustupToolchainPolicy.pinStrings("[toolchain]\nchannel = \"1.84.0\"\n", legacyNameAllowed: true) == ["1.84.0"])
         #expect(RustupToolchainPolicy.pinStrings("stable\nbeta\n", legacyNameAllowed: true) == nil)
+        // Lines are counted as rustup counts them, whatever the line ending.
+        #expect(RustupToolchainPolicy.pinStrings("nightly-2021-01-21\r\n", legacyNameAllowed: true) == ["nightly-2021-01-21"])
+        #expect(RustupToolchainPolicy.pinStrings("stable\r\nbeta\r\n", legacyNameAllowed: true) == nil)
+        #expect(RustupToolchainPolicy.pinStrings("stable\n  \n", legacyNameAllowed: true) == nil)
+        #expect(RustupToolchainPolicy.pinStrings(
+            "[toolchain]\r\nchannel = \"1.84.0\"\r\n", legacyNameAllowed: true
+        ) == ["1.84.0"])
         // `rust-toolchain.toml` is never a bare name.
         #expect(RustupToolchainPolicy.pinStrings("nightly-2021-01-21\n", legacyNameAllowed: false) == nil)
         #expect(RustupToolchainPolicy.pinStrings("", legacyNameAllowed: false) == [])

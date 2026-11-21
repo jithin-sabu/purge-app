@@ -19,14 +19,19 @@ import Foundation
 /// - rustup finished installing it over a day ago,
 /// - `~/.rustup/settings.toml` names it neither as the default nor in a
 ///   directory override,
-/// - `RUSTUP_TOOLCHAIN` doesn't name it,
+/// - `RUSTUP_TOOLCHAIN` doesn't name it, in Purge's environment or launchd's,
+///   read again right before the move,
 /// - no `rust-toolchain` or `rust-toolchain.toml` names it: the ones in home,
 ///   beside each project a Dev Projects scan found, or in a folder above one,
-///   which rustup also reads,
+///   which rustup also reads, and no `.cargo/config.toml` in those folders
+///   names it,
 /// - no linked toolchain leads into it,
-/// - no LaunchAgent, editor, MCP or cargo config, or shell startup file names
-///   a path inside it, `+<toolchain>` or `RUSTUP_TOOLCHAIN`, no link in a `bin`
-///   folder or in Kani's folder points into it, and dylint has no driver for it,
+/// - no LaunchAgent, editor, MCP, cargo, mise or proto config, or shell
+///   startup file names it (a path inside it, or its name as a word, as in
+///   `cargo +1.84.0` or `rustup run 1.84.0`) or holds `RUSTUP_TOOLCHAIN`,
+/// - no link in a `bin` folder, in Kani's folder or in mise's installs points
+///   into it, dylint has no driver for it, and no program in `~/.cargo/bin`
+///   loads its compiler library,
 /// - and, right before the move, rustup isn't running and no process has a
 ///   file open inside it.
 ///
@@ -50,7 +55,8 @@ nonisolated enum RustupToolchainPolicy {
     /// The hosts a Mac runs: Apple silicon, and Intel or Rosetta.
     static let hosts = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 
-    /// What rustup writes last when it installs or changes a toolchain, inside it.
+    /// What rustup writes last when it installs or changes a toolchain, inside
+    /// it. A finished install has all three.
     static let installRecords = [
         "lib/rustlib/multirust-channel-manifest.toml",
         "lib/rustlib/multirust-config.toml",
@@ -63,13 +69,18 @@ nonisolated enum RustupToolchainPolicy {
     /// The files rustup reads for a project's toolchain, in each folder from
     /// the project up to `/`.
     static let pinFileNames = ["rust-toolchain", "rust-toolchain.toml"]
+    /// cargo reads these in the same folders, from the project up to `/`. One
+    /// may point `rustc`, a wrapper or a linker into a toolchain.
+    static let cargoConfigNames = [".cargo/config.toml", ".cargo/config"]
     static let environmentName = "RUSTUP_TOOLCHAIN"
 
     /// Files that may name a toolchain, relative to home: the ones nvm's rule
-    /// reads, cargo's config (`[build] rustc`), and two more editors.
-    static let referenceFiles = NvmNodeVersionPolicy.referenceFiles + [
-        ".cargo/config.toml", ".cargo/config",
+    /// reads, cargo's config (`[build] rustc`), two more editors, and the
+    /// global configs of mise, asdf and proto, which pick a toolchain by name.
+    static let referenceFiles = NvmNodeVersionPolicy.referenceFiles + cargoConfigNames + [
         ".config/zed/settings.json", ".config/helix/languages.toml",
+        ".config/mise/config.toml", ".mise.toml", "mise.toml", ".tool-versions",
+        ".prototools", ".proto/.prototools",
     ]
     /// `bin` folders where a link may point into a toolchain. cargo's own holds
     /// rustup's proxies, which are not links.
@@ -78,6 +89,20 @@ nonisolated enum RustupToolchainPolicy {
     static let kaniFolder = ".kani"
     /// dylint keeps one driver per toolchain, in a folder named after it.
     static let dylintDrivers = ".dylint_drivers"
+    /// mise installs Rust through rustup and keeps one link per version here,
+    /// each leading to the toolchain. It selects one with `RUSTUP_TOOLCHAIN`
+    /// in the shell it activates, which Purge never sees.
+    static let miseInstalls = ".local/share/mise/installs/rust"
+    /// proto's Rust tool also runs rustup. Purge doesn't know its records, so
+    /// its folder keeps every toolchain.
+    static let protoRust = ".proto/tools/rust"
+    /// Where `cargo install` puts programs. One built against a nightly's
+    /// compiler (Flowistry, Verus, Creusot) loads that toolchain's
+    /// `librustc_driver` by name and breaks without it.
+    static let programFolders = [".cargo/bin"]
+    static let driverLibraryPrefix = "librustc_driver-"
+    /// A program's load commands sit at its start, well inside this many bytes.
+    static let programHeaderBytes = 256 * 1024
 
     // MARK: Names
 
@@ -226,12 +251,16 @@ nonisolated enum RustupToolchainPolicy {
     }
 
     /// The command that brings the toolchain back. `rustup toolchain install`
-    /// installs only the host's parts, so the targets added to the toolchain at
-    /// `path`, when it is given, are named too.
+    /// installs only what the profile in `settings.toml` names, for the host,
+    /// so the targets and components the toolchain at `path` has beyond that
+    /// are named too, when it is given.
     static func reinstallCommand(forFolderName folder: String, at path: String? = nil) -> String {
         var command = "rustup toolchain install \(folder)"
-        let targets = path.map { addedTargets(in: $0, folderName: folder) } ?? []
+        guard let path else { return command }
+        let targets = addedTargets(in: path, folderName: folder)
         if !targets.isEmpty { command += " --target \(targets.joined(separator: ","))" }
+        let components = addedComponents(in: path, folderName: folder, targets: targets)
+        if !components.isEmpty { command += " --component \(components.joined(separator: ","))" }
         return command
     }
 
@@ -249,6 +278,39 @@ nonisolated enum RustupToolchainPolicy {
         .sorted()
     }
 
+    /// What every profile installs, and what the default one adds. rustup
+    /// lists a component under either name.
+    static let coreComponents: Set<String> = ["rustc", "cargo", "rust-std"]
+    static let defaultProfileComponents: Set<String> = [
+        "rust-docs", "rustfmt", "rustfmt-preview", "clippy", "clippy-preview",
+    ]
+
+    /// The components in the toolchain's own list (`lib/rustlib/components`)
+    /// that a fresh install with rustup's current profile would leave out,
+    /// such as `rust-src`. With no profile Purge can read, everything beyond
+    /// the minimal three is named, which installs nothing extra.
+    static func addedComponents(in toolchainPath: String, folderName: String, targets: [String]) -> [String] {
+        guard let host = offerableName(ofFolderName: folderName)?.host,
+              let list = NvmNodeVersionPolicy.readText("\(toolchainPath)/lib/rustlib/components") else { return [] }
+        var covered = coreComponents
+        let settings = URL(fileURLWithPath: toolchainPath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("settings.toml").path
+        if let text = NvmNodeVersionPolicy.readText(settings),
+           RustupTOML.read(text, tables: ["overrides"], allowsArrays: false)?.topLevel["profile"] == ["default"] {
+            covered.formUnion(defaultProfileComponents)
+        }
+        var added = Set<String>()
+        for line in list.unicodeScalars.split(separator: "\n") {
+            let entry = String(String.UnicodeScalarView(line)).trimmingCharacters(in: .whitespaces)
+            guard !entry.isEmpty, entry.unicodeScalars.allSatisfy(isNameScalar) else { continue }
+            // `rust-std-<target>` comes back with `--target`.
+            if targets.contains(where: { entry.hasSuffix("-\($0)") }) { continue }
+            let name = entry.hasSuffix("-\(host)") ? String(entry.dropLast(host.count + 1)) : entry
+            if !name.isEmpty, !covered.contains(name) { added.insert(name) }
+        }
+        return added.sorted()
+    }
+
     // MARK: Context
 
     nonisolated struct Context: Sendable {
@@ -259,13 +321,16 @@ nonisolated enum RustupToolchainPolicy {
         var mayRead: @Sendable (_ path: String) -> Bool
         /// The `lsof` listing, read only right before a move.
         var openFiles: OpenFileCheck.Lister
-        /// Every `RUSTUP_TOOLCHAIN` value Purge can see.
-        var environment: @Sendable () -> [String]
+        /// Every `RUSTUP_TOOLCHAIN` value Purge can see, or nil when one
+        /// couldn't be read. `fresh` asks launchd again, which only a move does.
+        var environment: @Sendable (_ fresh: Bool) -> [String]?
         /// Whether rustup is at work, which may be inside a toolchain. Asked
         /// only right before a move.
         var rustupIsRunning: @Sendable () -> Bool
         /// The `bin` folders searched for links into a toolchain. Tests use their own.
         var linkFolders: [String] = RustupToolchainPolicy.linkFolders
+        /// The folders whose programs may load a toolchain's compiler library.
+        var programFolders: [String] = RustupToolchainPolicy.programFolders
 
         /// `access` is worked out once here, not for each file: it probes Full
         /// Disk Access by opening folders.
@@ -278,12 +343,17 @@ nonisolated enum RustupToolchainPolicy {
                 },
                 openFiles: OpenFileCheck.liveListing,
                 // Both the value Purge was started with and launchd's: either
-                // may be the one a build runs with.
-                environment: {
-                    [
-                        ProcessInfo.processInfo.environment[RustupToolchainPolicy.environmentName],
-                        LaunchdEnvironment.values[RustupToolchainPolicy.environmentName],
-                    ].compactMap { $0 }
+                // may be the one a build runs with. A launchd read that failed
+                // is not an unset variable.
+                environment: { fresh in
+                    let name = RustupToolchainPolicy.environmentName
+                    var values = [ProcessInfo.processInfo.environment[name]].compactMap { $0 }
+                    switch fresh ? LaunchdEnvironment.readNow(name) : LaunchdEnvironment.lastRead(name) {
+                    case .value(let value): values.append(value)
+                    case .unset: break
+                    case .failed: return nil
+                    }
+                    return values
                 },
                 rustupIsRunning: { RustupToolchainPolicy.isRustupRunning() }
             )
@@ -312,23 +382,32 @@ nonisolated enum RustupToolchainPolicy {
     // MARK: Gate
 
     /// Whether the toolchain folder at `path` is offered now, judged as far as `check` goes.
+    ///
+    /// `knownKept` is `keptToolchains` when the caller has just read it, so a
+    /// scan reads the pin files once for all its toolchains, not once for each.
     static func isOffered(
         _ path: String,
         home: String,
         now: Date,
         context: Context,
-        check: NvmNodeVersionPolicy.Check
+        check: NvmNodeVersionPolicy.Check,
+        knownKept: Set<String>? = nil
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
         let folder = url.lastPathComponent
         guard isToolchainPath(path, home: home),
               !PathContainment.containsSymlinkComponent(url, home: home),
               OldToolVersionScanPolicy.isRealFolder(path),
-              isFinishedInstall(path, before: now.addingTimeInterval(-OldToolVersionScanPolicy.minimumLeftoverAge)),
-              let kept = check == .quick
-                ? recentKeptToolchains(home: home, context: context, now: now)
-                : keptToolchains(home: home, context: context),
-              !kept.contains(folder) else { return false }
+              isFinishedInstall(path, before: now.addingTimeInterval(-OldToolVersionScanPolicy.minimumLeftoverAge))
+        else { return false }
+        let kept: Set<String>?
+        switch check {
+        case .quick: kept = recentKeptToolchains(home: home, context: context, now: now)
+        case .scan: kept = knownKept ?? keptToolchains(home: home, context: context)
+        // A move trusts no earlier read, launchd's included.
+        case .move: kept = keptToolchains(home: home, context: context, fresh: true)
+        }
+        guard let kept, !kept.contains(folder) else { return false }
         switch check {
         case .quick:
             return true
@@ -343,6 +422,18 @@ nonisolated enum RustupToolchainPolicy {
             return !context.rustupIsRunning()
                 && OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free
         }
+    }
+
+    /// The toolchain folders a scan offers, as paths. The keep set is read once.
+    static func offeredFolders(home: String, now: Date, context: Context) -> [String] {
+        let root = "\(home)/\(toolchainsRoot)"
+        guard let candidates = candidateFolders(in: root), !candidates.isEmpty,
+              let kept = keptToolchains(home: home, context: context) else { return [] }
+        return candidates
+            .filter { !kept.contains($0) }
+            .map { "\(root)/\($0)" }
+            .filter { isOffered($0, home: home, now: now, context: context, check: .scan, knownKept: kept) }
+            .sorted { OldToolVersionScanPolicy.isLower($0, than: $1) }
     }
 
     /// `FileDeleter`'s last check before it moves a toolchain: every rule
@@ -360,18 +451,15 @@ nonisolated enum RustupToolchainPolicy {
     }
 
     /// Whether rustup installed the toolchain from a release manifest and last
-    /// changed it before `cutoff`. rustup writes these records last, so a
-    /// toolchain still being installed has none, and one that just gained a
-    /// component or a target has a fresh one.
+    /// changed it before `cutoff`. rustup writes these records last, the
+    /// manifest before its component list, so a toolchain still being
+    /// installed, or one an install left half done, lacks one of them, and one
+    /// that just gained a component or a target has a fresh one.
     static func isFinishedInstall(_ path: String, before cutoff: Date) -> Bool {
-        guard OldToolVersionScanPolicy.isRegularFile("\(path)/\(releaseManifest)") else { return false }
         for record in installRecords {
             var info = stat()
-            guard lstat("\(path)/\(record)", &info) == 0 else {
-                if errno == ENOENT { continue }
-                return false
-            }
-            guard Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec)) < cutoff else { return false }
+            guard lstat("\(path)/\(record)", &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+                  Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec)) < cutoff else { return false }
         }
         return true
     }
@@ -403,20 +491,27 @@ nonisolated enum RustupToolchainPolicy {
         var strings: [String]
         var text: String = ""
         var folder: String?
+        /// A cargo config: its text is searched for the toolchain's name as a
+        /// word, the way a reference file is.
+        var isReferenceText = false
     }
 
     /// The candidate folders in `~/.rustup/toolchains` nothing may remove now.
     /// Nil, which keeps every toolchain, when a source can't be read or understood.
-    static func keptToolchains(home: String, context: Context) -> Set<String>? {
+    /// `fresh` reads launchd's `RUSTUP_TOOLCHAIN` again, which only a move does.
+    static func keptToolchains(home: String, context: Context, fresh: Bool = false) -> Set<String>? {
         let root = "\(home)/\(toolchainsRoot)"
         guard let candidates = candidateFolders(in: root) else { return nil }
         guard !candidates.isEmpty else { return [] }
-        guard let sources = sources(home: home, context: context) else { return nil }
+        guard let sources = sources(home: home, context: context, fresh: fresh) else { return nil }
         var kept = Set<String>()
         for source in sources {
             for folder in candidates where !kept.contains(folder) {
                 if source.strings.contains(where: { names($0, folder: folder) })
                     || NvmNodeVersionPolicy.names(source.text, versionFolder: folder, in: toolchainsRoot) {
+                    kept.insert(folder)
+                } else if source.isReferenceText, let name = offerableName(ofFolderName: folder),
+                          namesToolchain(source.text, folder: folder, release: name.release) {
                     kept.insert(folder)
                 }
             }
@@ -451,7 +546,7 @@ nonisolated enum RustupToolchainPolicy {
 
     /// rustup's settings, `RUSTUP_TOOLCHAIN`, and every pin file. Nil when one
     /// can't be read or understood.
-    private static func sources(home: String, context: Context) -> [Source]? {
+    private static func sources(home: String, context: Context, fresh: Bool) -> [Source]? {
         // No settings file, another layout, or no default: Purge can't tell
         // what rustup runs, so every toolchain stays. With no default, every
         // use goes through the routes Purge sees least.
@@ -462,27 +557,42 @@ nonisolated enum RustupToolchainPolicy {
               let defaults = read.topLevel["default_toolchain"], defaults.count == 1,
               !defaults[0].trimmingCharacters(in: .whitespaces).isEmpty,
               read.otherTopLevelKeys.isDisjoint(with: ["version", "default_toolchain"]) else { return nil }
+        guard let environment = context.environment(fresh) else { return nil }
         var sources = [
             Source(strings: read.strings, text: text),
-            Source(strings: context.environment()),
+            Source(strings: environment),
         ]
 
         guard let recorded = context.pinFiles() else { return nil }
         var checked = Set<String>()
+        var folders = Set<String>()
         // rustup walks up from the folder it runs in, which may be home itself.
         let inHome = pinFileNames.map { "\(home)/\($0)" }
         for file in inHome + recorded where checked.insert(file).inserted {
+            let folder = (file as NSString).deletingLastPathComponent
             switch NvmNodeVersionPolicy.readPinFile(file, home: home, mayRead: context.mayRead) {
             case .absent:
-                continue
+                break
             case .unknown:
                 return nil
             case .text(let text):
                 let isLegacy = URL(fileURLWithPath: file).lastPathComponent == "rust-toolchain"
                 guard let strings = pinStrings(text, legacyNameAllowed: isLegacy) else { return nil }
-                sources.append(Source(
-                    strings: strings, text: text, folder: (file as NSString).deletingLastPathComponent
-                ))
+                sources.append(Source(strings: strings, text: text, folder: folder))
+            }
+            // cargo reads its config in the same folders. The ledger records
+            // only the pin files, so these are worked out from them.
+            guard folders.insert(folder).inserted else { continue }
+            for name in cargoConfigNames {
+                let config = folder == "/" ? "/\(name)" : "\(folder)/\(name)"
+                switch NvmNodeVersionPolicy.readPinFile(config, home: home, mayRead: context.mayRead) {
+                case .absent:
+                    continue
+                case .unknown:
+                    return nil
+                case .text(let text):
+                    sources.append(Source(strings: [], text: text, folder: folder, isReferenceText: true))
+                }
             }
         }
         return sources
@@ -496,11 +606,17 @@ nonisolated enum RustupToolchainPolicy {
         let toml = RustupTOML.read(text, tables: ["toolchain"], allowsArrays: true)
         guard legacyNameAllowed else { return toml?.strings }
         guard !RustupTOML.hasUnreadableScalars(text) else { return nil }
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        if lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeLast() }
+        // Lines as rustup counts them (`str::lines`): split at each line feed,
+        // with no line after the last one. By scalar, not by character: Swift
+        // reads a carriage return and a line feed as one character, so a file
+        // with Windows line endings would never split and would always pass
+        // for one bare name.
+        var lines = text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false)
+        if lines.last?.isEmpty == true { lines.removeLast() }
         if lines.isEmpty { return [] }
         if lines.count == 1 {
-            return (toml?.strings ?? []) + [lines[0].trimmingCharacters(in: .whitespaces)]
+            let name = String(String.UnicodeScalarView(lines[0])).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (toml?.strings ?? []) + [name]
         }
         return toml?.strings
     }
@@ -552,7 +668,24 @@ nonisolated enum RustupToolchainPolicy {
             if namesToolchain(text, folder: folder, release: name.release) { return true }
         }
 
+        // proto runs rustup too, and Purge doesn't know how it records a toolchain.
+        var info = stat()
+        if lstat("\(home)/\(protoRust)", &info) == 0 { return true }
+        guard errno == ENOENT || errno == ENOTDIR else { return nil }
+
         var folders = context.linkFolders
+        // mise keeps a link per version. Anything else there is a layout
+        // Purge doesn't know, and keeps every toolchain.
+        let mise = "\(home)/\(miseInstalls)"
+        guard context.mayRead(mise) else { return nil }
+        do {
+            for entry in try FileManager.default.contentsOfDirectory(atPath: mise) where !entry.hasPrefix(".") {
+                guard lstat("\(mise)/\(entry)", &info) == 0, (info.st_mode & S_IFMT) == S_IFLNK else { return true }
+            }
+            folders.append(miseInstalls)
+        } catch {
+            guard NvmNodeVersionPolicy.isMissing(mise) else { return nil }
+        }
         let kani = "\(home)/\(kaniFolder)"
         guard context.mayRead(kani) else { return nil }
         do {
@@ -569,26 +702,86 @@ nonisolated enum RustupToolchainPolicy {
         ) else { return nil }
         if linked { return true }
 
-        var info = stat()
         if lstat("\(home)/\(dylintDrivers)/\(folder)", &info) == 0 { return true }
-        return errno == ENOENT || errno == ENOTDIR ? false : nil
+        guard errno == ENOENT || errno == ENOTDIR else { return nil }
+        return isLoadedByInstalledProgram(path, home: home, context: context)
+    }
+
+    /// Whether a program in `~/.cargo/bin` loads this toolchain's compiler
+    /// library. A tool built against one nightly's compiler names
+    /// `librustc_driver-<hash>.dylib` in its load commands, and the hash is
+    /// that toolchain's alone. Nil when the folder or a program can't be read.
+    static func isLoadedByInstalledProgram(_ path: String, home: String, context: Context) -> Bool? {
+        let libraries: [Data]
+        do {
+            libraries = try FileManager.default.contentsOfDirectory(atPath: "\(path)/lib")
+                .filter { $0.hasPrefix(driverLibraryPrefix) && $0.hasSuffix(".dylib") }
+                .map { Data($0.utf8) }
+        } catch {
+            return NvmNodeVersionPolicy.isMissing("\(path)/lib") ? false : nil
+        }
+        guard !libraries.isEmpty else { return false }
+        for relative in context.programFolders {
+            let folder = "\(home)/\(relative)"
+            guard context.mayRead(folder) else { return nil }
+            let names: [String]
+            do {
+                names = try FileManager.default.contentsOfDirectory(atPath: folder)
+            } catch {
+                if NvmNodeVersionPolicy.isMissing(folder) { continue }
+                return nil
+            }
+            for name in names {
+                let program = "\(folder)/\(name)"
+                // A link is `isLinkedFromBinFolder`'s to judge.
+                guard OldToolVersionScanPolicy.isRegularFile(program) else { continue }
+                guard let handle = FileHandle(forReadingAtPath: program) else { return nil }
+                defer { try? handle.close() }
+                let header: Data
+                do {
+                    // Nil at the end of the file, which an empty one reaches at once.
+                    header = try handle.read(upToCount: programHeaderBytes) ?? Data()
+                } catch {
+                    return nil
+                }
+                if libraries.contains(where: { header.range(of: $0) != nil }) { return true }
+            }
+        }
+        return false
     }
 
     /// Whether a reference file's `text` names the toolchain: a path inside its
-    /// folder, `+<release>` as cargo and rustc take it, or `RUSTUP_TOOLCHAIN`,
-    /// whose value Purge doesn't try to read from a script.
+    /// folder, its name as a word, or `RUSTUP_TOOLCHAIN`, whose value Purge
+    /// doesn't try to read from a script.
+    ///
+    /// The name as a word covers `cargo +1.84.0`, `cargo +"1.84.0"`,
+    /// `rustup run 1.84.0 …`, an editor's `["run", "nightly-2024-05-01", …]`
+    /// and mise's `rust = "1.84.0"`. It also keeps a toolchain whose version
+    /// some unrelated setting happens to hold, which errs on keeping.
     static func namesToolchain(_ text: String, folder: String, release: String) -> Bool {
         if NvmNodeVersionPolicy.names(text, versionFolder: folder, in: toolchainsRoot) { return true }
         let haystack = text.lowercased()
         if haystack.contains(environmentName.lowercased()) { return true }
-        let needle = "+\(release.lowercased())"
-        var searchFrom = haystack.startIndex
-        while let found = haystack.range(of: needle, range: searchFrom..<haystack.endIndex) {
-            guard found.upperBound < haystack.endIndex else { return true }
-            let next = haystack[found.upperBound]
-            // `+1.84` is not `+1.84.0`. A `-` may start the host, so it counts.
-            if !(next.isLetter || next.isNumber || next == "." || next == "_") { return true }
-            searchFrom = found.upperBound
+        return containsWord(release.lowercased(), in: haystack)
+    }
+
+    /// Whether `word` stands in `text` with no letter, digit, `.`, `_` or `-`
+    /// before it, and no letter, digit, `.` or `_` after it. A `-` may follow,
+    /// since it starts the host (`1.84.0-aarch64-apple-darwin`). So `1.84` is
+    /// not `1.84.0`, and `1.84.0` is not `1.84.01` or `21.84.0`.
+    static func containsWord(_ word: String, in text: String) -> Bool {
+        guard !word.isEmpty else { return false }
+        func isNamePart(_ character: Character) -> Bool {
+            character.isLetter || character.isNumber || character == "." || character == "_"
+        }
+        var searchFrom = text.startIndex
+        while let found = text.range(of: word, range: searchFrom..<text.endIndex) {
+            let before = found.lowerBound == text.startIndex ? nil : text[text.index(before: found.lowerBound)]
+            let after = found.upperBound == text.endIndex ? nil : text[found.upperBound]
+            let startsWord = before.map { !isNamePart($0) && $0 != "-" } ?? true
+            let endsWord = after.map { !isNamePart($0) } ?? true
+            if startsWord && endsWord { return true }
+            searchFrom = text.index(after: found.lowerBound)
         }
         return false
     }
@@ -790,18 +983,31 @@ nonisolated enum RustupTOML {
                 index += 1
                 return members
             }
-            // A number, a boolean or a date. An inline table (`{`) is not read.
-            var count = 0
-            while let scalar = current {
+            // A number, a boolean or a date. An inline table (`{`) is not read,
+            // nor a bare word such as `channel = nightly`, which is not TOML.
+            var word = String.UnicodeScalarView()
+            scan: while let scalar = current {
                 switch scalar {
                 case "a"..."z", "A"..."Z", "0"..."9", "+", "-", "_", ".", ":":
-                    count += 1
+                    word.append(scalar)
                     index += 1
                 default:
-                    return count == 0 ? nil : []
+                    break scan
                 }
             }
-            return count == 0 ? nil : []
+            return Self.isBareValue(String(word)) ? [] : nil
+        }
+
+        /// `true`, `false`, or what starts as a number does: a digit, or a
+        /// sign and more. That takes in dates and times too.
+        private static func isBareValue(_ word: String) -> Bool {
+            if ["true", "false", "inf", "nan"].contains(word) { return true }
+            guard let first = word.unicodeScalars.first else { return false }
+            switch first {
+            case "0"..."9": return true
+            case "+", "-": return word.unicodeScalars.count > 1
+            default: return false
+            }
         }
 
         /// Spaces, line breaks and comments between an array's members. False

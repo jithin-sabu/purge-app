@@ -627,9 +627,13 @@ nonisolated enum OldToolVersionScanPolicy {
             add(VitePlusNodeVersionPolicy.labelPrefix + name, vitePlusVersions[name] ?? [])
         }
         add(VitePlusNodeVersionPolicy.leftoversLabel, vitePlusLeftovers)
-        // One row per rustup toolchain, labelled with its whole folder name (#406).
-        for toolchain in offered(in: "\(homePath)/\(RustupToolchainPolicy.toolchainsRoot)") {
-            add(RustupToolchainPolicy.labelPrefix + URL(fileURLWithPath: toolchain).lastPathComponent, [toolchain])
+        // One row per rustup toolchain, labelled with its whole folder name
+        // (#406). Its own list, so what keeps a toolchain is read once.
+        let rustupRoot = URL(fileURLWithPath: "\(homePath)/\(RustupToolchainPolicy.toolchainsRoot)")
+        if ProtectedLocations.isReadable(rustupRoot, access: .limited, home: home) {
+            for toolchain in RustupToolchainPolicy.offeredFolders(home: homePath, now: now, context: rustup) {
+                add(RustupToolchainPolicy.labelPrefix + URL(fileURLWithPath: toolchain).lastPathComponent, [toolchain])
+            }
         }
         return rows
     }
