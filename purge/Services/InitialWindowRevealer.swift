@@ -37,10 +37,13 @@ enum InitialWindowRevealer {
                 reveal(turnsLeft: turnsLeft - 1)
                 return
             }
-            AppWindowPresenter.reveal()
+            // Not `AppWindowPresenter.reveal()`: with no window yet it opens
+            // one, and SwiftUI's own launch window could still arrive after it.
+            // This only activates then, and SwiftUI shows its window itself.
+            MainWindowLocator.revealAppWindow()
             for delay in retryDelays {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    MainActor.assumeIsolated { revealAgainIfNotActive() }
+                    MainActor.assumeIsolated { revealAgainIfNeeded() }
                 }
             }
         }
@@ -49,9 +52,22 @@ enum InitialWindowRevealer {
     /// macOS may turn down a second request to activate while another app is
     /// in front. Ordering the window front needs no activation, so the window
     /// is at least on top where the user can see it.
-    private static func revealAgainIfNotActive() {
-        guard !NSApp.isActive else { return }
-        AppWindowPresenter.reveal()
-        MainWindowLocator.appWindow(in: NSApp.windows)?.orderFrontRegardless()
+    private static func revealAgainIfNeeded() {
+        let window = MainWindowLocator.appWindow(in: NSApp.windows)
+        guard shouldRevealAgain(
+            appIsActive: NSApp.isActive,
+            windowIsOpen: window.map { $0.isVisible && !$0.isMiniaturized }
+        ) else { return }
+        MainWindowLocator.revealAppWindow()
+        window?.orderFrontRegardless()
+    }
+
+    /// A retry is for a launch window that lost the front, not for one the user
+    /// closed or minimised in the meantime. SwiftUI keeps a closed window in
+    /// `NSApp.windows`, and revealing it would bring it back. A launch window
+    /// that lost the front still reads as visible, so it is tried again.
+    /// `nil` means no window has been made yet, and the retry only activates.
+    nonisolated static func shouldRevealAgain(appIsActive: Bool, windowIsOpen: Bool?) -> Bool {
+        !appIsActive && windowIsOpen != false
     }
 }
