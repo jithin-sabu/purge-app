@@ -90,6 +90,7 @@
 "Android NDK %@" = "Android NDK %@";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
+"Rust %@ (rustup)" = "Rust %@ (rustup)";
 "Also in this cleanup" = "Bu temizlikte ayrıca";
 "Also select" = "Ayrıca seç";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ uygulamasını bir yönetici yüklediği için Çöp Sepeti'ne taşınabilmesi macOS'in izninizi almasını gerektirir.";

@@ -148,6 +148,22 @@ nonisolated final class DevScanner {
                 reinstallCommand: "vp env install \(version)"
             )
         }
+        // One row per rustup toolchain, named by its whole folder name (#406).
+        if let toolchain = RustupToolchainPolicy.toolchain(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: RustupToolchainPolicy.explanationKey,
+                friendlyFallback: toolLabel
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Rust \(toolchain) (rustup)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: RustupToolchainPolicy.reinstallCommand(
+                    forFolderName: toolchain, at: primaryPath?.standardizedFileURL.path
+                )
+            )
+        }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -1253,6 +1269,14 @@ nonisolated final class DevScanner {
             // way, and keeps the Node versions they pin (#398).
             VitePlusNodeVersionPolicy.ledger.record(
                 VitePlusNodeVersionPolicy.pinFiles(inProjectRoots: discoveredRoots.map(\.0)),
+                home: home.standardizedFileURL.path,
+                fullAccess: access == .full,
+                mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }
+            )
+            // rustup reads `rust-toolchain` and `rust-toolchain.toml` the same
+            // way, and they keep the toolchains they name (#406).
+            RustupToolchainPolicy.ledger.record(
+                RustupToolchainPolicy.pinFiles(inProjectRoots: discoveredRoots.map(\.0)),
                 home: home.standardizedFileURL.path,
                 fullAccess: access == .full,
                 mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }

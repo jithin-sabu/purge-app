@@ -2206,7 +2206,9 @@ struct ShapeLinkTests {
         let fm = FileManager.default
         let (base, home, elsewhere) = try Self.makeHome()
         defer { try? fm.removeItem(at: base) }
-        for link in ["Library", "Developer", "Downloads", ".gem", ".gradle", ".local", ".npm", ".cursor", ".nvm", "go"] {
+        for link in [
+            "Library", "Developer", "Downloads", ".gem", ".gradle", ".local", ".npm", ".cursor", ".nvm", ".rustup", "go",
+        ] {
             try fm.createSymbolicLink(at: home.appendingPathComponent(link), withDestinationURL: elsewhere)
         }
         for path in [
@@ -2216,6 +2218,7 @@ struct ShapeLinkTests {
             // Rules with their own link checks.
             "\(Self.appSupport)/Figma/DesktopProfile/v43", "Library/Caches/ms-playwright/chromium-1187", "go/pkg/mod",
             ".nvm/versions/node/v20.11.0", ".cursor/projects/tmp-1", ".cursor/worktrees/app/a1b2",
+            ".rustup/toolchains/1.84.0-aarch64-apple-darwin",
             // Projects.
             "Developer/app/node_modules", "Developer/app/.gradle", "Developer/app/build",
             // Next to a shape, never one.

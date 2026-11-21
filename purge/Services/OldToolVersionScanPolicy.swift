@@ -4,8 +4,9 @@ import Foundation
 /// Old tool versions kept next to the one in use (#324): Cursor's unfinished
 /// agent-CLI installs, old Claude Code downloads, Android NDK versions, Android
 /// system images no emulator uses, Figma profiles Figma has migrated away
-/// from, and Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
-/// uses, with the folders an unfinished Vite+ install leaves.
+/// from, Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
+/// uses, with the folders an unfinished Vite+ install leaves, and Rust
+/// toolchains rustup keeps that nothing uses (#406).
 ///
 /// Every row is Check First. These are installed tools and profiles, not data an
 /// app rebuilds by itself, and whether one is unused depends on the disk at the
@@ -34,6 +35,8 @@ nonisolated enum OldToolVersionScanPolicy {
         case vitePlusNodeVersion
         /// `<Vite+ data>/js_runtime/.tmp*` (#398), judged by `VitePlusNodeVersionPolicy`.
         case vitePlusInstallLeftover
+        /// `~/.rustup/toolchains/<name>` (#406), judged by `RustupToolchainPolicy`.
+        case rustupToolchain
     }
 
     // MARK: Rows
@@ -110,6 +113,9 @@ nonisolated enum OldToolVersionScanPolicy {
         if let name = onlyChild(path, of: "\(home)/\(NvmNodeVersionPolicy.versionsRoot)"),
            NvmNodeVersionPolicy.versionNumber(ofFolderName: name) != nil {
             return .nvmNodeVersion
+        }
+        if RustupToolchainPolicy.isToolchainPath(path, home: home) {
+            return .rustupToolchain
         }
         switch VitePlusNodeVersionPolicy.kind(of: path, home: home) {
         case .version: return .vitePlusNodeVersion
@@ -213,7 +219,8 @@ nonisolated enum OldToolVersionScanPolicy {
         now: Date = Date(),
         android: AndroidContext? = nil,
         nvm: NvmNodeVersionPolicy.Context? = nil,
-        vitePlus: VitePlusNodeVersionPolicy.Context? = nil
+        vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
+        rustup: RustupToolchainPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
@@ -222,11 +229,12 @@ nonisolated enum OldToolVersionScanPolicy {
             android: android ?? .current(home: home),
             nvm: nvm,
             vitePlus: vitePlus,
+            rustup: rustup,
             nvmCheck: .quick
         )
     }
 
-    /// `nvmCheck` says how far an nvm or Vite+ (#398) entry is judged:
+    /// `nvmCheck` says how far an nvm, Vite+ (#398) or rustup (#406) entry is judged:
     /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
     /// `FileDeleter` runs the rest right before the move
     /// (`passesImmediateTrashBoundary` in each policy).
@@ -238,6 +246,7 @@ nonisolated enum OldToolVersionScanPolicy {
         android: AndroidContext,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
+        rustup: RustupToolchainPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -286,6 +295,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case .vitePlusNodeVersion, .vitePlusInstallLeftover:
             return VitePlusNodeVersionPolicy.isOffered(
                 path, home: home, now: now, context: vitePlus ?? .current(home: home), check: nvmCheck
+            )
+        case .rustupToolchain:
+            return RustupToolchainPolicy.isOffered(
+                path, home: home, now: now, context: rustup ?? .current(home: home), check: nvmCheck
             )
         }
     }
@@ -547,12 +560,14 @@ nonisolated enum OldToolVersionScanPolicy {
         now: Date = Date(),
         android: AndroidContext? = nil,
         nvm: NvmNodeVersionPolicy.Context? = nil,
-        vitePlus: VitePlusNodeVersionPolicy.Context? = nil
+        vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
+        rustup: RustupToolchainPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
         let nvm = nvm ?? .current(home: homePath)
         let vitePlus = vitePlus ?? .current(home: homePath)
+        let rustup = rustup ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -567,7 +582,10 @@ nonisolated enum OldToolVersionScanPolicy {
             }
             return found.filter { path in
                 guard let kind = kind(of: path, home: homePath) else { return false }
-                return isOffered(path, kind: kind, home: homePath, now: now, android: android, nvm: nvm, vitePlus: vitePlus)
+                return isOffered(
+                    path, kind: kind, home: homePath, now: now,
+                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup
+                )
             }
             .sorted { isLower($0, than: $1) }
         }
@@ -609,6 +627,10 @@ nonisolated enum OldToolVersionScanPolicy {
             add(VitePlusNodeVersionPolicy.labelPrefix + name, vitePlusVersions[name] ?? [])
         }
         add(VitePlusNodeVersionPolicy.leftoversLabel, vitePlusLeftovers)
+        // One row per rustup toolchain, labelled with its whole folder name (#406).
+        for toolchain in offered(in: "\(homePath)/\(RustupToolchainPolicy.toolchainsRoot)") {
+            add(RustupToolchainPolicy.labelPrefix + URL(fileURLWithPath: toolchain).lastPathComponent, [toolchain])
+        }
         return rows
     }
 }
