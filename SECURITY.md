@@ -169,18 +169,24 @@ Purge updates itself through [Sparkle](https://sparkle-project.org). Every
 update is signed with an EdDSA key that exists only on the developer's machine.
 The matching public key is built into the app (`SUPublicEDKey` in
 [`purge/Info.plist`](purge/Info.plist)), and Purge refuses any download whose
-signature does not match it. Someone who took over the download server still
-could not push an update Purge would install.
+signature does not match it. Someone who took over the download server, or
+updates.purgemac.com, still could not push an update Purge would install.
 
 ## Network
 
 Purge connects on its own only for updates: the daily update check and, if you
 turn on Download and install updates automatically, the update download. Once a
-day it fetches a small XML file (the appcast) from this repo to see whether a
-newer version exists. It sends nothing about you, your files, or your Mac, and
-there is no analytics or crash reporting. With automatic installs on, a new
-version is downloaded from GitHub when the check finds one, and its signature is
-checked before it is installed. You can turn the check off in Purge under
+day it fetches a small XML file (the appcast) from updates.purgemac.com to see
+whether a newer version exists. That is a small server that passes on the
+appcast from this repo. It counts checks and downloads in aggregate, as daily
+totals by Purge version, and stores no IP address or anything else that
+identifies you. If it can't be reached, the next check fetches the appcast
+straight from this repo on GitHub. Apart from the Purge version, the check sends
+nothing about you, your files, or your Mac, and there is no analytics or crash
+reporting. With automatic installs on, a new version is downloaded when the
+check finds one. The download link goes through updates.purgemac.com so it can
+be counted, and the file itself still comes from GitHub releases. Its signature
+is checked before it is installed. You can turn the check off in Purge under
 Settings > Updates > Check for updates automatically, which also stops the
 downloads. Links in the app, such as the GitHub page, open in your browser only
 when you click them.

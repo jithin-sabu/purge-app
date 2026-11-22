@@ -41,6 +41,11 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     /// relaunches. It can run again if the quit is cancelled.
     private var installReadyUpdate: (() -> Void)?
 
+    /// True once Sparkle has loaded and parsed the appcast in the running update
+    /// cycle. A download error before that is the feed failing; after it, it is
+    /// the update itself.
+    private var appcastLoadedThisCycle = false
+
     override init() {
         super.init()
         // Not started in the unit-test host (#181): a started updater reads and
@@ -94,8 +99,14 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     // MARK: - SPUUpdaterDelegate
 
+    /// nil keeps `SUFeedURL` from Info.plist. After a check that couldn't load
+    /// that feed, the next one reads it from GitHub instead (`UpdateFeed`).
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        UpdateFeed.feedURLString(fallbackPending: UpdateFeed.isFallbackPending(in: .standard))
+    }
+
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
-        // Optional hook; Sparkle clears the session when the update driver finishes.
+        appcastLoadedThisCycle = true
     }
 
     /// Sparkle downloaded an update in the background and will install it when
@@ -128,5 +139,90 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
         // can no longer install anything.
         installReadyUpdate = nil
         readyUpdateVersion = nil
+        UpdateFeed.recordFinishedCheck(appcastLoaded: appcastLoadedThisCycle, error: error, in: .standard)
+        appcastLoadedThisCycle = false
+    }
+}
+
+/// Where Sparkle looks for updates.
+///
+/// `SUFeedURL` in Info.plist is updates.purgemac.com, a small server that passes
+/// on this repo's appcast.xml and counts checks in aggregate. Sparkle has no
+/// fallback feed of its own, so when a check can't load that feed, the next
+/// check reads the same file straight from GitHub, once. Then it goes back to
+/// updates.purgemac.com, whatever the GitHub check did. Either feed's updates
+/// must carry the EdDSA signature `SUPublicEDKey` checks, so the fallback trusts
+/// GitHub with nothing new.
+///
+/// "No update found" is a normal result, never a failure: Sparkle reports it as
+/// `SUNoUpdateError` after the appcast has loaded.
+nonisolated enum UpdateFeed {
+    static let gitHubFallbackURL = "https://raw.githubusercontent.com/jithin-sabu/purge-app/main/appcast.xml"
+
+    /// True while the next check should use `gitHubFallbackURL`.
+    static let fallbackPendingKey = "updates.useGitHubFeedForNextCheck"
+
+    // `SUSparkleErrorDomain` and its codes, from Sparkle's SUErrors.h. Kept as
+    // values here so the rule can be tested without Sparkle.
+    static let sparkleErrorDomain = "SUSparkleErrorDomain"
+    static let appcastParseErrorCode = 1000
+    static let noUpdateErrorCode = 1001
+    static let appcastErrorCode = 1002
+    /// Sparkle reports a failed appcast download with this code too, wrapping
+    /// the NSURLError, as well as a failed update download.
+    static let downloadErrorCode = 2001
+
+    /// nil keeps Info.plist's feed.
+    static func feedURLString(fallbackPending: Bool) -> String? {
+        fallbackPending ? gitHubFallbackURL : nil
+    }
+
+    /// True when the update cycle ended because the appcast couldn't be fetched
+    /// or read: a network or server error, or a reply that isn't an appcast. An
+    /// error after the appcast loaded, such as no update, a failed update
+    /// download or a bad signature, is not the feed's fault. A cancelled request
+    /// isn't either.
+    static func isFeedLoadFailure(_ error: (any Error)?, appcastLoaded: Bool) -> Bool {
+        guard let error, !appcastLoaded else { return false }
+        let nsError = error as NSError
+        if isCancellation(nsError) { return false }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError, isCancellation(underlying) {
+            return false
+        }
+        switch nsError.domain {
+        case NSURLErrorDomain:
+            return true
+        case sparkleErrorDomain:
+            return [appcastParseErrorCode, appcastErrorCode, downloadErrorCode].contains(nsError.code)
+        default:
+            return false
+        }
+    }
+
+    /// Whether the check after this one should use GitHub. The flag only changes
+    /// when a cycle ends, so the value it had then is the feed this check used.
+    static func fallbackPendingAfterCheck(usedFallback: Bool, appcastLoaded: Bool, error: (any Error)?) -> Bool {
+        !usedFallback && isFeedLoadFailure(error, appcastLoaded: appcastLoaded)
+    }
+
+    static func isFallbackPending(in defaults: UserDefaults) -> Bool {
+        defaults.bool(forKey: fallbackPendingKey)
+    }
+
+    static func recordFinishedCheck(appcastLoaded: Bool, error: (any Error)?, in defaults: UserDefaults) {
+        let pending = fallbackPendingAfterCheck(
+            usedFallback: isFallbackPending(in: defaults),
+            appcastLoaded: appcastLoaded,
+            error: error
+        )
+        if pending {
+            defaults.set(true, forKey: fallbackPendingKey)
+        } else {
+            defaults.removeObject(forKey: fallbackPendingKey)
+        }
+    }
+
+    private static func isCancellation(_ error: NSError) -> Bool {
+        error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
     }
 }

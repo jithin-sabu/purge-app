@@ -378,7 +378,7 @@ The signing flags matter: without a development certificate on the machine, the 
 
 Purge runs entirely on your Mac. Your excluded folders, cleaning history and last scan stay in its Application Support folder, and your settings in its preferences. Nothing is uploaded. The last scan is saved so Purge has something to show while it scans again. Nothing from Desktop, Documents, Downloads or iCloud is written to it, and Large Files keeps only its totals, by kind of file, never a file name.
 
-The one time Purge talks to the network is the update check: once a day it fetches a small XML file from GitHub to see whether a newer version is available. It sends nothing about you or your Mac, and you can turn it off in **Settings → Updates and History**.
+The one time Purge talks to the network is the update check. Once a day it fetches a small XML file (the appcast) from updates.purgemac.com, a small server that passes on the file from this repo. That server counts checks and downloads in aggregate, as daily totals by Purge version, and stores no IP address or anything else that identifies you. Update downloads still come from GitHub releases. If the server is down, the next check gets the file straight from GitHub. Apart from the Purge version, the check sends nothing about you or your Mac, and you can turn it off in **Settings → Updates and History**.
 
 Purge reads some file contents, on your Mac only. To find duplicates it compares files of the same size byte for byte. To work out which app or tool a file belongs to, it reads small files such as an app's `Info.plist`, LaunchAgent plists, and the scripts that start command-line tools. It never sends file contents anywhere.
 
