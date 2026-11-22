@@ -5,8 +5,9 @@ import Foundation
 /// agent-CLI installs, old Claude Code downloads, Android NDK versions, Android
 /// system images no emulator uses, Figma profiles Figma has migrated away
 /// from, Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
-/// uses, with the folders an unfinished Vite+ install leaves, and Rust
-/// toolchains rustup keeps that nothing uses (#406).
+/// uses, with the folders an unfinished Vite+ install leaves, Rust
+/// toolchains rustup keeps that nothing uses (#406), and Python versions uv
+/// keeps next to its minor-version links that nothing uses (#405).
 ///
 /// Every row is Check First. These are installed tools and profiles, not data an
 /// app rebuilds by itself, and whether one is unused depends on the disk at the
@@ -37,6 +38,8 @@ nonisolated enum OldToolVersionScanPolicy {
         case vitePlusInstallLeftover
         /// `~/.rustup/toolchains/<name>` (#406), judged by `RustupToolchainPolicy`.
         case rustupToolchain
+        /// `~/.local/share/uv/python/cpython-<version>-…` (#405), judged by `UvPythonVersionPolicy`.
+        case uvPythonVersion
     }
 
     // MARK: Rows
@@ -116,6 +119,9 @@ nonisolated enum OldToolVersionScanPolicy {
         }
         if RustupToolchainPolicy.isToolchainPath(path, home: home) {
             return .rustupToolchain
+        }
+        if UvPythonVersionPolicy.isVersionPath(path, home: home) {
+            return .uvPythonVersion
         }
         switch VitePlusNodeVersionPolicy.kind(of: path, home: home) {
         case .version: return .vitePlusNodeVersion
@@ -220,7 +226,8 @@ nonisolated enum OldToolVersionScanPolicy {
         android: AndroidContext? = nil,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
-        rustup: RustupToolchainPolicy.Context? = nil
+        rustup: RustupToolchainPolicy.Context? = nil,
+        uv: UvPythonVersionPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
@@ -230,11 +237,12 @@ nonisolated enum OldToolVersionScanPolicy {
             nvm: nvm,
             vitePlus: vitePlus,
             rustup: rustup,
+            uv: uv,
             nvmCheck: .quick
         )
     }
 
-    /// `nvmCheck` says how far an nvm, Vite+ (#398) or rustup (#406) entry is judged:
+    /// `nvmCheck` says how far an nvm, Vite+ (#398), rustup (#406) or uv (#405) entry is judged:
     /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
     /// `FileDeleter` runs the rest right before the move
     /// (`passesImmediateTrashBoundary` in each policy).
@@ -247,6 +255,7 @@ nonisolated enum OldToolVersionScanPolicy {
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
+        uv: UvPythonVersionPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -299,6 +308,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case .rustupToolchain:
             return RustupToolchainPolicy.isOffered(
                 path, home: home, now: now, context: rustup ?? .current(home: home), check: nvmCheck
+            )
+        case .uvPythonVersion:
+            return UvPythonVersionPolicy.isOffered(
+                path, home: home, now: now, context: uv ?? .current(home: home), check: nvmCheck
             )
         }
     }
@@ -412,6 +425,124 @@ nonisolated enum OldToolVersionScanPolicy {
             }
         }
         return pinned
+    }
+
+    /// A program's load commands sit at its start, well inside this many bytes.
+    static let programHeaderBytes = 256 * 1024
+
+    /// Whether a program directly in one of `folders` (relative ones are in
+    /// home) holds one of `needles` in its first `programHeaderBytes`, or in
+    /// the first `programHeaderBytes` of each slice of a universal program,
+    /// where its load commands name the libraries it loads. Links are skipped:
+    /// they are `isLinkedFromBinFolder`'s to judge. Nil when a folder or a
+    /// program can't be read, or a universal header can't be read whole.
+    /// rustup (#406) and uv (#405) use it.
+    static func programHeaders(
+        in folders: [String], home: String, mayRead: (String) -> Bool, contain needles: [Data]
+    ) -> Bool? {
+        guard !needles.isEmpty else { return false }
+        for relative in folders {
+            let folder = relative.hasPrefix("/") ? relative : "\(home)/\(relative)"
+            guard mayRead(folder) else { return nil }
+            let names: [String]
+            do {
+                names = try FileManager.default.contentsOfDirectory(atPath: folder)
+            } catch {
+                if NvmNodeVersionPolicy.isMissing(folder) { continue }
+                return nil
+            }
+            for name in names {
+                let program = "\(folder)/\(name)"
+                var info = stat()
+                // A folder that lists but can't be searched gives no answer.
+                guard lstat(program, &info) == 0 else { return nil }
+                guard (info.st_mode & S_IFMT) == S_IFREG else { continue }
+                guard let handle = FileHandle(forReadingAtPath: program) else { return nil }
+                defer { try? handle.close() }
+                do {
+                    // Nil at the end of the file, which an empty one reaches at once.
+                    let header = try handle.read(upToCount: programHeaderBytes) ?? Data()
+                    if needles.contains(where: { header.range(of: $0) != nil }) { return true }
+                    // A universal program keeps each architecture's load
+                    // commands at the start of its own slice, which may begin
+                    // far past the first read.
+                    switch fatSlices(in: header) {
+                    case .notFat:
+                        continue
+                    case .malformed:
+                        return nil
+                    case .slices(let slices):
+                        let fileSize = try handle.seekToEnd()
+                        for slice in slices {
+                            guard slice.offset <= fileSize, slice.size <= fileSize - slice.offset else { return nil }
+                            try handle.seek(toOffset: slice.offset)
+                            let start = try handle.read(upToCount: Int(min(slice.size, UInt64(programHeaderBytes)))) ?? Data()
+                            if needles.contains(where: { start.range(of: $0) != nil }) { return true }
+                        }
+                    }
+                } catch {
+                    return nil
+                }
+            }
+        }
+        return false
+    }
+
+    /// What a program's first bytes say about its architecture slices.
+    nonisolated enum FatHeader: Equatable {
+        /// A single-architecture program, a script, or anything else.
+        case notFat
+        /// A universal program, with each slice's place in the file.
+        case slices([FatSlice])
+        /// A universal header Purge can't read whole.
+        case malformed
+    }
+
+    nonisolated struct FatSlice: Equatable {
+        var offset: UInt64
+        var size: UInt64
+    }
+
+    /// The slices of a universal program, read from its header
+    /// (`<mach-o/fat.h>`, big-endian). Java class files share the 32-bit magic;
+    /// theirs is followed by a version of 45 or more, where a universal header
+    /// counts its slices, which are never that many.
+    static func fatSlices(in header: Data) -> FatHeader {
+        func word(_ at: Int) -> UInt32? {
+            guard at >= 0, at + 4 <= header.count else { return nil }
+            let start = header.startIndex + at
+            return header[start..<start + 4].reduce(0) { $0 << 8 | UInt32($1) }
+        }
+        func doubleWord(_ at: Int) -> UInt64? {
+            guard let high = word(at), let low = word(at + 4) else { return nil }
+            return UInt64(high) << 32 | UInt64(low)
+        }
+        guard let magic = word(0), magic == 0xCAFE_BABE || magic == 0xCAFE_BABF,
+              let count = word(4), count > 0, count < 45 else { return .notFat }
+        let is64 = magic == 0xCAFE_BABF
+        let entrySize = is64 ? 32 : 20
+        var slices: [FatSlice] = []
+        for index in 0..<Int(count) {
+            let entry = 8 + index * entrySize
+            if is64 {
+                guard let offset = doubleWord(entry + 8), let size = doubleWord(entry + 16) else { return .malformed }
+                slices.append(FatSlice(offset: offset, size: size))
+            } else {
+                guard let offset = word(entry + 8), let size = word(entry + 12) else { return .malformed }
+                slices.append(FatSlice(offset: UInt64(offset), size: UInt64(size)))
+            }
+        }
+        return .slices(slices)
+    }
+
+    /// Whether a process whose program is named one of `names` runs. True when
+    /// the process list can't be read. rustup (#406) and uv (#405) use it.
+    static func isProcessRunning(named names: Set<String>) -> Bool {
+        guard let pids = ProcessWorkingDirectories.allProcessIDs() else { return true }
+        return pids.contains { pid in
+            guard let path = ProcessWorkingDirectories.executablePath(of: pid) else { return false }
+            return names.contains(URL(fileURLWithPath: path).lastPathComponent)
+        }
     }
 
     /// `path` as written and with its links resolved, both in lowercase, since
@@ -561,13 +692,15 @@ nonisolated enum OldToolVersionScanPolicy {
         android: AndroidContext? = nil,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
-        rustup: RustupToolchainPolicy.Context? = nil
+        rustup: RustupToolchainPolicy.Context? = nil,
+        uv: UvPythonVersionPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
         let nvm = nvm ?? .current(home: homePath)
         let vitePlus = vitePlus ?? .current(home: homePath)
         let rustup = rustup ?? .current(home: homePath)
+        let uv = uv ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -584,7 +717,7 @@ nonisolated enum OldToolVersionScanPolicy {
                 guard let kind = kind(of: path, home: homePath) else { return false }
                 return isOffered(
                     path, kind: kind, home: homePath, now: now,
-                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup
+                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup, uv: uv
                 )
             }
             .sorted { isLower($0, than: $1) }
@@ -633,6 +766,14 @@ nonisolated enum OldToolVersionScanPolicy {
         if ProtectedLocations.isReadable(rustupRoot, access: .limited, home: home) {
             for toolchain in RustupToolchainPolicy.offeredFolders(home: homePath, now: now, context: rustup) {
                 add(RustupToolchainPolicy.labelPrefix + URL(fileURLWithPath: toolchain).lastPathComponent, [toolchain])
+            }
+        }
+        // One row per uv Python patch version no minor link points at, labelled
+        // with its whole folder name (#405). Its own list, like rustup's.
+        let uvRoot = URL(fileURLWithPath: "\(homePath)/\(UvPythonVersionPolicy.pythonRoot)")
+        if ProtectedLocations.isReadable(uvRoot, access: .limited, home: home) {
+            for version in UvPythonVersionPolicy.offeredFolders(home: homePath, now: now, context: uv) {
+                add(UvPythonVersionPolicy.labelPrefix + URL(fileURLWithPath: version).lastPathComponent, [version])
             }
         }
         return rows

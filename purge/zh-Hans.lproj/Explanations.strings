@@ -1230,3 +1230,7 @@
 /* rustup-toolchain */
 "rustup Rust Toolchain" = "rustup Rust 工具链";
 "An older Rust toolchain from rustup. Not the default, and no override or rust-toolchain file Purge found names it. rustup toolchain install brings it back." = "rustup 安装的较旧 Rust 工具链。它不是默认工具链，也没有目录覆盖或 Purge 找到的 rust-toolchain 文件指定它。用 rustup toolchain install 可以装回来。";
+
+/* uv-python-version */
+"uv Python Version" = "uv Python 版本";
+"An older Python patch version uv kept after an upgrade. uv's link for this minor version points at a newer one, and no environment, .python-version file or interpreter setting Purge found uses it. Anything else that runs it stops working until you put the folder back from the Trash, or the tool that made it sets it up again. uv python install brings the version back." = "uv 升级后保留下来的较旧 Python 补丁版本。uv 为这个次版本建立的链接指向更新的版本，Purge 找到的虚拟环境、.python-version 文件和解释器设置都没有使用它。其他用到它的东西会无法运行，直到你从废纸篓把文件夹放回原处，或由创建它的工具重新设置。用 uv python install 可以把这个版本装回来。";

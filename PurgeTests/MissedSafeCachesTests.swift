@@ -599,12 +599,18 @@ struct MissedCacheAllowlistTests {
     /// nvm itself and the rest of `~/.cache` stay out. A Node version folder is
     /// allowed by its shape since #400, and `NvmNodeVersionPolicy` decides at the
     /// move, but nothing inside one is. The same holds for rustup (#406): only a
-    /// versioned or dated toolchain folder has the shape.
+    /// versioned or dated toolchain folder has the shape, and for uv (#405): only
+    /// a CPython patch folder, never its minor link.
     @Test(arguments: [
         ".nvm", ".nvm/versions", ".nvm/versions/node", ".nvm/versions/node/v22.14.0/bin", ".nvm/nvm.sh", ".nvm/alias",
         ".rustup", ".rustup/toolchains", ".rustup/toolchains/stable-aarch64-apple-darwin",
         ".rustup/toolchains/1.84.0-aarch64-apple-darwin/bin", ".rustup/toolchains/stage1",
         ".rustup/update-hashes", ".rustup/update-hashes/1.84.0-aarch64-apple-darwin", ".rustup/settings.toml",
+        ".local/share/uv", ".local/share/uv/python", ".local/share/uv/python/cpython-3.12-macos-aarch64-none",
+        ".local/share/uv/python/.lock", ".local/share/uv/python/.temp", ".local/share/uv/python/.gitignore",
+        ".local/share/uv/python/cpython-3.12.4-macos-aarch64-none/bin",
+        ".local/share/uv/python/pypy-3.10.14-macos-aarch64-none", ".local/share/uv/tools",
+        ".local/share/uv/tools/ruff",
         ".cache/firebase", ".cache/codex-runtimes", ".cache/hyperframes", ".cache/gh",
     ])
     func neighboursStayOut(relative: String) {

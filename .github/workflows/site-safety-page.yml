@@ -14,6 +14,7 @@ on:
       - purge/Services/NvmNodeVersionPolicy.swift
       - purge/Services/VitePlusNodeVersionPolicy.swift
       - purge/Services/RustupToolchainPolicy.swift
+      - purge/Services/UvPythonVersionPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
@@ -32,6 +33,7 @@ on:
       - purge/Services/NvmNodeVersionPolicy.swift
       - purge/Services/VitePlusNodeVersionPolicy.swift
       - purge/Services/RustupToolchainPolicy.swift
+      - purge/Services/UvPythonVersionPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift

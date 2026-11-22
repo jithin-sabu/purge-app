@@ -101,8 +101,6 @@ nonisolated enum RustupToolchainPolicy {
     /// `librustc_driver` by name and breaks without it.
     static let programFolders = [".cargo/bin"]
     static let driverLibraryPrefix = "librustc_driver-"
-    /// A program's load commands sit at its start, well inside this many bytes.
-    static let programHeaderBytes = 256 * 1024
 
     // MARK: Names
 
@@ -371,12 +369,7 @@ nonisolated enum RustupToolchainPolicy {
     /// read. A proxy such as `cargo` becomes the toolchain's own program, which
     /// `lsof` sees.
     static func isRustupRunning() -> Bool {
-        guard let pids = ProcessWorkingDirectories.allProcessIDs() else { return true }
-        return pids.contains { pid in
-            guard let path = ProcessWorkingDirectories.executablePath(of: pid) else { return false }
-            let name = URL(fileURLWithPath: path).lastPathComponent
-            return name == "rustup" || name == "rustup-init"
-        }
+        OldToolVersionScanPolicy.isProcessRunning(named: ["rustup", "rustup-init"])
     }
 
     // MARK: Gate
@@ -720,34 +713,9 @@ nonisolated enum RustupToolchainPolicy {
         } catch {
             return NvmNodeVersionPolicy.isMissing("\(path)/lib") ? false : nil
         }
-        guard !libraries.isEmpty else { return false }
-        for relative in context.programFolders {
-            let folder = "\(home)/\(relative)"
-            guard context.mayRead(folder) else { return nil }
-            let names: [String]
-            do {
-                names = try FileManager.default.contentsOfDirectory(atPath: folder)
-            } catch {
-                if NvmNodeVersionPolicy.isMissing(folder) { continue }
-                return nil
-            }
-            for name in names {
-                let program = "\(folder)/\(name)"
-                // A link is `isLinkedFromBinFolder`'s to judge.
-                guard OldToolVersionScanPolicy.isRegularFile(program) else { continue }
-                guard let handle = FileHandle(forReadingAtPath: program) else { return nil }
-                defer { try? handle.close() }
-                let header: Data
-                do {
-                    // Nil at the end of the file, which an empty one reaches at once.
-                    header = try handle.read(upToCount: programHeaderBytes) ?? Data()
-                } catch {
-                    return nil
-                }
-                if libraries.contains(where: { header.range(of: $0) != nil }) { return true }
-            }
-        }
-        return false
+        return OldToolVersionScanPolicy.programHeaders(
+            in: context.programFolders, home: home, mayRead: context.mayRead, contain: libraries
+        )
     }
 
     /// Whether a reference file's `text` names the toolchain: a path inside its
