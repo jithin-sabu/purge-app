@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.18.0</title>
+      <pubDate>Sun, 22 Nov 2026 01:27:35 +0000</pubDate>
+      <sparkle:version>48</sparkle:version>
+      <sparkle:shortVersionString>1.18.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Old rustup toolchains</strong>: Dev Tools lists the Rust toolchains rustup keeps that aren't the default and that no override or project names, as Check First.</li>
+          <li><strong>Old uv Python versions</strong>: Dev Tools lists the older Python versions uv kept after an upgrade that nothing links to any more, as Check First.</li>
+          <li><strong>Old pyenv Python versions</strong>: Dev Tools lists the Python versions pyenv keeps that nothing selects or uses, as Check First.</li>
+          <li><strong>Back after an update</strong>: With the Dock icon hidden, Purge now comes to the front when it launches, so it no longer seems to vanish after an update.</li>
+          <li><strong>Update checks</strong>: Purge now checks for updates through updates.purgemac.com, which counts checks as daily totals and stores no IP address or ID.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.18.0/Purgev1.18.0.dmg"
+        sparkle:edSignature="Bi/ENqhDLCmk0bZsw8NGzKbNF+NRJW1TvPKHWnMDREETDCX28CZlZiTFxlOEEqj4B2ETwk+0mHaW+T9FzV6vCQ=="
+        length="13112798"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.17.0</title>
       <pubDate>Fri, 20 Nov 2026 01:02:27 +0000</pubDate>
       <sparkle:version>47</sparkle:version>
