@@ -324,4 +324,62 @@ struct StartupPreferenceStoreTests {
         #expect(policy.applied.isEmpty)
         #expect(store.launchesAtLogin)
     }
+
+    /// macOS can report the new status item as gone in the same update that
+    /// inserts it, when it keeps the item hidden. Leaving the mode then made the
+    /// Settings switch snap back off on every click.
+    @Test("A removal right after joining the menu bar keeps the mode")
+    func removalRightAfterJoiningIsIgnored() {
+        let defaults = suite.defaults
+        defaults.set(false, forKey: "startup.showMenuBarIcon")
+        var clock = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(true)
+        clock += 0.2
+        store.statusItemWasRemoved()
+
+        #expect(store.showsMenuBarIcon)
+        #expect(StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
+    }
+
+    @Test("Dragging the icon out later leaves the menu bar")
+    func laterRemovalLeavesTheMenuBar() {
+        let defaults = suite.defaults
+        defaults.set(false, forKey: "startup.showMenuBarIcon")
+        var clock = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(true)
+        clock += StartupPreferenceStore.statusItemSettleInterval + 1
+        store.statusItemWasRemoved()
+
+        #expect(!store.showsMenuBarIcon)
+        #expect(!StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
+    }
+
+    @Test("A removal at launch, with the mode saved from before, leaves the menu bar")
+    func removalWithoutJoiningThisLaunchLeavesTheMenuBar() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in }
+        )
+        store.statusItemWasRemoved()
+
+        #expect(!store.showsMenuBarIcon)
+    }
 }
