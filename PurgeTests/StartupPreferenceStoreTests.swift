@@ -332,7 +332,7 @@ struct StartupPreferenceStoreTests {
     func removalRightAfterJoiningIsIgnored() {
         let defaults = suite.defaults
         defaults.set(false, forKey: "startup.showMenuBarIcon")
-        var clock = Date(timeIntervalSinceReferenceDate: 0)
+        let clock = Date(timeIntervalSinceReferenceDate: 0)
 
         let store = StartupPreferenceStore(
             userDefaults: defaults,
@@ -351,7 +351,7 @@ struct StartupPreferenceStoreTests {
     func laterRemovalLeavesTheMenuBar() {
         let defaults = suite.defaults
         defaults.set(false, forKey: "startup.showMenuBarIcon")
-        var clock = Date(timeIntervalSinceReferenceDate: 0)
+        let clock = Date(timeIntervalSinceReferenceDate: 0)
 
         let store = StartupPreferenceStore(
             userDefaults: defaults,
@@ -366,8 +366,85 @@ struct StartupPreferenceStoreTests {
         #expect(!StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
     }
 
-    @Test("A removal at launch, with the mode saved from before, leaves the menu bar")
-    func removalWithoutJoiningThisLaunchLeavesTheMenuBar() {
+    @Test("A removal right after launch, with the mode saved from before, is ignored")
+    func removalRightAfterLaunchIsIgnored() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        defaults.set(true, forKey: "startup.hideDockIcon")
+        let launchedAt = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            launchedAt: launchedAt
+        )
+        store.statusItemWasRemoved(at: launchedAt + 3)
+
+        #expect(store.showsMenuBarIcon)
+        #expect(store.statusItemIsHidden)
+        #expect(!store.hidesDockIcon)
+    }
+
+    @Test("A removal long after launch, with the mode saved from before, leaves the menu bar")
+    func laterRemovalAfterLaunchLeavesTheMenuBar() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        let launchedAt = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            launchedAt: launchedAt
+        )
+        store.statusItemWasRemoved(at: launchedAt + StartupPreferenceStore.launchSettleInterval + 1)
+
+        #expect(!store.showsMenuBarIcon)
+    }
+
+    @Test("Hiding right after the item is inserted again keeps the mode")
+    func removalRightAfterReinsertionIsIgnored() {
+        let defaults = suite.defaults
+        defaults.set(false, forKey: "startup.showMenuBarIcon")
+        let clock = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(true)
+        let reinsertedAt = clock + 60
+        store.statusItemWasInserted(at: reinsertedAt)
+        store.statusItemWasRemoved(at: reinsertedAt + 0.2)
+
+        #expect(store.showsMenuBarIcon)
+        #expect(store.statusItemIsHidden)
+    }
+
+    @Test("A removal reported before the item last joined is dropped")
+    func removalFromBeforeTheLastJoinIsDropped() {
+        let defaults = suite.defaults
+        defaults.set(false, forKey: "startup.showMenuBarIcon")
+        let clock = Date(timeIntervalSinceReferenceDate: 100)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(true)
+        store.statusItemWasRemoved(at: clock - 5)
+
+        #expect(store.showsMenuBarIcon)
+        #expect(!store.statusItemIsHidden)
+    }
+
+    @Test("An insertion handled after the mode was turned off doesn't turn it back on")
+    func staleInsertionDoesNotRejoin() {
         let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
 
@@ -376,9 +453,11 @@ struct StartupPreferenceStoreTests {
             loginItem: FakeLoginItem(),
             applyDockPolicy: { _ in }
         )
-        store.statusItemWasRemoved(at: Date())
+        store.setShowsMenuBarIcon(false)
+        store.statusItemWasInserted(at: Date())
 
         #expect(!store.showsMenuBarIcon)
+        #expect(!StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
     }
 
     @Test("A removal reported early but handled late still counts as the insertion echo")
@@ -426,7 +505,7 @@ struct StartupPreferenceStoreTests {
         #expect(appliedPolicies.last == false)
 
         clock += 10
-        store.statusItemWasInserted()
+        store.statusItemWasInserted(at: clock)
         store.setHidesDockIcon(true)
 
         #expect(!store.statusItemIsHidden)

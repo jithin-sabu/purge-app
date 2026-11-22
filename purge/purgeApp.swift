@@ -155,7 +155,7 @@ struct PurgeApp: App {
                 let reportedAt = Date()
                 Task { @MainActor in
                     if inserted {
-                        StartupPreferenceStore.shared.statusItemWasInserted()
+                        StartupPreferenceStore.shared.statusItemWasInserted(at: reportedAt)
                     } else {
                         StartupPreferenceStore.shared.statusItemWasRemoved(at: reportedAt)
                     }
