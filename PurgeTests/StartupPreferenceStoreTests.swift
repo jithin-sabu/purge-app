@@ -341,8 +341,7 @@ struct StartupPreferenceStoreTests {
             now: { clock }
         )
         store.setShowsMenuBarIcon(true)
-        clock += 0.2
-        store.statusItemWasRemoved()
+        store.statusItemWasRemoved(at: clock + 0.2)
 
         #expect(store.showsMenuBarIcon)
         #expect(StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
@@ -361,8 +360,7 @@ struct StartupPreferenceStoreTests {
             now: { clock }
         )
         store.setShowsMenuBarIcon(true)
-        clock += StartupPreferenceStore.statusItemSettleInterval + 1
-        store.statusItemWasRemoved()
+        store.statusItemWasRemoved(at: clock + StartupPreferenceStore.statusItemSettleInterval + 1)
 
         #expect(!store.showsMenuBarIcon)
         #expect(!StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
@@ -378,8 +376,83 @@ struct StartupPreferenceStoreTests {
             loginItem: FakeLoginItem(),
             applyDockPolicy: { _ in }
         )
-        store.statusItemWasRemoved()
+        store.statusItemWasRemoved(at: Date())
 
         #expect(!store.showsMenuBarIcon)
+    }
+
+    @Test("A removal reported early but handled late still counts as the insertion echo")
+    func lateHandledEchoIsStillIgnored() {
+        let defaults = suite.defaults
+        defaults.set(false, forKey: "startup.showMenuBarIcon")
+        var clock = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(true)
+        let reportedAt = clock + 0.1
+        clock += StartupPreferenceStore.statusItemSettleInterval + 5
+        store.statusItemWasRemoved(at: reportedAt)
+
+        #expect(store.showsMenuBarIcon)
+    }
+
+    @Test("A hidden new icon brings the Dock back and keeps it")
+    func hiddenIconKeepsTheDock() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        defaults.set(true, forKey: "startup.hideDockIcon")
+        var clock = Date(timeIntervalSinceReferenceDate: 0)
+        var appliedPolicies: [Bool] = []
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { appliedPolicies.append($0) },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(false)
+        store.setShowsMenuBarIcon(true)
+        store.statusItemWasRemoved(at: clock + 0.2)
+        store.setHidesDockIcon(true)
+
+        #expect(store.showsMenuBarIcon)
+        #expect(store.statusItemIsHidden)
+        #expect(!store.hidesDockIcon)
+        #expect(appliedPolicies.last == false)
+
+        clock += 10
+        store.statusItemWasInserted()
+        store.setHidesDockIcon(true)
+
+        #expect(!store.statusItemIsHidden)
+        #expect(store.hidesDockIcon)
+    }
+
+    @Test("An echo with the Dock icon hidden shows the Dock again")
+    func echoWithHiddenDockShowsTheDock() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        var clock = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            now: { clock }
+        )
+        store.setShowsMenuBarIcon(false)
+        store.setShowsMenuBarIcon(true)
+        store.setHidesDockIcon(true)
+        clock += 0.1
+        store.statusItemWasRemoved(at: clock)
+
+        #expect(store.showsMenuBarIcon)
+        #expect(!store.hidesDockIcon)
+        #expect(!StartupPreferenceStore.persistedHidesDockIcon(userDefaults: defaults))
     }
 }

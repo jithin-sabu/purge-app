@@ -167,23 +167,25 @@ struct SettingsView: View {
                         isOn: launchAtLoginBinding
                     )
 
-                    settingsSectionDivider
+                    if !startup.statusItemIsHidden {
+                        settingsSectionDivider
 
-                    settingsToggleRow(
-                        title: String(localized: "Hide Dock icon"),
-                        // Only true while the icon is hidden: with it shown, the app
-                        // menu is back and ⌘Q quits.
-                        caption: startup.hidesDockIcon
-                            ? String(localized: "Quit from the menu bar, since ⌘Q won't work.")
-                            : nil,
-                        info: String(localized: """
-                            Purge runs from the menu bar only. Click the menu bar icon to open \
-                            this window again. The app menu is gone while the Dock icon is \
-                            hidden, so ⌘Q won't quit. Use Quit in the menu bar dropdown.
-                            """),
-                        captionAnimatesTextChanges: true,
-                        isOn: hideDockIconBinding
-                    )
+                        settingsToggleRow(
+                            title: String(localized: "Hide Dock icon"),
+                            // Only true while the icon is hidden: with it shown, the app
+                            // menu is back and ⌘Q quits.
+                            caption: startup.hidesDockIcon
+                                ? String(localized: "Quit from the menu bar, since ⌘Q won't work.")
+                                : nil,
+                            info: String(localized: """
+                                Purge runs from the menu bar only. Click the menu bar icon to open \
+                                this window again. The app menu is gone while the Dock icon is \
+                                hidden, so ⌘Q won't quit. Use Quit in the menu bar dropdown.
+                                """),
+                            captionAnimatesTextChanges: true,
+                            isOn: hideDockIconBinding
+                        )
+                    }
                 }
                 .transition(.opacity)
             }

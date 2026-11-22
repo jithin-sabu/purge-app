@@ -67,6 +67,11 @@ final class StartupPreferenceStore: ObservableObject {
     /// install that has not seen this setting, so it is never missing here.
     @Published private(set) var showsMenuBarIcon: Bool
 
+    /// Set when macOS keeps the status item hidden right after it is inserted.
+    /// The mode stays on, but there is no icon to click, so the Dock icon has
+    /// to stay too. Not persisted: the next insertion answers it again.
+    @Published private(set) var statusItemIsHidden = false
+
     /// Mirrors `SMAppService`, and is deliberately **not** persisted. The system
     /// owns this state — the user can turn Purge off in System Settings without
     /// telling us — so a stored copy would only be a second answer to disagree with.
@@ -128,7 +133,16 @@ final class StartupPreferenceStore: ObservableObject {
         showsMenuBarIcon = shown
         ud.set(shown, forKey: UDKeys.showMenuBarIcon)
         joinedMenuBarAt = shown ? now() : nil
+        statusItemIsHidden = false
         return true
+    }
+
+    /// The landing point when the status item's `isInserted` binding turns true.
+    func statusItemWasInserted() {
+        if statusItemIsHidden {
+            statusItemIsHidden = false
+        }
+        setShowsMenuBarIcon(true)
     }
 
     /// The landing point when the status item's `isInserted` binding turns false,
@@ -138,9 +152,18 @@ final class StartupPreferenceStore: ObservableObject {
     /// keeps the item hidden. That write arrives inside the same update that
     /// joined the menu bar, and leaving the mode then would make the switch snap
     /// back on every click, so a removal that soon after joining is ignored.
-    func statusItemWasRemoved() {
+    /// The mode stays, but with no icon to click the Dock icon comes back.
+    ///
+    /// `removedAt` is when SwiftUI wrote `false`, not when this runs: the binding
+    /// defers the call, and a busy main actor must not push an echo past the
+    /// settle interval.
+    func statusItemWasRemoved(at removedAt: Date) {
         if let joinedMenuBarAt,
-           Self.isInsertionEcho(removedAt: now(), joinedMenuBarAt: joinedMenuBarAt) {
+           Self.isInsertionEcho(removedAt: removedAt, joinedMenuBarAt: joinedMenuBarAt) {
+            statusItemIsHidden = true
+            if hidesDockIcon {
+                setHidesDockIcon(false)
+            }
             return
         }
         setShowsMenuBarIcon(false)
@@ -152,7 +175,7 @@ final class StartupPreferenceStore: ObservableObject {
 
     func setHidesDockIcon(_ hidden: Bool) {
         // No menu bar icon and no Dock icon is an app nobody can reach.
-        guard !hidden || showsMenuBarIcon else { return }
+        guard !hidden || (showsMenuBarIcon && !statusItemIsHidden) else { return }
         hidesDockIcon = hidden
         ud.set(hidden, forKey: UDKeys.hideDockIcon)
         applyDockPolicy(hidden)

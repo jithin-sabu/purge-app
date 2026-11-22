@@ -152,11 +152,12 @@ struct PurgeApp: App {
         Binding(
             get: { showsMenuBarIcon },
             set: { inserted in
+                let reportedAt = Date()
                 Task { @MainActor in
                     if inserted {
-                        StartupPreferenceStore.shared.setShowsMenuBarIcon(true)
+                        StartupPreferenceStore.shared.statusItemWasInserted()
                     } else {
-                        StartupPreferenceStore.shared.statusItemWasRemoved()
+                        StartupPreferenceStore.shared.statusItemWasRemoved(at: reportedAt)
                     }
                 }
             }
