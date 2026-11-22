@@ -46,9 +46,10 @@ private enum PY {
     /// extension module and `ensurepip`'s packages.
     static func install(_ home: URL, in folder: String = root, _ names: String...) throws {
         for name in names {
+            let major = name.split(separator: ".").first.map(String.init) ?? ""
             let minor = name.split(separator: ".").prefix(2).joined(separator: ".")
             let base = "\(folder)/\(name)"
-            for file in ["bin/python\(minor)", "bin/python\(minor)-config", "bin/pip3", "bin/pip\(minor)",
+            for file in ["bin/python\(minor)", "bin/python\(minor)-config", "bin/pip\(major)", "bin/pip\(minor)",
                          "bin/pydoc\(minor)", "bin/idle\(minor)", "bin/2to3-\(minor)",
                          "lib/libpython\(minor).dylib",
                          "lib/python\(minor)/os.py",
@@ -63,7 +64,7 @@ private enum PY {
                          "include/python\(minor)/Python.h"] {
                 try write("x", home, "\(base)/\(file)")
             }
-            for alias in ["python", "python3"] {
+            for alias in ["python", "python\(major)"] {
                 try link(home, "\(base)/bin/\(alias)", to: "python\(minor)")
             }
             settle(home, name, in: folder)
@@ -121,9 +122,12 @@ private enum PY {
         )
     }
 
-    /// The files for a project at `relative`, as a Dev Projects walk records them.
+    /// The files for a project at `relative`, as a Dev Projects walk records
+    /// them, minus the folders above the fixture: a test never reads the real
+    /// `/.python-version` or the temporary folder's.
     static func recorded(_ home: URL, project relative: String) -> [String] {
         Policy.recordedFiles(inProjectRoots: [home.appendingPathComponent(relative)], mayRead: { _ in true })
+            .filter { $0.hasPrefix(home.path + "/") }
     }
 
     /// The version folders the Dev Tools scan offers, by name.
@@ -308,7 +312,9 @@ struct PyenvPythonVersionShapeTests {
         try PY.write("home = /x\n", home, "code/app/.tox/py311/pyvenv.cfg")
         try PY.write("home = /x\n", home, "code/app/.nox/tests/pyvenv.cfg")
         try PY.write("x", home, "code/app/src/main.py")
-        let files = PY.recorded(home, project: "code/app")
+        let files = PyenvPythonVersionPolicy.recordedFiles(
+            inProjectRoots: [home.appendingPathComponent("code/app")], mayRead: { _ in true }
+        )
         let app = home.appendingPathComponent("code/app").path
         for folder in [app, home.appendingPathComponent("code").path, home.path, "/"] {
             #expect(files.contains(folder == "/" ? "/.python-version" : "\(folder)/.python-version"), "\(folder)")
@@ -316,10 +322,13 @@ struct PyenvPythonVersionShapeTests {
         // Recorded whether there or not, so one made after the scan counts.
         #expect(files.contains("\(app)/.venv/pyvenv.cfg"))
         #expect(files.contains("\(app)/venv/pyvenv.cfg"))
+        #expect(files.contains("\(app)/.vscode/settings.json"))
+        // Folders listed again at each check, so an environment made in one later counts.
+        #expect(files.contains("\(app)/.tox"))
+        #expect(files.contains("\(app)/.nox"))
+        #expect(files.contains("\(app)/.direnv"))
         // Seen by the walk now, under any name.
         #expect(files.contains("\(app)/env-311/pyvenv.cfg"))
-        #expect(files.contains("\(app)/.tox/py311/pyvenv.cfg"))
-        #expect(files.contains("\(app)/.nox/tests/pyvenv.cfg"))
         #expect(!files.contains("\(app)/src/pyvenv.cfg"))
     }
 
@@ -463,6 +472,11 @@ struct PyenvPythonVersionKeepTests {
         ".virtualenvs/work", "Library/Caches/pypoetry/virtualenvs/app-x1y2-py3.11", ".local/share/virtualenvs/app-x1y2",
         "Library/Application Support/pdm/venvs/app-x1y2-3.11",
         "Library/Application Support/hatch/env/virtual/app/x1y2/default", ".venv",
+        // Made after the walk, in a folder it recorded.
+        "code/app/.tox/py311", "code/app/.tox/.pkg", "code/app/.nox/tests", "code/app/.direnv/python-3.11.9",
+        ".cache/pre-commit/repoa1b2c3/py_env-python3.11",
+        // Made right in pyenv's folder, which pyenv then offers by name.
+        ".pyenv/versions/work",
     ])
     func aVirtualEnvironmentKeepsTheVersionItRunsFrom(relative: String) throws {
         let home = try PY.makePyenv()
@@ -527,6 +541,8 @@ struct PyenvPythonVersionKeepTests {
         "bin/black", "lib/python3.11/site-packages/requests/__init__.py",
         "lib/python3.11/site-packages/requests-2.32.0.dist-info/METADATA",
         "lib/python3.11/site-packages/six.py",
+        // Not what the build ships, though the name starts the same.
+        "bin/python-tools", "bin/pip-audit", "bin/pydoc-markdown", "bin/idlelib-run",
     ])
     func aPackageInstalledIntoTheVersionKeepsIt(relative: String) throws {
         let home = try PY.makePyenv()
@@ -619,6 +635,9 @@ struct PyenvPythonVersionKeepTests {
 
     @Test(arguments: [
         (".zshrc", "pyenv shell 3.11.9\n"),
+        (".zshrc", "pyenv shell python-3.11.9\n"),
+        (".zlogin", "pyenv shell 3.11.9\n"),
+        (".config/fish/conf.d/pyenv.fish", "pyenv shell 3.11.9\n"),
         (".zshrc", "export PATH=\"$HOME/.pyenv/versions/3.11.9/bin:$PATH\"\n"),
         (".bash_profile", "alias py311='~/.pyenv/versions/3.11.9/bin/python'\n"),
         ("Library/Application Support/Code/User/settings.json",
@@ -672,6 +691,131 @@ struct PyenvPythonVersionKeepTests {
         defer { try? FileManager.default.removeItem(at: home) }
         try PY.link(home, ".local/bin/python3.11",
                     to: home.appendingPathComponent("\(PY.root)/\(PY.old)/bin/python3.11").path)
+        #expect(PY.offered(home).isEmpty)
+    }
+
+    @Test
+    func aPinnedEnvironmentInTheVersionsFolderKeepsItsBase() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        // `python -m venv ~/.pyenv/versions/work`, then `pyenv global work`.
+        try PY.venv(home, "\(PY.root)/work", from: PY.old)
+        try PY.link(home, "\(PY.root)/work/bin/python",
+                    to: home.appendingPathComponent("\(PY.root)/\(PY.old)/bin/python3.11").path)
+        try PY.write("work\n", home, ".pyenv/version")
+        #expect(PY.offered(home).isEmpty)
+        #expect(!PY.gateKeeps(home, PY.old))
+        #expect(!PY.movable(home, PY.old))
+    }
+
+    @Test
+    func aBuildKilledPartwayIsNotTheNewestOfItsMinor() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        // `pyenv install 3.11.10` stopped before `bin/python3`: 3.11.9 is the only working 3.11.
+        try FileManager.default.removeItem(at: home.appendingPathComponent("\(PY.root)/\(PY.newest)/bin/python3"))
+        PY.settle(home, PY.newest)
+        #expect(PY.offered(home).isEmpty)
+        try PY.write("3.11\n", home, ".pyenv/version")
+        #expect(PY.offered(home).isEmpty)
+        #expect(!PY.movable(home, PY.old))
+    }
+
+    @Test
+    func pythonTwoIsJudgedByItsOwnProgram() throws {
+        let home = try PY.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try PY.install(home, "2.7.17", "2.7.18")
+        #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent("\(PY.root)/2.7.17/bin/python3").path))
+        #expect(PY.offered(home) == ["2.7.17"])
+    }
+
+    @Test
+    func theShippedCommandsAreExactNames() {
+        let shipped = PyenvPythonVersionPolicy.shippedCommands(forVersion: "3.11.9")
+        for name in ["python", "python3", "python3.11", "python3.11-config", "python3-config", "pip", "pip3",
+                     "pip3.11", "idle3", "idle3.11", "pydoc3.11", "2to3", "2to3-3.11"] {
+            #expect(shipped.contains(name), "\(name)")
+        }
+        for name in ["python-tools", "pip-audit", "python3.12", "pip3.12", "black"] {
+            #expect(!shipped.contains(name), "\(name)")
+        }
+        #expect(PyenvPythonVersionPolicy.shippedCommands(forVersion: "2.7.18").isSuperset(of: ["python2", "smtpd.py"]))
+    }
+
+    @Test
+    func severalNamesOnOneLineAllCount() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try PY.write("3.11.9:3.12.4\n", home, ".pyenv/version")
+        #expect(PY.offered(home).isEmpty)
+        #expect(!PY.movable(home, PY.old))
+        try PY.write("3.12.4:3.11.10\n", home, ".pyenv/version")
+        #expect(PY.movable(home, PY.old))
+    }
+
+    @Test
+    func aProjectsEditorSettingsKeepTheVersionTheyName() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let context = PY.context(recorded: PY.recorded(home, project: "code/app"))
+        #expect(PY.offered(home, context) == [PY.old])
+        try PY.write(#"{"python.defaultInterpreterPath": "~/.pyenv/versions/3.11.9/bin/python"}"#,
+                     home, "code/app/.vscode/settings.json")
+        #expect(PY.offered(home, context).isEmpty)
+        #expect(!PY.movable(home, PY.old, context))
+    }
+
+    @Test
+    func anOlderVirtualenvNamesItsBaseInOrigPrefix() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        // virtualenv before 20: no `pyvenv.cfg`, and a copied `bin/python`.
+        try PY.write("x", home, ".virtualenvs/old/bin/python")
+        try PY.write(home.appendingPathComponent("\(PY.root)/\(PY.old)").path + "\n",
+                     home, ".virtualenvs/old/lib/python3.11/orig-prefix.txt")
+        #expect(PY.offered(home).isEmpty)
+    }
+
+    @Test
+    func anEnvironmentPythonPurgeCannotLookAtKeepsEverything() throws {
+        let home = try PY.makePyenv()
+        let bin = home.appendingPathComponent(".virtualenvs/work/bin")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bin.path)
+            try? FileManager.default.removeItem(at: home)
+        }
+        try PY.link(home, ".virtualenvs/work/bin/python",
+                    to: home.appendingPathComponent("\(PY.root)/\(PY.old)/bin/python3.11").path)
+        // `bin` can't be searched, so `bin/python` can't be looked at.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: bin.path)
+        #expect(PY.offered(home).isEmpty)
+    }
+
+    @Test
+    func aToxFolderPurgeCannotListKeepsEverything() throws {
+        let home = try PY.makePyenv()
+        let tox = home.appendingPathComponent("code/app/.tox")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tox.path)
+            try? FileManager.default.removeItem(at: home)
+        }
+        try FileManager.default.createDirectory(at: tox, withIntermediateDirectories: true)
+        let context = PY.context(recorded: PY.recorded(home, project: "code/app"))
+        #expect(PY.offered(home, context) == [PY.old])
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: tox.path)
+        #expect(PY.offered(home, context).isEmpty)
+    }
+
+    @Test
+    func aVersionWithNoSharedLibraryStays() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        // Built without `--enable-shared`: a `--copies` environment may run it untimed.
+        try FileManager.default.removeItem(
+            at: home.appendingPathComponent("\(PY.root)/\(PY.old)/lib/libpython3.11.dylib")
+        )
+        PY.settle(home, PY.old)
         #expect(PY.offered(home).isEmpty)
     }
 
@@ -769,6 +913,26 @@ struct PyenvPythonVersionMoveTests {
         PY.setTimes(home.appendingPathComponent("\(PY.root)/\(PY.old)/bin/python3.11").path,
                     accessed: Date(), changed: Date().addingTimeInterval(-200 * PY.day))
         #expect(!PY.movable(home, PY.old, context))
+    }
+
+    @Test
+    func aPinMadeWhileLsofRunsStopsTheMove() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let context = PY.context(onLsof: { try? PY.write("3.11.9\n", home, ".pyenv/version") })
+        #expect(!PY.movable(home, PY.old, context))
+    }
+
+    /// The list gate runs on the main thread, so it leaves the environments
+    /// outside pyenv's folder to the scan and the move.
+    @Test
+    func theListGateLeavesEnvironmentsToTheMove() throws {
+        let home = try PY.makePyenv()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try PY.venv(home, ".virtualenvs/work", from: PY.old)
+        #expect(PY.offered(home).isEmpty)
+        #expect(PY.gateKeeps(home, PY.old))
+        #expect(!PY.movable(home, PY.old))
     }
 
     /// The gate `isOfferedForCleanup` asks reads the small files again, so a

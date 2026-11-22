@@ -14,7 +14,7 @@ import Foundation
 /// A candidate is offered only when nothing Purge can see still uses it:
 ///
 /// - pyenv finished building it, and it hasn't changed for a day,
-/// - it is not the newest installed release of its minor (`3.11`),
+/// - it is not the newest finished release of its minor (`3.11`),
 /// - `~/.pyenv/version`, `PYENV_VERSION` (Purge's environment or launchd's,
 ///   read again right before the move), `~/.python-version` and every
 ///   `.python-version` beside a project a Dev Projects scan found, or in a
@@ -22,15 +22,20 @@ import Foundation
 /// - it holds no pyenv-virtualenv environment (`envs`), and no link in
 ///   `~/.pyenv/versions` leads into it,
 /// - no virtual environment Purge can find runs from it: those beside each
-///   project, and those of uv's tools, pipx, Poetry, Hatch, pipenv, pdm and
-///   virtualenvwrapper. A `pyvenv.cfg` names the Python it runs from,
+///   project (`.venv`, `venv`, tox's, nox's and direnv's), those in
+///   `~/.pyenv/versions` itself, and those of uv's tools, pipx, Poetry, Hatch,
+///   pipenv, pdm, virtualenvwrapper and pre-commit. A `pyvenv.cfg` names the
+///   Python it runs from, and an older virtualenv's `orig-prefix.txt` does,
 /// - it holds no package or command besides what pyenv's build ships,
-/// - no LaunchAgent, editor, MCP, Jupyter kernel or PyCharm config, or shell
-///   startup file names a path inside it or its version as a word, or holds
-///   `PYENV_VERSION`, and no link in a `bin` folder points into it,
+/// - no LaunchAgent, editor (a scanned project's `.vscode/settings.json`
+///   too), MCP, Jupyter kernel or PyCharm config, or shell startup file in
+///   home or fish's `conf.d` names a path inside it or its version as a word,
+///   or holds `PYENV_VERSION`, and no link in a `bin` folder points into it,
 /// - its Python hasn't run for 90 days. Starting it maps its program and its
-///   extension modules, which moves their access times, so a virtual
-///   environment anywhere on the Mac that still runs it keeps it,
+///   `libpython`, which moves their access times, so a virtual environment
+///   anywhere on the Mac that still runs it keeps it. A version built without
+///   a shared `libpython` always stays, since a `--copies` environment may run
+///   it without touching anything Purge can time,
 /// - and, right before the move, no process has a file open inside it.
 ///
 /// The checks run in the same three places as nvm's (`NvmNodeVersionPolicy`).
@@ -57,8 +62,13 @@ nonisolated enum PyenvPythonVersionPolicy {
     /// The environments a project keeps, which `python -m venv`, uv and
     /// Poetry's in-project setting make. Recorded whether they are there or not.
     static let projectVenvNames = [".venv", "venv"]
-    /// Folders in a project that hold one environment per folder: tox's and nox's.
-    static let projectVenvGroups = [".tox", ".nox"]
+    /// Folders in a project that hold one environment per folder: tox's, nox's
+    /// and direnv's (`layout python` makes `.direnv/python-<version>`).
+    /// Recorded whether they are there or not, and listed again each time.
+    static let projectVenvGroups = [".tox", ".nox", ".direnv"]
+    /// A project's own editor settings, which may name an interpreter
+    /// (`python.defaultInterpreterPath`). Recorded whether there or not.
+    static let projectSettingsFiles = [".vscode/settings.json"]
     /// Folders in home where each folder is an environment: uv's tools, pipx's
     /// (all three places it has used), virtualenvwrapper's, Poetry's,
     /// pipenv's and pdm's.
@@ -82,10 +92,14 @@ nonisolated enum PyenvPythonVersionPolicy {
     /// Hatch keeps `<project>/<id>/<environment>` here.
     static let hatchVenvRoot = "Library/Application Support/hatch/env/virtual"
     static let hatchVenvDepth = 3
+    /// pre-commit keeps `repo<id>/py_env-<python>` here for each hook repo.
+    static let preCommitRoot = ".cache/pre-commit"
 
     /// Files that may name a Python path or version, relative to home: the
-    /// ones nvm's rule reads and Zed's.
-    static let referenceFiles = NvmNodeVersionPolicy.referenceFiles + [".config/zed/settings.json"]
+    /// ones nvm's rule reads, Zed's and zsh's login file.
+    static let referenceFiles = NvmNodeVersionPolicy.referenceFiles + [".config/zed/settings.json", ".zlogin"]
+    /// fish reads every `.fish` file here at startup.
+    static let fishConfigFolder = ".config/fish/conf.d"
     /// Jupyter keeps `<kernel>/kernel.json` here, whose `argv` names a Python.
     static let jupyterKernels = "Library/Jupyter/kernels"
     /// PyCharm and the other JetBrains IDEs keep `<product>/options/jdk.table.xml`
@@ -95,9 +109,25 @@ nonisolated enum PyenvPythonVersionPolicy {
     /// `bin` folders where a link may point into a version.
     static let linkFolders = NvmNodeVersionPolicy.linkFolders
 
-    /// What pyenv's build puts in `bin`: the interpreter, pip, IDLE, pydoc,
-    /// 2to3 and `python-config`, each with and without its version.
-    static let shippedCommandPrefixes = ["python", "pip", "idle", "pydoc", "2to3"]
+    /// What pyenv's build puts in `bin` for `version`, by exact name: the
+    /// interpreter, pip, IDLE, pydoc, 2to3 and `python-config`, each with and
+    /// without its version, the `m` names before 3.8, the `easy_install` an
+    /// older `ensurepip` brought, and 2.7's `smtpd.py`. Any other name is
+    /// something installed into the version.
+    static func shippedCommands(forVersion version: String) -> Set<String> {
+        let major = String(version.split(separator: ".").first ?? "")
+        let minor = minor(of: version)
+        var names: Set<String> = []
+        for stem in ["python", "pip", "idle", "pydoc"] {
+            names.formUnion([stem, "\(stem)\(major)", "\(stem)\(minor)"])
+        }
+        names.formUnion([
+            "python-config", "python\(major)-config", "python\(minor)-config",
+            "python\(minor)m", "python\(minor)m-config",
+            "2to3", "2to3-\(minor)", "easy_install", "easy_install-\(minor)", "smtpd.py",
+        ])
+        return names
+    }
     /// What `ensurepip` puts in `site-packages`. Older releases also bring
     /// setuptools, with `_distutils_hack`, `pkg_resources` and a `.pth`.
     static let shippedPackages: Set<String> = ["pip", "setuptools", "wheel"]
@@ -182,7 +212,7 @@ nonisolated enum PyenvPythonVersionPolicy {
     /// Projects walks.
     static let ledger = NvmrcLedger(
         fileURL: AppSupportFolder.url().appendingPathComponent("pyenv-files.json"),
-        limit: 10_000
+        limit: 20_000
     )
 
     // MARK: Gate
@@ -211,23 +241,24 @@ nonisolated enum PyenvPythonVersionPolicy {
         else { return false }
         let kept: Set<String>?
         switch check {
+        // On the main thread: the version files and the folder itself, not the
+        // environments, which the scan read and the move reads again.
         case .quick: kept = recentKeptVersions(home: home, context: context, now: now)
         case .scan: kept = knownKept ?? keptVersions(home: home, context: context)
-        // A move trusts no earlier read, launchd's included.
-        case .move: kept = keptVersions(home: home, context: context, fresh: true)
+        case .move:
+            // `lsof` first, since it takes a moment: a pin or environment made
+            // while it ran still counts. A move trusts no earlier read,
+            // launchd's included.
+            guard OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free else { return false }
+            kept = keptVersions(home: home, context: context, fresh: true)
         }
         guard let kept, !kept.contains(folder) else { return false }
         switch check {
         case .quick:
             return true
         case .scan, .move:
-            guard let used = isUsedFromOutside(path, home: home, context: context), !used else { return false }
-        }
-        switch check {
-        case .quick, .scan:
-            return true
-        case .move:
-            return OpenFileCheck.check(folders: [url], lister: context.openFiles) == .free
+            guard let used = isUsedFromOutside(path, home: home, context: context) else { return false }
+            return !used
         }
     }
 
@@ -259,15 +290,22 @@ nonisolated enum PyenvPythonVersionPolicy {
 
     /// Whether pyenv finished building the version and nothing in it changed
     /// since `cutoff`. pyenv builds elsewhere and installs into the folder at
-    /// the end, and deletes the folder when a build fails. A `bin/python3` is
-    /// the last thing a finished install has, and a `pip install` into the
-    /// version changes `bin` or `lib`.
+    /// the end, and deletes the folder when a build fails. A
+    /// `pip install` into the version changes `bin` or `lib`.
     static func isFinishedInstall(_ path: String, before cutoff: Date) -> Bool {
+        hasInterpreter(path) && OldToolVersionScanPolicy.isUnchanged(path, before: cutoff)
+    }
+
+    /// Whether the version has its `bin/python<major>` (`python3`, or 2.7's
+    /// `python2`), the last thing a finished install has. A build that was
+    /// killed partway, where pyenv's cleanup never ran, has none.
+    static func hasInterpreter(_ path: String) -> Bool {
+        guard let version = version(ofFolderName: URL(fileURLWithPath: path).lastPathComponent),
+              let major = version.split(separator: ".").first else { return false }
         var info = stat()
-        guard lstat("\(path)/bin/python3", &info) == 0 else { return false }
+        guard lstat("\(path)/bin/python\(major)", &info) == 0 else { return false }
         let type = info.st_mode & S_IFMT
-        guard type == S_IFREG || type == S_IFLNK else { return false }
-        return OldToolVersionScanPolicy.isUnchanged(path, before: cutoff)
+        return type == S_IFREG || type == S_IFLNK
     }
 
     private static let recentLock = NSLock()
@@ -282,7 +320,7 @@ nonisolated enum PyenvPythonVersionPolicy {
         if let cached, now.timeIntervalSince(cached.at) < NvmNodeVersionPolicy.recentReadLifetime, now >= cached.at {
             return cached.kept
         }
-        let kept = keptVersions(home: home, context: context)
+        let kept = keptVersions(home: home, context: context, environments: false)
         recentLock.lock()
         recent[home] = (now, kept)
         recentLock.unlock()
@@ -296,7 +334,12 @@ nonisolated enum PyenvPythonVersionPolicy {
     /// `~/.pyenv/versions` leads into, and any an environment runs from. Nil,
     /// which keeps every version, when a source can't be read or understood.
     /// `fresh` reads launchd's `PYENV_VERSION` again, which only a move does.
-    static func keptVersions(home: String, context: Context, fresh: Bool = false) -> Set<String>? {
+    /// `environments` false leaves out the environments outside
+    /// `~/.pyenv/versions` and the projects' editor settings, for the
+    /// main-thread gate. The scan and the move always read them.
+    static func keptVersions(
+        home: String, context: Context, fresh: Bool = false, environments: Bool = true
+    ) -> Set<String>? {
         let root = "\(home)/\(versionsRoot)"
         guard let installed = installedNames(in: root) else { return nil }
         let candidates = candidateFolders(installed, root: root)
@@ -304,7 +347,9 @@ nonisolated enum PyenvPythonVersionPolicy {
 
         var kept = Set<String>()
         var newestOfMinor: [String: String] = [:]
-        for version in candidates {
+        // Only a finished build counts as the newest: one killed partway must
+        // not leave the last working release of its minor unkept.
+        for version in candidates where hasInterpreter("\(root)/\(version)") {
             let minor = minor(of: version)
             if let current = newestOfMinor[minor], !OldToolVersionScanPolicy.isLower(current, than: version) { continue }
             newestOfMinor[minor] = version
@@ -324,7 +369,9 @@ nonisolated enum PyenvPythonVersionPolicy {
             case .unknown:
                 return nil
             case .text(let text):
-                for word in versionFileWords(text) {
+                // pyenv joins a file's names with `:` and splits them again, so
+                // `3.11.9:3.12.4` on one line names both.
+                for word in versionFileWords(text).flatMap({ $0.split(separator: ":").map(String.init) }) {
                     guard let named = resolve(word, installed: installed) else { return nil }
                     kept.formUnion(named)
                 }
@@ -347,10 +394,22 @@ nonisolated enum PyenvPythonVersionPolicy {
             if linked { kept.insert(folder) }
         }
 
-        guard let environments = environmentFolders(home: home, recorded: recorded, mayRead: context.mayRead)
-        else { return nil }
+        // An environment made right in `~/.pyenv/versions` (`python -m venv
+        // ~/.pyenv/versions/work`, or an older pyenv-virtualenv), which a
+        // `.python-version` may name. Few enough to read on the main thread.
+        var venvs = installed
+            .filter { !candidates.contains($0) && OldToolVersionScanPolicy.isRealFolder("\(root)/\($0)") }
+            .map { "\(root)/\($0)" }
+        if environments {
+            guard let found = environmentFolders(home: home, recorded: recorded, mayRead: context.mayRead),
+                  let named = namedBySettings(recorded: recorded, candidates: candidates, home: home,
+                                              mayRead: context.mayRead)
+            else { return nil }
+            venvs += found
+            kept.formUnion(named)
+        }
         var seen = Set<String>()
-        for venv in environments where seen.insert(venv).inserted {
+        for venv in venvs where seen.insert(venv).inserted {
             guard let used = versionsUsed(
                 byEnvironment: venv, candidates: candidates, root: root, home: home, mayRead: context.mayRead
             ) else { return nil }
@@ -472,9 +531,8 @@ nonisolated enum PyenvPythonVersionPolicy {
         }
         let bin = "\(versionPath)/bin"
         guard let commands = try? FileManager.default.contentsOfDirectory(atPath: bin) else { return true }
-        let addedCommand = commands.contains { name in
-            !name.hasPrefix(".") && !shippedCommandPrefixes.contains(where: { name.hasPrefix($0) })
-        }
+        let shipped = shippedCommands(forVersion: version)
+        let addedCommand = commands.contains { name in !name.hasPrefix(".") && !shipped.contains(name) }
         if addedCommand { return true }
         let sitePackages = "\(versionPath)/lib/python\(minor(of: version))/site-packages"
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: sitePackages) else { return true }
@@ -494,13 +552,17 @@ nonisolated enum PyenvPythonVersionPolicy {
     /// access or change of its programs in `bin`, its `libpython`, and its
     /// extension modules in `lib-dynload`. Starting Python maps its program,
     /// and an environment's `python` is a link to it, so either moves the
-    /// access time. True when any of them can't be read, or none is there.
+    /// access time. A `--copies` environment runs its own program but still
+    /// loads the version's `libpython`. True when any of them can't be read,
+    /// or there is no `libpython`: a static build run through a `--copies`
+    /// environment may touch nothing here at all.
     static func ranRecently(_ versionPath: String, now: Date) -> Bool {
         guard let version = version(ofFolderName: URL(fileURLWithPath: versionPath).lastPathComponent) else {
             return true
         }
         let cutoff = now.addingTimeInterval(-unusedAge)
         var newest: Date?
+        var sawLibrary = false
         func note(_ folder: String, where include: (String) -> Bool) -> Bool {
             let names: [String]
             do {
@@ -513,6 +575,7 @@ nonisolated enum PyenvPythonVersionPolicy {
                 guard lstat("\(folder)/\(name)", &info) == 0 else { return false }
                 // A link's own times say nothing about its target's use.
                 guard (info.st_mode & S_IFMT) == S_IFREG else { continue }
+                if name.hasPrefix("libpython") { sawLibrary = true }
                 let accessed = TimeInterval(info.st_atimespec.tv_sec)
                 let changed = TimeInterval(info.st_mtimespec.tv_sec)
                 let latest = Date(timeIntervalSince1970: max(accessed, changed))
@@ -523,33 +586,46 @@ nonisolated enum PyenvPythonVersionPolicy {
         guard note("\(versionPath)/bin", where: { $0.hasPrefix("python") }),
               note("\(versionPath)/lib", where: { $0.hasPrefix("libpython") }),
               note("\(versionPath)/lib/python\(minor(of: version))/lib-dynload", where: { $0.hasSuffix(".so") }),
-              let newest else { return true }
+              sawLibrary, let newest else { return true }
         return newest >= cutoff
     }
 
     // MARK: Virtual environments
 
     /// Every environment folder Purge reads: the projects' from the ledger,
-    /// those in home, each folder in `venvFolders`, and Hatch's. Nil when one
-    /// of those folders is there but can't be listed.
+    /// each one in a recorded tox, nox or direnv folder as it is now, those in
+    /// home, each folder in `venvFolders`, Hatch's and pre-commit's. Nil when
+    /// one of those folders is there but can't be listed.
     static func environmentFolders(home: String, recorded: [String], mayRead: (String) -> Bool) -> [String]? {
         var folders = recorded
             .filter { URL(fileURLWithPath: $0).lastPathComponent == venvConfigName }
             .map { ($0 as NSString).deletingLastPathComponent }
         folders += homeVenvs.map { "\(home)/\($0)" }
-        func children(of folder: String) -> [String]? {
+        func children(of folder: String, includeHidden: Bool = false) -> [String]? {
             guard mayRead(folder) else { return nil }
             do {
                 return try FileManager.default.contentsOfDirectory(atPath: folder)
-                    .filter { !$0.hasPrefix(".") }
+                    .filter { includeHidden || !$0.hasPrefix(".") }
                     .map { "\(folder)/\($0)" }
             } catch {
                 return NvmNodeVersionPolicy.isMissing(folder) ? [] : nil
             }
         }
+        // Listed now, so one made after the walk counts. tox keeps its
+        // packaging environment in the hidden `.pkg`.
+        for group in recorded where projectVenvGroups.contains(URL(fileURLWithPath: group).lastPathComponent) {
+            guard let found = children(of: group, includeHidden: true) else { return nil }
+            folders += found
+        }
         for relative in venvFolders {
             guard let found = children(of: "\(home)/\(relative)") else { return nil }
             folders += found
+        }
+        // pre-commit: `repo<id>/py_env-<python>`.
+        guard let repos = children(of: "\(home)/\(preCommitRoot)") else { return nil }
+        for repo in repos where URL(fileURLWithPath: repo).lastPathComponent.hasPrefix("repo") && isFolder(repo) {
+            guard let found = children(of: repo) else { return nil }
+            folders += found.filter { URL(fileURLWithPath: $0).lastPathComponent.hasPrefix("py_env-") }
         }
         var level = ["\(home)/\(hatchVenvRoot)"]
         for depth in 0..<hatchVenvDepth {
@@ -583,7 +659,15 @@ nonisolated enum PyenvPythonVersionPolicy {
         let config = "\(venv)/\(venvConfigName)"
         switch NvmNodeVersionPolicy.readPinFile(config, home: home, mayRead: mayRead) {
         case .absent:
-            break
+            // A virtualenv before version 20 writes no `pyvenv.cfg` and copies
+            // `bin/python`. It names its base in `lib/python<minor>/orig-prefix.txt`.
+            // An installed Python's `bin/python` is a link, so its `lib` isn't listed.
+            var program = stat()
+            if lstat("\(venv)/bin/python", &program) == 0, (program.st_mode & S_IFMT) == S_IFREG {
+                guard let reached = originalPrefixes(of: venv, candidates: candidates, root: root, home: home,
+                                                     mayRead: mayRead) else { return nil }
+                used.formUnion(reached)
+            }
         case .unknown:
             return nil
         case .text(let text):
@@ -612,13 +696,69 @@ nonisolated enum PyenvPythonVersionPolicy {
         guard mayRead(bin) else { return nil }
         for name in ["python", "python3"] {
             let python = "\(bin)/\(name)"
-            guard lstat(python, &info) == 0, (info.st_mode & S_IFMT) == S_IFLNK else { continue }
+            guard lstat(python, &info) == 0 else {
+                // Only a confirmed missing name is no link. Anything else is unread.
+                if errno == ENOENT || errno == ENOTDIR { continue }
+                return nil
+            }
+            guard (info.st_mode & S_IFMT) == S_IFLNK else { continue }
             guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: python),
                   let reached = folders(reachedBy: target, from: bin, candidates: candidates, root: root,
                                         mayRead: mayRead) else { return nil }
             used.formUnion(reached)
         }
         return used
+    }
+
+    /// The candidates an older virtualenv's `lib/python<minor>/orig-prefix.txt`
+    /// leads into. Empty when it has none. Nil when one can't be read.
+    private static func originalPrefixes(
+        of venv: String, candidates: [String], root: String, home: String, mayRead: (String) -> Bool
+    ) -> Set<String>? {
+        let lib = "\(venv)/lib"
+        guard mayRead(lib) else { return nil }
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: lib)
+        } catch {
+            return NvmNodeVersionPolicy.isMissing(lib) ? [] : nil
+        }
+        var used = Set<String>()
+        for name in names where name.hasPrefix("python") {
+            let file = "\(lib)/\(name)/orig-prefix.txt"
+            switch NvmNodeVersionPolicy.readPinFile(file, home: home, mayRead: mayRead) {
+            case .absent:
+                continue
+            case .unknown:
+                return nil
+            case .text(let text):
+                let prefix = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard prefix.hasPrefix("/"),
+                      let reached = folders(reachedBy: prefix, from: venv, candidates: candidates, root: root,
+                                            mayRead: mayRead) else { return nil }
+                used.formUnion(reached)
+            }
+        }
+        return used
+    }
+
+    /// The candidates a project's editor settings name, read the way the
+    /// reference files are. Nil when one can't be read.
+    static func namedBySettings(
+        recorded: [String], candidates: [String], home: String, mayRead: (String) -> Bool
+    ) -> Set<String>? {
+        var named = Set<String>()
+        for file in recorded where projectSettingsFiles.contains(where: { file.hasSuffix("/\($0)") }) {
+            switch NvmNodeVersionPolicy.readPinFile(file, home: home, mayRead: mayRead) {
+            case .absent:
+                continue
+            case .unknown:
+                return nil
+            case .text(let text):
+                named.formUnion(candidates.filter { namesVersion(text, folder: $0) })
+            }
+        }
+        return named
     }
 
     /// The candidates the path in `value` is or leads into, read from `folder`
@@ -664,9 +804,10 @@ nonisolated enum PyenvPythonVersionPolicy {
         }
         guard let agents = listed("\(home)/\(NvmNodeVersionPolicy.launchAgents)", suffix: ".plist", inEach: nil),
               let kernels = listed("\(home)/\(jupyterKernels)", suffix: nil, inEach: "kernel.json"),
-              let interpreters = listed("\(home)/\(jetBrainsRoot)", suffix: nil, inEach: jetBrainsInterpreters)
+              let interpreters = listed("\(home)/\(jetBrainsRoot)", suffix: nil, inEach: jetBrainsInterpreters),
+              let fish = listed("\(home)/\(fishConfigFolder)", suffix: ".fish", inEach: nil)
         else { return nil }
-        files += agents + kernels + interpreters
+        files += agents + kernels + interpreters + fish
 
         for file in files {
             guard context.mayRead(file) else { return nil }
@@ -687,24 +828,29 @@ nonisolated enum PyenvPythonVersionPolicy {
 
     /// Whether a reference file's `text` names the version: a path inside its
     /// folder, its version as a word (`pyenv shell 3.11.9`,
-    /// `PYENV_VERSION=3.11.9`), or `PYENV_VERSION`, whose value Purge doesn't
+    /// `PYENV_VERSION=3.11.9`, `python-3.11.9`, which pyenv also accepts), or
+    /// `PYENV_VERSION`, whose value Purge doesn't
     /// try to read from a script. A version some unrelated setting happens to
     /// hold keeps it too, which errs on keeping.
     static func namesVersion(_ text: String, folder: String) -> Bool {
         if NvmNodeVersionPolicy.names(text, versionFolder: folder, in: versionsRoot) { return true }
         let haystack = text.lowercased()
         if haystack.contains(environmentName.lowercased()) { return true }
-        return RustupToolchainPolicy.containsWord(folder.lowercased(), in: haystack)
+        let version = folder.lowercased()
+        return RustupToolchainPolicy.containsWord(version, in: haystack)
+            || RustupToolchainPolicy.containsWord("python-\(version)", in: haystack)
     }
 
     // MARK: Scan
 
     /// The paths pyenv and Python read for `roots`, for the ledger:
     /// `.python-version` in each project and every folder above it, up to `/`,
-    /// and the `pyvenv.cfg` of each project's `.venv` and `venv`, each listed
-    /// whether a file is there now or not, so one added after the scan still
-    /// counts at the move. Also the `pyvenv.cfg` of every environment the walk
-    /// sees in a project now: a folder of any name, or one in `.tox` or `.nox`.
+    /// the `pyvenv.cfg` of each project's `.venv` and `venv`, its tox, nox and
+    /// direnv folders, which are listed again at each check, and its
+    /// `.vscode/settings.json`, each listed whether it is there now or not, so
+    /// one added after the scan still counts at the move. Also the `pyvenv.cfg`
+    /// of every environment the walk sees directly in a project now, under any
+    /// name.
     static func recordedFiles(inProjectRoots roots: [URL], mayRead: (String) -> Bool) -> [String] {
         let pins = NvmNodeVersionPolicy.nvmrcFiles(inProjectRoots: roots).map { nvmrc -> String in
             let folder = (nvmrc as NSString).deletingLastPathComponent
@@ -715,9 +861,8 @@ nonisolated enum PyenvPythonVersionPolicy {
             let project = root.standardizedFileURL.path
             venvs += projectVenvNames.map { "\(project)/\($0)/\(venvConfigName)" }
             venvs += existingConfigs(in: project, mayRead: mayRead)
-            for group in projectVenvGroups {
-                venvs += existingConfigs(in: "\(project)/\(group)", mayRead: mayRead)
-            }
+            venvs += projectVenvGroups.map { "\(project)/\($0)" }
+            venvs += projectSettingsFiles.map { "\(project)/\($0)" }
         }
         var seen = Set<String>()
         return (pins + venvs).filter { seen.insert($0).inserted }
