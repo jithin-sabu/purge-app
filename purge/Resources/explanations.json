@@ -3597,6 +3597,15 @@
     "kind": "packages"
   },
   {
+    "key": "pyenv-python-version",
+    "display_name": "pyenv Python Version",
+    "tag": "medium",
+    "explanation": "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
     "key": "rustup-toolchain",
     "display_name": "rustup Rust Toolchain",
     "tag": "medium",

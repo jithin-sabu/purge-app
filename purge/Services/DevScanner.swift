@@ -179,6 +179,20 @@ nonisolated final class DevScanner {
                 reinstallCommand: UvPythonVersionPolicy.reinstallCommand(forFolderName: folder)
             )
         }
+        // One row per pyenv version, named like the nvm rows (#404).
+        if let version = PyenvPythonVersionPolicy.version(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: PyenvPythonVersionPolicy.explanationKey,
+                friendlyFallback: toolLabel
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Python \(version) (pyenv)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: PyenvPythonVersionPolicy.reinstallCommand(forVersion: version)
+            )
+        }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -1304,6 +1318,17 @@ nonisolated final class DevScanner {
                 home: home.standardizedFileURL.path,
                 fullAccess: access == .full,
                 mayRead: { ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home) }
+            )
+            // pyenv reads `.python-version` the same way, and a project's
+            // virtual environments name the Python they run from (#404).
+            let mayRead: (String) -> Bool = {
+                ProtectedLocations.isReadable(URL(fileURLWithPath: $0), access: access, home: home)
+            }
+            PyenvPythonVersionPolicy.ledger.record(
+                PyenvPythonVersionPolicy.recordedFiles(inProjectRoots: discoveredRoots.map(\.0), mayRead: mayRead),
+                home: home.standardizedFileURL.path,
+                fullAccess: access == .full,
+                mayRead: mayRead
             )
         }
 

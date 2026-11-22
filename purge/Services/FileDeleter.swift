@@ -235,25 +235,27 @@ nonisolated final class FileDeleter: Sendable {
 
     /// The last check before a Dev Tools row moves that reads what the list gate
     /// can't afford on the main thread: for an nvm (#400) or Vite+ (#398) Node
-    /// version, a rustup toolchain (#406) or a uv Python version (#405), its configs, `bin` links and
-    /// `lsof`, and `lsof` for an unfinished Vite+ install. True lets the move go. Tests hand in a
-    /// fake, since the real one only knows the real home's `~/.nvm`.
+    /// version, a rustup toolchain (#406), a uv Python version (#405) or a pyenv Python (#404),
+    /// its configs, `bin` links and `lsof`, and `lsof` for an unfinished Vite+ install. True lets
+    /// the move go. Tests hand in a fake, since the real one only knows the real home's `~/.nvm`.
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
     /// The move check every real clean uses: nvm's rules, then Vite+'s, then
-    /// rustup's, then uv's. Tests pass a throwaway home and fake reads to prove each part runs.
+    /// rustup's, then uv's, then pyenv's. Tests pass a throwaway home and fake reads to prove each part runs.
     static func defaultImmediateMoveCheck(
         home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
         nvm: NvmNodeVersionPolicy.Context? = nil,
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
-        uv: UvPythonVersionPolicy.Context? = nil
+        uv: UvPythonVersionPolicy.Context? = nil,
+        pyenv: PyenvPythonVersionPolicy.Context? = nil
     ) -> @Sendable (URL) -> Bool {
         { url in
             NvmNodeVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: nvm)
                 && VitePlusNodeVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: vitePlus)
                 && RustupToolchainPolicy.passesImmediateTrashBoundary(url, home: home, context: rustup)
                 && UvPythonVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: uv)
+                && PyenvPythonVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: pyenv)
         }
     }
 

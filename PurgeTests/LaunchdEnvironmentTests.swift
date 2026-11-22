@@ -35,6 +35,14 @@ struct LaunchdEnvironmentTests {
         #expect(LaunchdEnvironment.names.contains(name))
     }
 
+    @Test("pyenv's version is read from launchd too (#404)")
+    func pyenvVersionIsRead() {
+        let name = "PYENV_VERSION"
+        #expect(LaunchdEnvironment.names.contains(name))
+        #expect(LaunchdEnvironment.read(name, runner: runner(stdout: "3.11.9:3.12.4\n")) == .value("3.11.9:3.12.4"))
+        #expect(LaunchdEnvironment.read(name, runner: runner(status: 1, stdout: "")) == .failed)
+    }
+
     @Test("launchd fills a name Purge started without, and never replaces one it has")
     func merging() {
         let launchd = ["OLLAMA_MODELS": "/Volumes/T7/models"]

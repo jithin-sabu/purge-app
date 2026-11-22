@@ -268,6 +268,10 @@ enum BrandIconMapping {
         if UvPythonVersionPolicy.folder(inLabel: key) != nil {
             return "python"
         }
+        // Each pyenv row's key is its label, `pyenv Python <version>` (#404).
+        if PyenvPythonVersionPolicy.version(inLabel: key) != nil {
+            return "python"
+        }
         return nil
     }
 
