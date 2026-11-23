@@ -99,49 +99,13 @@ struct LimitedScanNotice: View {
     @EnvironmentObject private var store: PurgeStore
 
     var body: some View {
-        Button {
-            store.isLookDeeperPresented = true
-        } label: {
-            HStack(spacing: AppStyle.Spacing.xSmall) {
-                Image(systemName: "lock")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .frame(width: 20)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                    Text("Limited scan")
-                        .font(AppStyle.Typography.callout.weight(.semibold))
-                        .foregroundStyle(AppColors.textPrimary)
-                    Text("Let Purge look deeper")
-                        .font(AppStyle.Typography.metadataEmphasis)
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(AppColors.textTertiary)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.vertical, AppStyle.Spacing.small)
-            .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                    .fill(AppColors.fillSecondary)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous))
-        }
-        .buttonStyle(LimitedScanNoticeButtonStyle())
-        .accessibilityLabel("Limited scan. Let Purge look deeper.")
-        .transition(.opacity)
-    }
-}
-
-private struct LimitedScanNoticeButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.7 : 1)
+        SidebarNoticeRow(
+            systemImage: "lock",
+            iconColor: AppColors.textSecondary,
+            title: String(localized: "Limited scan"),
+            subtitle: String(localized: "Let Purge look deeper"),
+            accessibilityLabel: String(localized: "Limited scan. Let Purge look deeper."),
+            action: { store.isLookDeeperPresented = true }
+        )
     }
 }

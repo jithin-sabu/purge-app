@@ -437,7 +437,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     func cancelWaiting() {
         waitCancelled = true
-        SettingsGuidePanel.shared.hide()
+        SettingsGuidePanel.shared.hide(.installProfile)
+        SettingsGuidePanel.shared.hide(.removeProfile)
     }
 
     /// Stops a removal before its next request to the service.
@@ -531,7 +532,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 let now = readBlocks()
                 return blockTypes.allSatisfy { now.contains($0) }
             }
-            SettingsGuidePanel.shared.hide()
+            SettingsGuidePanel.shared.hide(.installProfile)
             // System Settings keeps its own copy once opened; the file would only
             // linger. Only Purge's own regular file goes, nothing that replaced it.
             AppleIntelligenceDownloadBlock.removeProfile(at: profileURL)
@@ -757,7 +758,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
             SettingsGuidePanel.shared.show(.removeProfile) { [weak self] in self?.cancelWaiting() }
             let readBlocks = services.installedBlocks
             let removed = await waitUntil { readBlocks().isEmpty }
-            SettingsGuidePanel.shared.hide()
+            SettingsGuidePanel.shared.hide(.removeProfile)
             installedBlocks = services.installedBlocks()
             guard removed else {
                 phase = .idle

@@ -33,6 +33,8 @@
 "%@ used" = "%@ kullanılıyor";
 "%@ was removed, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ kaldırıldı ancak bu dosyalar hâlâ Mac'inizde. İşaretli bıraktığınız her şey Çöp Sepeti'ne taşınır; boşaltana kadar geri koyabilirsiniz.";
 "%lld selected · %@" = "%lld seçili · %@";
+"Allow Purge in the background" = "Purge'ün arka planda çalışmasına izin verin";
+"Blocked in Login Items" = "Giriş Öğeleri'nde engellendi";
 "Measuring space…" = "Alan ölçülüyor…";
 "%@, %@" = "%@, %@";
 "%@, %@ reclaimed" = "%@, %@ geri kazanıldı";
@@ -90,6 +92,8 @@
 "Android NDK %@" = "Android NDK %@";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
+"Not Now" = "Şimdi değil";
+"Reviews paused" = "İncelemeler duraklatıldı";
 "Rust %@ (rustup)" = "Rust %@ (rustup)";
 "Python %@ (uv)" = "Python %@ (uv)";
 "Python %@ (pyenv)" = "Python %@ (pyenv)";
@@ -130,6 +134,12 @@
 "Available after the scan finishes" = "Tarama bittikten sonra kullanılabilir";
 "Available for new files" = "Yeni dosyalar için kullanılabilir";
 "Purgeable" = "Temizlenebilir alan";
+"Scroll down to Allow in the Background." = "Arka Planda İzin Ver bölümüne kaydırın.";
+"Scroll down to Background App Activity." = "Arka Plan Uygulama Etkinliği bölümüne kaydırın.";
+"Switch Purge on." = "Purge'ü açın.";
+"The restart didn't work." = "Yeniden başlatma işe yaramadı.";
+"The watcher didn't start" = "İzleyici başlamadı";
+"The watcher stopped" = "İzleyici durdu";
 "macOS frees this by itself when it needs room" = "macOS, yere ihtiyaç duyduğunda bunu kendisi boşaltır";
 "What is purgeable space?" = "Temizlenebilir alan nedir?";
 "About purgeable space" = "Temizlenebilir alan hakkında";
@@ -636,8 +646,6 @@
 "That's room for %@." = "Bu kadar yere sığar: %@.";
 "The application bundle. Moving it to the Trash removes the app itself." = "Uygulama paketi. Çöp Sepeti'ne taşımak uygulamanın kendisini kaldırır.";
 "The application itself" = "Uygulamanın kendisi";
-"The background watcher couldn't start, so deleted apps go unnoticed." = "Arka plan izleyicisi başlatılamadı, bu yüzden silinen uygulamalar fark edilmez.";
-"The background watcher isn't running, so deleted apps go unnoticed." = "Arka plan izleyicisi çalışmıyor, bu yüzden silinen uygulamalar fark edilmez.";
 "The scan stopped before it finished, so nothing was cleaned." = "Tarama bitmeden durdu, bu yüzden hiçbir şey temizlenmedi.";
 "The scan stopped before it finished." = "Tarama bitmeden durdu.";
 "The uninstaller needs full access" = "Kaldırıcının tam erişime ihtiyacı var";
@@ -779,7 +787,6 @@
 "low on space" = "yer azaldı";
 "mac is full" = "mac dolu";
 "macOS calls this Full Disk Access. Turn it off anytime in System Settings." = "macOS buna Tam Disk Erişimi der. Sistem Ayarları'nda istediğiniz zaman kapatabilirsiniz.";
-"macOS is blocking Purge's background watcher, so deleted apps go unnoticed." = "macOS Purge'ün arka plan izleyicisini engelliyor, bu yüzden silinen uygulamalar fark edilmez.";
 "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on." = "macOS, Purge'ün arka planda çalışmasını engelliyor. Sistem Ayarları'nda Giriş Öğeleri'ni açıp Purge'ü etkinleştirin.";
 "macOS needs your permission" = "macOS'in izninize ihtiyacı var";
 "macOS protects this one and won't let it be removed." = "macOS bunu korur ve kaldırılmasına izin vermez.";

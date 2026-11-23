@@ -41,6 +41,8 @@ final class RemovedAppMonitor: ObservableObject {
     /// Whether the agent has answered the check that is running now.
     private var answeredDuringProbe = false
     private var probeTask: Task<Void, Never>?
+    /// Runs while the Login Items guide is up (`openLoginItemsSettings`).
+    private var approvalTimer: Timer?
 
     private enum Phase {
         case idle
@@ -304,8 +306,44 @@ final class RemovedAppMonitor: ObservableObject {
         }
     }
 
+    /// How long the Login Items guide waits for the user, as long as the profile
+    /// guide waits (`AppleIntelligenceModelStore.settingsWait`). After that the
+    /// guide closes; the sidebar row is still there to start again.
+    static let approvalWait: TimeInterval = 10 * 60
+
+    /// Opens Login Items with a guide beside it that says which switch to turn on,
+    /// then checks once a second until macOS allows the watcher. The guide closes
+    /// itself then, when the problem changes, when the user cancels it, or after
+    /// `approvalWait`. Each check reads only the Login Items status; the agent is
+    /// probed once, after macOS allows it.
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
+        guard watcherHealth == .needsApproval else { return }
+        SettingsGuidePanel.shared.show(.allowInBackground) { [weak self] in
+            self?.stopWaitingForApproval(hideGuide: false)
+        }
+        approvalTimer?.invalidate()
+        let deadline = Date().addingTimeInterval(Self.approvalWait)
+        approvalTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard self.isEnabled, self.managesLiveAgent, self.watcherHealth == .needsApproval,
+                      Date() < deadline
+                else {
+                    self.stopWaitingForApproval(hideGuide: true)
+                    return
+                }
+                guard self.agentService.status != .requiresApproval else { return }
+                self.stopWaitingForApproval(hideGuide: true)
+                self.refreshAgentStatus()
+            }
+        }
+    }
+
+    private func stopWaitingForApproval(hideGuide: Bool) {
+        approvalTimer?.invalidate()
+        approvalTimer = nil
+        if hideGuide { SettingsGuidePanel.shared.hide(.allowInBackground) }
     }
 
     /// Called by Purge's uninstaller before it moves bundles, so the agent does not
@@ -891,12 +929,16 @@ nonisolated enum WatcherHealth: Equatable, Sendable {
         }
     }
 
-    /// The same problem in a line, for the sidebar notice.
-    var shortMessage: String? {
+    /// The sidebar row's title. The sheet it opens uses `problemTitle`, which is too
+    /// long for the row at sidebar width.
+    static let shortTitle = String(localized: "Reviews paused")
+
+    /// The problem in a few words, under the sidebar row's title.
+    var shortHint: String? {
         switch self {
-        case .needsApproval: return String(localized: "macOS is blocking Purge's background watcher, so deleted apps go unnoticed.")
-        case .notRunning: return String(localized: "The background watcher isn't running, so deleted apps go unnoticed.")
-        case .failedToStart: return String(localized: "The background watcher couldn't start, so deleted apps go unnoticed.")
+        case .needsApproval: return String(localized: "Blocked in Login Items")
+        case .notRunning: return String(localized: "The watcher stopped")
+        case .failedToStart: return String(localized: "The watcher didn't start")
         case .off, .checking, .running: return nil
         }
     }

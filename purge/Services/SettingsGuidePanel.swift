@@ -2,12 +2,13 @@ import AppKit
 import SwiftUI
 
 /// A small floating panel that sits beside the System Settings window and says
-/// what to click, for the two moments Purge has to hand over to macOS: installing
-/// the Apple Intelligence download-block profile and removing it (#133). The
+/// what to click, for the moments Purge has to hand over to macOS: installing
+/// the Apple Intelligence download-block profile and removing it (#133), and
+/// allowing the deleted-apps watcher in Login Items. The
 /// window list gives System Settings' position without any permission, so the
 /// panel follows the window as it moves and comes back when it is behind
-/// something. It never takes focus, and it goes away on its own once the store
-/// sees the profile change.
+/// something. It never takes focus, and it goes away on its own once its owner
+/// sees the change it asked for.
 @MainActor
 final class SettingsGuidePanel {
     static let shared = SettingsGuidePanel()
@@ -15,9 +16,11 @@ final class SettingsGuidePanel {
     enum Guide: Equatable {
         case installProfile
         case removeProfile
+        case allowInBackground
     }
 
     private var panel: NSPanel?
+    private(set) var shown: Guide?
     private var timer: Timer?
     private var onCancel: (() -> Void)?
 
@@ -25,8 +28,17 @@ final class SettingsGuidePanel {
     private static let gap: CGFloat = AppStyle.Spacing.medium
     private static let systemSettingsBundleID = "com.apple.systempreferences"
 
+    /// Shows `guide`. One System Settings pane is on screen at a time, so a guide
+    /// for another flow is replaced, and that flow is told its guide was
+    /// cancelled, so it stops waiting instead of waiting with no guide.
     func show(_ guide: Guide, onCancel: @escaping () -> Void) {
+        if let previous = shown, previous != guide, let replaced = self.onCancel {
+            self.onCancel = nil
+            shown = nil
+            replaced()
+        }
         self.onCancel = onCancel
+        shown = guide
         let content = SettingsGuideView(guide: guide) { [weak self] in self?.cancel() }
         let hosting = NSHostingView(rootView: content)
         hosting.setFrameSize(hosting.fittingSize)
@@ -48,7 +60,14 @@ final class SettingsGuidePanel {
         timer?.invalidate()
         timer = nil
         onCancel = nil
+        shown = nil
         panel?.orderOut(nil)
+    }
+
+    /// Hides the panel only while it shows `guide`, so one flow never closes
+    /// another's guide.
+    func hide(_ guide: Guide) {
+        if shown == guide { hide() }
     }
 
     private func cancel() {
@@ -178,6 +197,7 @@ struct SettingsGuideView: View {
         switch guide {
         case .installProfile: return String(localized: "Install the Purge profile")
         case .removeProfile: return String(localized: "Remove the Purge profile")
+        case .allowInBackground: return String(localized: "Allow Purge in the background")
         }
     }
 
@@ -194,6 +214,15 @@ struct SettingsGuideView: View {
                 String(localized: "In System Settings, select \"\(AppleIntelligenceDownloadBlock.profileDisplayName)\"."),
                 String(localized: "Click the minus button below the list, then Remove."),
                 String(localized: "Enter your password if it asks for one."),
+            ]
+        case .allowInBackground:
+            // macOS 27 renamed the section; 13 through 26 call it Allow in the Background.
+            let renamed = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
+            return [
+                renamed
+                    ? String(localized: "Scroll down to Background App Activity.")
+                    : String(localized: "Scroll down to Allow in the Background."),
+                String(localized: "Switch Purge on."),
             ]
         }
     }
