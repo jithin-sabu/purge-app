@@ -488,6 +488,9 @@ enum EverythingElseMotion {
     static let fade = Animation.easeInOut(duration: 0.4)
     /// How long `curve` takes, so the glass over an opened folder waits for it.
     static let zoomDuration: TimeInterval = 0.7
+    /// The level being left fades a little ahead of the zoom, so it is gone
+    /// by the time the new level settles.
+    static let leavingFade = Animation.easeOut(duration: 0.5)
     /// The capsule's width following its text, the way the Clean button's does.
     static let capsuleWidth = Animation.spring(response: 0.38, dampingFraction: 0.92, blendDuration: 0.12)
     static let capsuleText = Animation.easeInOut(duration: 0.45)
@@ -722,6 +725,16 @@ private struct EverythingElseNestedMap: View {
     @State private var holdsFolderGlass = false
     /// The last folder sizing, so the capsule keeps its name through that wait.
     @State private var lastFolderSizing: EverythingElseFolderSizing?
+    /// The tiles of the level being left (#437). They don't vanish: going in
+    /// they move out past the edges as the opened tile grows, going back up
+    /// they shrink into the tile they came from, and either way they fade.
+    @State private var leaving: [EverythingElseMapLayout.Tile] = []
+    @State private var leavingRects: [String: CGRect] = [:]
+    @State private var leavingOpacity: Double = 0
+    /// Going back up, the leaving tiles sit over the map they shrink into;
+    /// going in, under the tiles growing over them.
+    @State private var leavingOnTop = false
+    @State private var leavingGeneration = 0
 
     /// Tiles smaller than this keep their colour but drop the label; the hover
     /// label names them.
@@ -756,6 +769,12 @@ private struct EverythingElseNestedMap: View {
                                 .zIndex(tile.id == layout.originTileID ? 0 : 1)
                                 .transition(.identity)
                         }
+                        // Its own identity, apart from the tiles arriving: a
+                        // "smaller folders" tile can be on both levels.
+                        ForEach(leaving, id: \.id) { tile in
+                            leavingTile(tile)
+                        }
+                        .zIndex(leavingOnTop ? 2 : 0.5)
                     }
                     if isComplete {
                         hoverLabel(layout: layout, size: geometry.size)
@@ -929,28 +948,63 @@ private struct EverythingElseNestedMap: View {
         shown = new
         let targets = Self.targets(new)
         let full = CGRect(origin: .zero, size: new.size)
+        let oldRects = Self.targets(old).merging(drawn) { _, current in current }
+        // Every tile of the old level that the new one doesn't keep, from
+        // where it is now.
+        let going = old.tiles.filter { targets[$0.id] == nil }
         var start: [String: CGRect]?
+        var leavingTargets: [String: CGRect] = [:]
         if new.openPaths.count > old.openPaths.count {
             let id = new.openPaths[old.openPaths.count]
-            if let anchor = drawn[id] ?? Self.targets(old)[id] {
+            if let anchor = oldRects[id] {
                 start = targets.mapValues { Self.map($0, from: full, to: anchor) }
+                // The camera's move: what was around the opened tile goes out
+                // past the edges as that tile grows to fill the map.
+                for tile in going {
+                    leavingTargets[tile.id] = Self.map(oldRects[tile.id] ?? tile.rect, from: anchor, to: full)
+                }
             }
         } else if new.openPaths.count < old.openPaths.count {
             let id = old.openPaths[new.openPaths.count]
             if let anchor = targets[id] {
                 start = targets.mapValues { Self.map($0, from: anchor, to: full) }
+                // Back into the tile they were inside.
+                for tile in going {
+                    leavingTargets[tile.id] = Self.map(oldRects[tile.id] ?? tile.rect, from: full, to: anchor)
+                }
             }
         }
         var still = Transaction()
         still.disablesAnimations = true
         guard let start, !reduceMotion else {
-            withTransaction(still) { drawn = targets }
+            withTransaction(still) {
+                drawn = targets
+                leaving = []
+            }
             return
         }
         zoomEndsAt = Date().addingTimeInterval(EverythingElseMotion.zoomDuration)
-        withTransaction(still) { drawn = start }
+        leavingGeneration += 1
+        let generation = leavingGeneration
+        withTransaction(still) {
+            drawn = start
+            leaving = going
+            leavingRects = oldRects.filter { id, _ in leavingTargets[id] != nil }
+            leavingOpacity = 1
+            leavingOnTop = new.openPaths.count < old.openPaths.count
+        }
         DispatchQueue.main.async {
-            withAnimation(Self.settle) { drawn = targets }
+            withAnimation(Self.settle) {
+                drawn = targets
+                leavingRects = leavingTargets
+            }
+            withAnimation(EverythingElseMotion.leavingFade) { leavingOpacity = 0 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + EverythingElseMotion.zoomDuration + 0.05) {
+            guard leavingGeneration == generation else { return }
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) { leaving = [] }
         }
     }
 
@@ -1072,14 +1126,50 @@ private struct EverythingElseNestedMap: View {
         .position(x: rect.midX, y: rect.midY)
     }
 
-    private func itemTile(_ tile: EverythingElseMapLayout.Tile, rect: CGRect) -> some View {
+    /// A tile's fill and label, with nothing to click: what `itemTile` draws
+    /// inside its button, and what a tile leaving the map draws as it goes.
+    private func tileFace(_ tile: EverythingElseMapLayout.Tile) -> some View {
         let item = tile.item
         let bucket = item.group.bucket
-        let selection = EverythingElseMapSelection.item(item.id)
-        let isRinged = hovered == selection || opened == selection
         let showsSize = tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight
         let showsName = showsSize || (tile.rect.width >= Self.labelWidth - 12 && tile.rect.height >= Self.nameOnlyHeight)
         let titleLines = tile.rect.height >= 56 ? 2 : 1
+        return RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+            .fill(EverythingElseStyle.color(bucket))
+            .brightness(-0.05 * Double(tile.shade))
+            // An overlay, so a label wider than the tile it rides never
+            // widens the tile and stays pinned to its top-left corner.
+            .overlay(alignment: .topLeading) {
+                if showsName {
+                    // The label is laid out against the tile's final width, not
+                    // the width it is animating through, so it never re-wraps
+                    // mid-move: it rides the tile's corner and is clipped until
+                    // the tile has grown to fit it.
+                    VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                        Text(EverythingElseMapLabel.title(item))
+                            .font(AppStyle.Typography.metadataEmphasis)
+                            .lineLimit(titleLines)
+                        if showsSize {
+                            Text(formatStorageBytes(item.bytes))
+                                .font(AppStyle.Typography.metadata.numbers)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .opacity(0.75)
+                        }
+                    }
+                    .foregroundStyle(EverythingElseStyle.labelColor(bucket))
+                    .frame(width: max(0, tile.rect.width - 2 * Self.labelInset), alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Self.labelInset)
+                    .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
+                }
+            }
+    }
+
+    private func itemTile(_ tile: EverythingElseMapLayout.Tile, rect: CGRect) -> some View {
+        let item = tile.item
+        let selection = EverythingElseMapSelection.item(item.id)
+        let isRinged = hovered == selection || opened == selection
         var openable: EverythingElseFolder?
         if case .folder(let folder) = item.kind, store.everythingElseCanOpen(folder) {
             openable = folder
@@ -1087,36 +1177,7 @@ private struct EverythingElseNestedMap: View {
         return Button {
             opened = selection
         } label: {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                .fill(EverythingElseStyle.color(bucket))
-                .brightness(-0.05 * Double(tile.shade))
-                // An overlay, so a label wider than the tile it rides never
-                // widens the tile and stays pinned to its top-left corner.
-                .overlay(alignment: .topLeading) {
-                    if showsName {
-                        // The label is laid out against the tile's final width, not
-                        // the width it is animating through, so it never re-wraps
-                        // mid-move: it rides the tile's corner and is clipped until
-                        // the tile has grown to fit it.
-                        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                            Text(EverythingElseMapLabel.title(item))
-                                .font(AppStyle.Typography.metadataEmphasis)
-                                .lineLimit(titleLines)
-                            if showsSize {
-                                Text(formatStorageBytes(item.bytes))
-                                    .font(AppStyle.Typography.metadata.numbers)
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .opacity(0.75)
-                            }
-                        }
-                        .foregroundStyle(EverythingElseStyle.labelColor(bucket))
-                        .frame(width: max(0, tile.rect.width - 2 * Self.labelInset), alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, Self.labelInset)
-                        .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
-                    }
-                }
+            tileFace(tile)
                 .overlay {
                     RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                         .strokeBorder(AppColors.textPrimary, lineWidth: isRinged ? 2 : 0)
@@ -1137,6 +1198,18 @@ private struct EverythingElseNestedMap: View {
         .accessibilityLabel(EverythingElseMapLabel.title(item) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
         .accessibilityHint("Shows what this is and what you can do about it")
         .modifier(EverythingElseLookInsideAction(folder: openable) { store.openEverythingElseFolder($0) })
+    }
+
+    /// A tile of the level being left, moving with the zoom as it fades.
+    private func leavingTile(_ tile: EverythingElseMapLayout.Tile) -> some View {
+        let rect = leavingRects[tile.id] ?? tile.rect
+        return tileFace(tile)
+            .frame(width: rect.width, height: rect.height)
+            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
+            .position(x: rect.midX, y: rect.midY)
+            .opacity(leavingOpacity)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
