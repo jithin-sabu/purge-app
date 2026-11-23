@@ -1223,7 +1223,7 @@ struct DevToolsView: View {
                                     primaryLabel: component.safetyInfo.headline,
                                     formattedSize: component.formattedSize,
                                     safetyInfo: component.safetyInfo,
-                                    brandIcon: .sfSymbol("hammer"),
+                                    brandIcon: .glyph(slug: "xcode", fallbackSymbol: "hammer"),
                                     detailCaption: xcodeComponentCaption(component),
                                     reinstallSafety: .notApplicable,
                                     revealLocations: {
@@ -1244,7 +1244,7 @@ struct DevToolsView: View {
                                 primaryLabel: component.safetyInfo.headline,
                                 formattedSize: component.formattedSize,
                                 safetyInfo: component.safetyInfo,
-                                brandIcon: .sfSymbol("hammer"),
+                                brandIcon: .glyph(slug: "xcode", fallbackSymbol: "hammer"),
                                 detailCaption: xcodeComponentCaption(component),
                                 revealLocations: {
                                     [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]

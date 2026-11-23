@@ -25,10 +25,12 @@ enum BrandRowIcon: Equatable {
 }
 
 /// Resolves row icons for App Caches, Dev Tools and project groups. A known brand
-/// gets its monochrome glyph, or its installed app's icon in greyscale when Simple
-/// Icons doesn't carry it. Otherwise the definition's `kind` picks an SF Symbol
-/// that says what the cache is. Caches Purge doesn't recognise get
-/// `questionmark.folder`, so they look different from known ones.
+/// gets its monochrome glyph. A definition with no glyph gets the icon of an app it
+/// names, in greyscale, when that app is installed. Otherwise the definition's
+/// `kind` picks an SF Symbol that says what the cache is. A cache with no
+/// definition is often still named after its app, by bundle ID in
+/// `~/Library/Caches` or by name in Application Support, and gets that app's icon.
+/// Anything else gets `questionmark.folder`, so it looks different from known ones.
 ///
 /// Main actor by name, not only by the project default: the caches below are
 /// plain dictionaries, and a caller off the main actor could write them from
@@ -70,14 +72,19 @@ final class BrandIconService {
             let definitionKey = item.definitionKey
                 ?? ExplanationDatabase.definitionKey(forFolderName: item.bundleID)
                 ?? ExplanationDatabase.definitionKey(forFolderName: item.appName)
-            guard let definitionKey else { return .symbol(Self.unknownSymbolName) }
-            return icon(forDefinitionKey: definitionKey)
+            if let definitionKey, let icon = icon(forDefinitionKey: definitionKey) {
+                return icon
+            }
+            if let image = installedAppIcon(forFolderName: item.bundleID) {
+                return .appIcon(image)
+            }
+            return .symbol(Self.unknownSymbolName)
         }
     }
 
     func rowIcon(forDevTool tool: DevTool) -> BrandRowIcon {
         cachedRowIcon(key: "t|\(tool.definitionKey)") {
-            icon(forDefinitionKey: tool.definitionKey)
+            icon(forDefinitionKey: tool.definitionKey) ?? .symbol(Self.unknownSymbolName)
         }
     }
 
@@ -114,18 +121,19 @@ final class BrandIconService {
         return .symbol(Self.projectFolderSymbolName)
     }
 
-    private func icon(forDefinitionKey key: String) -> BrandRowIcon {
+    /// Nil when the definition names no brand, no installed app and no kind.
+    private func icon(forDefinitionKey key: String) -> BrandRowIcon? {
         if let slug = BrandIconMapping.slug(forDefinitionKey: key),
            let image = brandGlyph(slug: slug) {
             return .glyph(image)
         }
-        if let image = installedBrandAppIcon(forDefinitionKey: key) {
+        if let image = installedDefinitionAppIcon(forDefinitionKey: key) {
             return .appIcon(image)
         }
         if let kind = ExplanationDatabase.kind(forKey: key) {
             return .symbol(kind.symbolName)
         }
-        return .symbol(Self.unknownSymbolName)
+        return nil
     }
 
     private func cachedRowIcon(key: String, resolve: () -> BrandRowIcon) -> BrandRowIcon {
@@ -168,20 +176,37 @@ final class BrandIconService {
         return image
     }
 
-    /// The installed app's icon in greyscale for a brand with no glyph, or nil when
-    /// the key isn't one of those brands or the app isn't installed.
-    private func installedBrandAppIcon(forDefinitionKey key: String) -> NSImage? {
-        guard let appName = BrandIconMapping.applicationName(forDefinitionKey: key) else { return nil }
+    /// The icon, in greyscale, of an installed app the definition names: by its
+    /// bundle IDs, the icon-only bundle IDs in `BrandIconMapping`, then by app name.
+    /// Nil when it names none or none is installed.
+    private func installedDefinitionAppIcon(forDefinitionKey key: String) -> NSImage? {
         let cacheKey = "g|\(key)"
         if let cached = installedAppIconCache[cacheKey] {
             return cached
         }
-        let icon = ExplanationDatabase.allBundleIDs(forKey: key).lazy.compactMap(installedAppIcon(bundleID:)).first
-            ?? installedAppIcon(appName: appName)
+        let bundleIDs = ExplanationDatabase.allBundleIDs(forKey: key) + BrandIconMapping.iconBundleIDs(forDefinitionKey: key)
+        let icon = bundleIDs.lazy.compactMap(installedAppIcon(bundleID:)).first
+            ?? BrandIconMapping.applicationName(forDefinitionKey: key).flatMap(installedAppIcon(appName:))
         let image = icon.map(Self.greyscale)
         installedAppIconCache[cacheKey] = image
         return image
     }
+
+    /// The icon, in greyscale, of the installed app a cache folder is named after:
+    /// a bundle ID such as `com.anysphere.sand`, or an app name such as `Grok Bot`.
+    private func installedAppIcon(forFolderName name: String) -> NSImage? {
+        guard !name.isEmpty else { return nil }
+        let cacheKey = "f|\(name)"
+        if let cached = installedAppIconCache[cacheKey] {
+            return cached
+        }
+        let icon = installedAppIcon(bundleID: name) ?? installedAppIcon(appName: name)
+        let image = icon.map(Self.greyscale)
+        installedAppIconCache[cacheKey] = image
+        return image
+    }
+
+    private static let greyscaleContext = CIContext()
 
     /// Desaturated once here rather than with a SwiftUI filter, which would run on
     /// every render of every row.
@@ -193,7 +218,7 @@ final class BrandIconService {
             "CIColorControls",
             parameters: [kCIInputSaturationKey: 0]
         )
-        guard let image = CIContext().createCGImage(output, from: output.extent) else { return icon }
+        guard let image = greyscaleContext.createCGImage(output, from: output.extent) else { return icon }
         return NSImage(cgImage: image, size: NSSize(width: side, height: side))
     }
 
@@ -232,6 +257,8 @@ struct AdaptiveBrandIconImage: View {
         case cacheItem(CacheItem)
         case devTool(DevTool)
         case projectGroup(ProjectGroup)
+        /// A brand glyph by its Simple Icons slug, or the symbol if it isn't bundled.
+        case glyph(slug: String, fallbackSymbol: String)
         case sfSymbol(String)
     }
 
@@ -278,6 +305,8 @@ struct AdaptiveBrandIconImage: View {
             return service.rowIcon(forDevTool: tool)
         case .projectGroup(let group):
             return service.rowIcon(forProjectGroup: group)
+        case .glyph(let slug, let fallbackSymbol):
+            return service.brandGlyph(slug: slug).map(BrandRowIcon.glyph) ?? .symbol(fallbackSymbol)
         case .sfSymbol(let name):
             return .symbol(name)
         }

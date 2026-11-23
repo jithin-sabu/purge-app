@@ -390,7 +390,7 @@
     "aliases": [
       "com.apple.e5rt.e5bundlecache"
     ],
-    "kind": "system"
+    "kind": "ai"
   },
   {
     "key": "feature-access-agent",
@@ -3704,7 +3704,7 @@
     "aliases": [
       "com.apple.intelligenceflow.intelligenceflowd"
     ],
-    "kind": "system"
+    "kind": "ai"
   },
   {
     "key": "swift-frontend-cache",

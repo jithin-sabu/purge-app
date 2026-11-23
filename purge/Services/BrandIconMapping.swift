@@ -69,6 +69,8 @@ enum BrandIconMapping {
         "xcode-archives": "xcode",
         "xcode-device-support": "xcode",
         "xcode-itunes-service": "xcode",
+        "claude-updater": "anthropic",
+        "openai-codex": "openai",
     ]
 
     // MARK: - Dev Tools global rows
@@ -76,16 +78,16 @@ enum BrandIconMapping {
     private static let devToolDefinitionKeyToSlug: [String: String] = [
         "npm-cache": "nodedotjs",
         "npm": "nodedotjs",
-        "pnpm-store": "nodedotjs",
-        "pnpm": "nodedotjs",
-        "yarn-cache": "nodedotjs",
-        "yarn": "nodedotjs",
+        "pnpm-store": "pnpm",
+        "pnpm": "pnpm",
+        "yarn-cache": "yarn",
+        "yarn": "yarn",
         "homebrew-cache": "homebrew",
         "homebrew": "homebrew",
         "docker": "docker",
-        "gradle-cache": "android",
-        "gradle-global-cache": "android",
-        "gradle": "android",
+        "gradle-cache": "gradle",
+        "gradle-global-cache": "gradle",
+        "gradle": "gradle",
         "cocoapods-cache": "swift",
         "cocoapods-spec-repos": "swift",
         "cocoapods": "swift",
@@ -96,7 +98,7 @@ enum BrandIconMapping {
         "sbt": "scala",
         "rubygems": "ruby",
         "bundler": "ruby",
-        "composer": "php",
+        "composer": "composer",
         "terraform": "terraform",
         "githubactions": "github",
         "vagrant": "vagrant",
@@ -130,7 +132,48 @@ enum BrandIconMapping {
         "android-system-images": "androidstudio",
         "old-figma-profiles": "figma",
         "orphaned-git-worktree": "git",
-        "zsh": "iterm2",
+        // Tools with a glyph in the bundle that their rows did not use.
+        "bun-cache": "bun",
+        "deno-cache": "deno",
+        "turbo-cache": "turbo",
+        "nextjs-cache": "nextdotjs",
+        "next-build": "nextdotjs",
+        "vite-cache": "vite",
+        "eslint-cache": "eslint",
+        "jest-cache": "jest",
+        "vitest-cache": "vitest",
+        "storybook-cache": "storybook",
+        "nx-cache": "nx",
+        "python-cache": "python",
+        "pytest-cache": "python",
+        "mypy-cache": "python",
+        "tox-environments": "python",
+        "venv": "python",
+        "apple-python-cache": "python",
+        "uv-cache": "uv",
+        "ruff-cache": "ruff",
+        "kotlin-build": "kotlin",
+        "android-build": "android",
+        "gradle-build": "gradle",
+        "gradle-leftovers": "gradle",
+        "maven-target": "openjdk",
+        "swift-build": "swift",
+        "swiftpm-build": "swift",
+        "swiftpm-cache": "swift",
+        "swift-frontend-cache": "swift",
+        "rust-target": "rust",
+        "nvm-cache": "nodedotjs",
+        "nvm-download-cache": "nodedotjs",
+        "node-modules": "nodedotjs",
+        "checkpoint-nodejs": "nodedotjs",
+        "node-gyp-headers": "nodedotjs",
+        "dart-tool": "flutter",
+        "pub-cache": "flutter",
+        "bundler-vendor": "ruby",
+        "composer-vendor": "php",
+        "terraform-plugins": "terraform",
+        "claude-cli-cache": "anthropic",
+        "cursor-compile-cache": "cursor",
     ]
 
     // MARK: - Brands with no glyph
@@ -138,6 +181,7 @@ enum BrandIconMapping {
     /// Brands Simple Icons doesn't carry: Microsoft had its logos removed, and the
     /// smaller apps were never added. Their rows show the installed app's icon in
     /// greyscale, found by the definition's bundle IDs first and then by this name.
+    /// A definition whose bundle IDs name an installed app needs no entry here.
     private static let definitionKeyToApplicationName: [String: String] = [
         "vscode": "Visual Studio Code",
         "microsoft-teams": "Microsoft Teams",
@@ -154,6 +198,40 @@ enum BrandIconMapping {
         "bartender": "Bartender 5",
         "lungo": "Lungo",
         "granola": "Granola",
+        "yab": "Yab",
+    ]
+
+    /// Apps whose icon a definition borrows, by bundle ID, when its own
+    /// `bundle_ids` name a background service rather than the app. Only the icon
+    /// comes from here: `explanations.json` bundle IDs also match folders, these never do.
+    private static let definitionKeyToIconBundleIDs: [String: [String]] = [
+        "maps-tile-cache": ["com.apple.Maps"],
+        "messages-previews": ["com.apple.MobileSMS"],
+        "mail-downloads": ["com.apple.mail"],
+        "findmy": ["com.apple.findmy"],
+        "homed": ["com.apple.Home"],
+        "remindd": ["com.apple.reminders"],
+        "tipsd": ["com.apple.helpviewer"],
+        "helpd": ["com.apple.helpviewer"],
+        "videoconference": ["com.apple.FaceTime"],
+        "itunes": ["com.apple.Music"],
+        "amp-library-agent": ["com.apple.Music"],
+        "dictionary-services": ["com.apple.Dictionary"],
+        "assistantd": ["com.apple.siri.launcher"],
+        "siri-tts": ["com.apple.siri.launcher"],
+        "parsecd": ["com.apple.siri.launcher"],
+        "duetexpertd": ["com.apple.siri.launcher"],
+        "proactive-eventtracker": ["com.apple.siri.launcher"],
+        "appstoreagent": ["com.apple.AppStore"],
+        "amsaccountsd": ["com.apple.AppStore"],
+        "amsengagementd": ["com.apple.AppStore"],
+        "ams-migrator": ["com.apple.AppStore"],
+        "promoted-content": ["com.apple.AppStore"],
+        "app-installation-binary-deltas": ["com.apple.AppStore"],
+        "fileprovider-appstore": ["com.apple.AppStore"],
+        "gamed": ["com.apple.games"],
+        "gamekit": ["com.apple.games"],
+        "davinci-cacheclip": ["com.blackmagic-design.DaVinciResolve"],
     ]
 
   // MARK: - Project artifact kinds
@@ -161,7 +239,7 @@ enum BrandIconMapping {
     private static let artifactKindToSlug: [DeletableArtifactKind: String] = [
         .nodeModules: "nodedotjs",
         .venv: "python",
-        .dotGradle: "android",
+        .dotGradle: "gradle",
         .target: "rust",
         .pods: "swift",
         .dartTool: "flutter",
@@ -193,40 +271,41 @@ enum BrandIconMapping {
         .androidGradle: "android",
     ]
 
-    /// Future path-pattern → slug (frontend toolchain bucket uses React per spec).
+    /// Folder name → slug for project rows. A tool with its own glyph uses it; the
+    /// rest of the frontend toolchain uses React.
     static let pathPatternToSlug: [(pattern: String, slug: String)] = [
         ("node_modules", "nodedotjs"),
         ("npm", "nodedotjs"),
-        ("yarn", "nodedotjs"),
-        ("pnpm", "nodedotjs"),
-        ("bun", "nodedotjs"),
-        ("deno", "nodedotjs"),
-        (".next", "react"),
-        ("vite", "react"),
+        ("yarn", "yarn"),
+        ("pnpm", "pnpm"),
+        ("bun", "bun"),
+        ("deno", "deno"),
+        (".next", "nextdotjs"),
+        ("vite", "vite"),
         ("parcel", "react"),
-        ("turbo", "react"),
-        ("nx", "react"),
-        ("storybook", "react"),
-        ("eslint", "react"),
-        ("jest", "react"),
-        ("vitest", "react"),
+        ("turbo", "turbo"),
+        ("nx", "nx"),
+        ("storybook", "storybook"),
+        ("eslint", "eslint"),
+        ("jest", "jest"),
+        ("vitest", "vitest"),
         ("husky", "react"),
         (".dart_tool", "flutter"),
         ("pub-cache", "flutter"),
         ("flutter", "flutter"),
         ("__pycache__", "python"),
-        ("uv", "python"),
-        ("ruff", "python"),
+        ("uv", "uv"),
+        ("ruff", "ruff"),
         ("mypy", "python"),
         ("cargo", "rust"),
         ("target", "rust"),
         ("go/pkg/mod", "go"),
         ("go-build", "go"),
-        (".gradle", "android"),
+        (".gradle", "gradle"),
         ("kotlin", "kotlin"),
         (".gem", "ruby"),
         ("bundler", "ruby"),
-        ("composer", "php"),
+        ("composer", "composer"),
         ("swift", "swift"),
         ("cocoapods", "swift"),
         (".sbt", "scala"),
@@ -278,6 +357,10 @@ enum BrandIconMapping {
     /// The installed app to borrow an icon from, for a brand with no glyph.
     static func applicationName(forDefinitionKey key: String) -> String? {
         definitionKeyToApplicationName[key] ?? definitionKeyToApplicationName[key.lowercased()]
+    }
+
+    static func iconBundleIDs(forDefinitionKey key: String) -> [String] {
+        definitionKeyToIconBundleIDs[key] ?? definitionKeyToIconBundleIDs[key.lowercased()] ?? []
     }
 
     static func slug(forArtifactKind kind: DeletableArtifactKind) -> String? {
