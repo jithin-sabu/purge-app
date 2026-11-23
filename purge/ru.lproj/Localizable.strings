@@ -1529,6 +1529,8 @@
 
 "Show the folders inside, by size" = "Показать папки внутри по размеру";
 "Double-click to look inside" = "Дважды щёлкните, чтобы заглянуть внутрь";
+"Go back to a folder further up" = "Вернуться в одну из папок выше";
+"Folders further up" = "Папки выше";
 
 "Back to the whole map" = "Назад ко всей карте";
 

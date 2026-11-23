@@ -405,8 +405,11 @@ struct EverythingElseView: View {
 /// folder itself is the heading. A folder that was passed through shares a
 /// step with the folder it holds, as `Metadata / CoreSpotlight`: its own level
 /// would be one tile filling the map. The whole path shows while it fits; one
-/// too long for the row keeps the first step and the last two, with an
-/// ellipsis between. Command–Up Arrow goes up one step, as in Finder.
+/// too long for the row keeps the first step and the last two, then the last
+/// one only, with an ellipsis between that lists the steps it stands for.
+/// "Everything else" and the steps above the open folder never shrink, a
+/// long step name is cut to `parentStepLength` characters, and the open
+/// folder's name gives way instead, so the way back is always there. Command–Up Arrow goes up one step, as in Finder.
 private struct EverythingElseBreadcrumb: View {
     let openFolders: [EverythingElseFolder]
     /// Normalized paths of the open folders that were passed through.
@@ -416,6 +419,16 @@ private struct EverythingElseBreadcrumb: View {
 
     /// Steps after the first that stay shown when the path is too long to fit.
     private static let trailingSteps = 2
+    /// The most characters a step above the open folder shows. A longer name
+    /// is cut in the middle; its tooltip has it in full.
+    private static let parentStepLength = 28
+
+    /// `name` cut in the middle to `limit` characters, with an ellipsis.
+    static func shortened(_ name: String, to limit: Int) -> String {
+        guard name.count > limit else { return name }
+        let side = (limit - 1) / 2
+        return String(name.prefix(side)) + "…" + String(name.suffix(side))
+    }
     /// A size down from the page title: on the whole map "Everything else" is
     /// the heading, inside a folder the path is, and a path is longer.
     private static let font = AppStyle.Typography.sectionTitle
@@ -446,6 +459,8 @@ private struct EverythingElseBreadcrumb: View {
         ViewThatFits(in: .horizontal) {
             path(steps, hiding: 0)
             path(steps, hiding: max(0, steps.count - Self.trailingSteps))
+            // Taken whenever nothing fits, so it must work at any width.
+            path(steps, hiding: max(0, steps.count - 1))
         }
     }
 
@@ -453,12 +468,15 @@ private struct EverythingElseBreadcrumb: View {
     private func path(_ steps: [Step], hiding hidden: Int) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
             step(String(localized: "Everything else"), keeping: 0, isParent: steps.count == 1)
+                .fixedSize()
             if hidden > 0 {
                 separator
-                Text(verbatim: "…")
-                    .font(Self.font)
-                    .foregroundStyle(AppColors.textTertiary)
-                    .help(steps.prefix(hidden).map(\.name).joined(separator: " › "))
+                EverythingElseHiddenSteps(
+                    steps: steps.prefix(hidden).map { (name: $0.name, keeping: $0.keeping) },
+                    font: Self.font,
+                    onClose: onClose
+                )
+                .fixedSize()
             }
             ForEach(Array(steps.enumerated()).dropFirst(hidden), id: \.element.id) { index, item in
                 separator
@@ -467,11 +485,11 @@ private struct EverythingElseBreadcrumb: View {
                         .font(Self.font)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .layoutPriority(1)
                         .help(item.folders.last.map { displayDirectoryPath(for: $0.url) } ?? item.name)
                         .accessibilityAddTraits(.isHeader)
                 } else {
                     step(item.name, keeping: item.keeping, isParent: index == steps.count - 2)
+                        .fixedSize()
                 }
             }
         }
@@ -479,6 +497,7 @@ private struct EverythingElseBreadcrumb: View {
 
     private var separator: some View {
         Image(systemName: "chevron.right")
+            .fixedSize()
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(AppColors.textTertiary)
             .accessibilityHidden(true)
@@ -491,7 +510,7 @@ private struct EverythingElseBreadcrumb: View {
         let button = Button {
             onClose(count)
         } label: {
-            Text(title)
+            Text(Self.shortened(title, to: Self.parentStepLength))
                 .font(Self.font)
                 .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(1)
@@ -500,6 +519,7 @@ private struct EverythingElseBreadcrumb: View {
         }
         .buttonStyle(.plain)
         .help(count == 0 ? String(localized: "Back to the whole map") : String(localized: "Back to \(title)"))
+        .accessibilityLabel(Text(title))
         .accessibilityHint("Goes back up to here")
         if isParent {
             button
@@ -514,6 +534,54 @@ private struct EverythingElseBreadcrumb: View {
                 }
         } else {
             button
+        }
+    }
+}
+
+/// The ellipsis in a long path: a click lists the steps it stands for,
+/// outermost first, and each goes back up to its folder.
+private struct EverythingElseHiddenSteps: View {
+    let steps: [(name: String, keeping: Int)]
+    let font: AppStyle.TextStyle
+    let onClose: (Int) -> Void
+
+    @State private var isShown = false
+
+    /// The most characters a name in the list shows before it is cut in the middle.
+    private static let nameLength = 44
+
+    var body: some View {
+        Button {
+            isShown = true
+        } label: {
+            Text(verbatim: "…")
+                .font(font)
+                .foregroundStyle(AppColors.textSecondary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "Go back to a folder further up"))
+        .accessibilityLabel(Text("Folders further up"))
+        .popover(isPresented: $isShown, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                ForEach(steps, id: \.keeping) { step in
+                    Button {
+                        isShown = false
+                        onClose(step.keeping)
+                    } label: {
+                        Text(EverythingElseBreadcrumb.shortened(step.name, to: Self.nameLength))
+                            .font(AppStyle.Typography.body)
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(String(localized: "Back to \(step.name)"))
+                    .accessibilityLabel(Text(step.name))
+                }
+            }
+            .padding(AppStyle.Spacing.small)
         }
     }
 }

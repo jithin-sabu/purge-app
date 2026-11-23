@@ -1570,6 +1570,8 @@
 
 "Show the folders inside, by size" = "İçindeki klasörleri boyuta göre göster";
 "Double-click to look inside" = "İçine bakmak için çift tıklayın";
+"Go back to a folder further up" = "Daha yukarıdaki bir klasöre dön";
+"Folders further up" = "Daha yukarıdaki klasörler";
 
 "Back to the whole map" = "Haritanın tamamına dön";
 
