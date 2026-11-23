@@ -10,13 +10,21 @@ import Testing
 /// `Google/Chrome/<profile>/Cache`.
 @Suite("Library/Caches browser caches: Chromium shape")
 struct LibraryCachesBrowserShapeTests {
-    /// A fresh `<temp>/Library/Caches`, removed by the caller.
+    /// A throwaway home with its `Library/Caches`, removed by the caller.
     private func makeCaches() throws -> (caches: URL, cleanup: URL) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("purge-test-caches-\(UUID().uuidString)", isDirectory: true)
+            .standardizedFileURL
         let caches = root.appendingPathComponent("Library/Caches", isDirectory: true)
         try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
         return (caches, root)
+    }
+
+    /// The throwaway home a folder in its `Library/Caches` belongs to.
+    private func home(of folder: URL) -> String {
+        var url = folder.standardizedFileURL
+        while url.lastPathComponent != "Library", url.path != "/" { url.deleteLastPathComponent() }
+        return url.deletingLastPathComponent().path
     }
 
     /// Folders and empty files under `root`.
@@ -35,8 +43,8 @@ struct LibraryCachesBrowserShapeTests {
         }
     }
 
-    private func tier(_ folder: URL) -> SafetyLevel? {
-        SafetyTierList.evaluate(folderName: folder.lastPathComponent, path: folder)
+    private func tier(_ folder: URL, home: String? = nil) -> SafetyLevel? {
+        SafetyTierList.evaluate(folderName: folder.lastPathComponent, path: folder, home: home ?? self.home(of: folder))
     }
 
     /// Yab's folder exactly as it is on a real Mac.
@@ -100,6 +108,25 @@ struct LibraryCachesBrowserShapeTests {
         #expect(tier(browser) == .safe)
     }
 
+    /// Only a `.DS_Store` file. A folder or a link with that name is looked at
+    /// like anything else, and fails.
+    @Test
+    func dsStoreFolderOrLinkKeepsItNotSure() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let folder = caches.appendingPathComponent("DSFolder", isDirectory: true)
+        try lay(folder, folders: Self.yabFolders + ["Chromium/.DS_Store/IndexedDB"], files: ["Chromium/.DS_Store/Cookies"])
+        let link = caches.appendingPathComponent("DSLink", isDirectory: true)
+        try lay(link, folders: Self.yabFolders)
+        try FileManager.default.createSymbolicLink(
+            at: link.appendingPathComponent(".DS_Store"),
+            withDestinationURL: cleanup.appendingPathComponent("Documents", isDirectory: true)
+        )
+
+        #expect(tier(folder) == nil)
+        #expect(tier(link) == nil)
+    }
+
     // MARK: - Not Sure
 
     /// An app that keeps anything but caches here, such as Yab's own
@@ -135,9 +162,13 @@ struct LibraryCachesBrowserShapeTests {
         let indexedDB = caches.appendingPathComponent("Data", isDirectory: true)
         try lay(indexedDB, folders: Self.yabFolders + ["Chromium/Default/IndexedDB/https_example.com_0.indexeddb.leveldb"])
 
+        let emptyWorker = caches.appendingPathComponent("EmptyWorker", isDirectory: true)
+        try lay(emptyWorker, folders: Self.yabFolders + ["Chromium/Default/Service Worker"])
+
         #expect(tier(worker) == nil)
         #expect(tier(script) == nil)
         #expect(tier(indexedDB) == nil)
+        #expect(tier(emptyWorker) == nil)
     }
 
     /// The name `Cache` is not enough: it needs Chromium's layout, and at least
@@ -153,9 +184,22 @@ struct LibraryCachesBrowserShapeTests {
         let empty = caches.appendingPathComponent("Empty", isDirectory: true)
         try lay(empty, folders: ["Default"])
 
+        // The blockfile markers must be files: a folder or a link with their names fails.
+        let folderMarkers = caches.appendingPathComponent("FolderMarkers", isDirectory: true)
+        try lay(folderMarkers, folders: ["Default/Cache/index", "Default/Cache/data_0"])
+        let linkedMarkers = caches.appendingPathComponent("LinkedMarkers", isDirectory: true)
+        try lay(linkedMarkers, folders: ["Default/Cache"], files: ["Default/Cache/index"])
+        try lay(cleanup, folders: [], files: ["data_0"])
+        try FileManager.default.createSymbolicLink(
+            at: linkedMarkers.appendingPathComponent("Default/Cache/data_0"),
+            withDestinationURL: cleanup.appendingPathComponent("data_0")
+        )
+
         #expect(tier(plain) == nil)
         #expect(tier(codeOnly) == nil)
         #expect(tier(empty) == nil)
+        #expect(tier(folderMarkers) == nil)
+        #expect(tier(linkedMarkers) == nil)
     }
 
     /// A link is never followed: behind it the only evidence left is a name.
@@ -181,10 +225,17 @@ struct LibraryCachesBrowserShapeTests {
         )
         let linkedTop = caches.appendingPathComponent("LinkedTop", isDirectory: true)
         try fm.createSymbolicLink(at: linkedTop, withDestinationURL: elsewhere)
+        let linkedData = caches.appendingPathComponent("LinkedData", isDirectory: true)
+        try lay(linkedData, folders: ["Chromium/Default/Cache"])
+        try fm.createSymbolicLink(
+            at: linkedData.appendingPathComponent("Chromium/Default/Cache/Cache_Data"),
+            withDestinationURL: elsewhere.appendingPathComponent("Chromium/Default/Cache/Cache_Data")
+        )
 
         #expect(tier(linkedProfile) == nil)
         #expect(tier(linkedCache) == nil)
         #expect(tier(linkedTop) == nil)
+        #expect(tier(linkedData) == nil)
     }
 
     @Test
@@ -213,22 +264,34 @@ struct LibraryCachesBrowserShapeTests {
 
     // MARK: - Where the rule applies
 
-    /// Only a folder directly in a `Library/Caches` folder. The same shape in
-    /// Application Support, deeper in Caches, or anywhere else is not lifted.
+    /// Only a folder directly in the home's `Library/Caches`. The same shape in a
+    /// sandboxed app's `Data/Library/Caches`, in Application Support, deeper in
+    /// Caches, or anywhere else is not lifted.
     @Test
-    func onlyFoldersDirectlyInLibraryCaches() throws {
+    func onlyFoldersDirectlyInHomeCaches() throws {
         let (caches, cleanup) = try makeCaches()
         defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let container = cleanup.appendingPathComponent(
+            "Library/Containers/com.example.app/Data/Library/Caches/NewBrowser", isDirectory: true
+        )
+        try lay(container, folders: Self.yabFolders)
         let support = cleanup.appendingPathComponent("Library/Application Support/NewBrowser", isDirectory: true)
         try lay(support, folders: Self.yabFolders)
         let nested = caches.appendingPathComponent("Vendor/NewBrowser", isDirectory: true)
         try lay(nested, folders: Self.yabFolders)
         let documents = cleanup.appendingPathComponent("Documents/NewBrowser", isDirectory: true)
         try lay(documents, folders: Self.yabFolders)
+        let inHome = caches.appendingPathComponent("NewBrowser", isDirectory: true)
+        try lay(inHome, folders: Self.yabFolders)
 
-        #expect(tier(support) == nil)
-        #expect(tier(nested) == nil)
-        #expect(tier(documents) == nil)
+        #expect(tier(container, home: home) == nil)
+        #expect(tier(support, home: home) == nil)
+        #expect(tier(nested, home: home) == nil)
+        #expect(tier(documents, home: home) == nil)
+        #expect(tier(inHome, home: home) == .safe)
+        // Another user's home, or no path at all.
+        #expect(tier(inHome, home: "/Users/someone-else") == nil)
         #expect(SafetyTierList.evaluate(folderName: "NewBrowser") == nil)
     }
 
@@ -255,21 +318,105 @@ struct LibraryCachesBrowserShapeTests {
         let info = ExplanationResolver.initialSafetyForCacheFolder(
             folderName: "NewBrowser",
             friendlyHeadline: "NewBrowser",
-            path: browser
+            path: browser,
+            home: cleanup.path
         )
         #expect(info.level == .safe)
     }
 
+    // MARK: - Right before the move
+
+    /// The rating is read at scan time. Anything the browser writes there
+    /// before the clean keeps the folder where it is (#440 review).
+    @Test
+    func moveReadsTheShapeAgain() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let check = FileDeleter.defaultImmediateMoveCheck(home: home)
+        let browser = caches.appendingPathComponent("NewBrowser", isDirectory: true)
+        try lay(browser, folders: Self.yabFolders)
+        #expect(tier(browser) == .safe)
+        #expect(check(browser))
+
+        try lay(browser, folders: [], files: ["Chromium/Default/Local State"])
+        #expect(!SafetyTierList.passesChromiumShapeBoundary(browser, home: home))
+        #expect(!check(browser))
+
+        let worker = caches.appendingPathComponent("WorkerLater", isDirectory: true)
+        try lay(worker, folders: Self.yabFolders)
+        #expect(tier(worker) == .safe)
+        #expect(check(worker))
+        try lay(worker, folders: ["Chromium/Default/Service Worker/CacheStorage"])
+        #expect(!check(worker))
+    }
+
+    /// Only a folder rated Safe by its shape is read again. A folder rated by
+    /// its name or by another rule, and any path outside the home's Caches,
+    /// passes as before.
+    @Test
+    func moveCheckLeavesOtherPathsAlone() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let chrome = caches.appendingPathComponent("Google", isDirectory: true)
+        try lay(chrome, folders: ["Chrome/Default/Cache/Cache_Data"], files: ["Chrome/Default/Local State"])
+        let support = cleanup.appendingPathComponent("Library/Application Support/NewBrowser/Cache", isDirectory: true)
+        try lay(support, folders: [], files: ["file"])
+
+        // A folder no rule rated by its shape, such as an Electron updater cache
+        // the scan rates under another name.
+        let unrated = caches.appendingPathComponent("com.example.app.updater", isDirectory: true)
+        try lay(unrated, folders: [], files: ["installer.zip"])
+
+        #expect(SafetyTierList.passesChromiumShapeBoundary(chrome, home: home))
+        #expect(SafetyTierList.passesChromiumShapeBoundary(support, home: home))
+        #expect(SafetyTierList.passesChromiumShapeBoundary(unrated, home: home))
+        #expect(FileDeleter.defaultImmediateMoveCheck(home: home)(unrated))
+    }
+
     // MARK: - Yab's own entry
 
-    /// Yab's `~/Library/Caches/Yab` folder is Safe by its entry. Its bundle ID
-    /// folder, `dev.serafim.fast`, holds `Cache.db` and WebKit's `CacheStorage`,
-    /// so the entry must not reach it.
+    /// Yab's entry names the folder and explains it, but the shape decides its
+    /// tier. Its bundle ID folder, `dev.serafim.fast`, holds `Cache.db` and
+    /// WebKit's `CacheStorage`, so the entry must not reach it.
     @Test
     func yabEntryCoversOnlyItsChromiumFolder() throws {
         #expect(ExplanationDatabase.definitionKey(forFolderName: "Yab") == "yab")
         let record = try #require(ExplanationDatabase.matchBundledDatabase(folderName: "Yab"))
-        #expect(ExplanationDatabase.safetyInfo(from: record).level == .safe)
+        #expect(record.needsChromiumShape == true)
         #expect(ExplanationDatabase.definitionKey(forFolderName: "dev.serafim.fast") == nil)
+    }
+
+    /// A Yab folder that holds anything but Chromium disk caches is not Safe, by
+    /// its entry or otherwise, and a move reads it again.
+    @Test
+    func yabEntryNeedsTheShape() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let yab = caches.appendingPathComponent("Yab", isDirectory: true)
+        try lay(yab, folders: Self.yabFolders)
+
+        func resolved() -> SafetyInfo {
+            ExplanationResolver.initialSafetyForCacheFolder(folderName: "Yab", friendlyHeadline: "Yab", path: yab, home: home)
+        }
+        #expect(resolved().level == .safe)
+        #expect(resolved().headline != "Yab")
+        #expect(SafetyTierList.passesChromiumShapeBoundary(yab, home: home))
+
+        try lay(yab, folders: ["Chromium/Default/Service Worker/CacheStorage"])
+        #expect(resolved().level == .unknown)
+        #expect(!SafetyTierList.passesChromiumShapeBoundary(yab, home: home))
+
+        // A container cache folder with the same name is not Safe by the entry.
+        let container = cleanup.appendingPathComponent(
+            "Library/Containers/com.example.app/Data/Library/Caches/Yab", isDirectory: true
+        )
+        try lay(container, folders: Self.yabFolders)
+        let inContainer = ExplanationResolver.initialSafetyForCacheFolder(
+            folderName: "Yab", friendlyHeadline: "Yab", path: container, home: home
+        )
+        #expect(inContainer.level == .unknown)
     }
 }

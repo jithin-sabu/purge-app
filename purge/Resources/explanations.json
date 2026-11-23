@@ -1062,7 +1062,8 @@
     "aliases": [
       "Yab"
     ],
-    "kind": "browser"
+    "kind": "browser",
+    "needs_chromium_shape": true
   },
   {
     "key": "xcode-itunes-service",

@@ -110,7 +110,13 @@ enum SafetyTierList {
         )
     }
 
-    nonisolated static func evaluate(folderName: String, path: URL? = nil) -> SafetyLevel? {
+    /// - Parameter home: whose `Library/Caches` the Chromium shape rule looks
+    ///   in. Tests pass a throwaway home.
+    nonisolated static func evaluate(
+        folderName: String,
+        path: URL? = nil,
+        home: String = DeletionSafetyPolicy.cachedHomePath
+    ) -> SafetyLevel? {
         let lower = folderName.lowercased()
 
         if let path {
@@ -183,11 +189,13 @@ enum SafetyTierList {
             return .medium
         }
 
-        // A folder in `Library/Caches` that no name above knows, holding nothing
+        // A folder in `~/Library/Caches` that no name above knows, holding nothing
         // but a browser's disk caches. The shape decides, as for the Application
         // Support caches above, so a new Chromium browser needs no entry. Checked
-        // last, so it only ever lifts a folder that would be Not Sure.
-        if let path, isInLibraryCaches(path), CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(path) {
+        // last, so it only ever lifts a folder that would be Not Sure. A move
+        // reads the shape again (`passesChromiumShapeBoundary`).
+        if let path, isInHomeCaches(path, home: home), CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(path) {
+            recordShapeRating(path)
             return .safe
         }
 
@@ -195,10 +203,46 @@ enum SafetyTierList {
         return nil
     }
 
-    /// Whether `path` sits directly in a `Library/Caches` folder.
-    private nonisolated static func isInLibraryCaches(_ path: URL) -> Bool {
-        let parent = path.standardizedFileURL.deletingLastPathComponent()
-        return parent.lastPathComponent == "Caches"
-            && parent.deletingLastPathComponent().lastPathComponent == "Library"
+    /// Whether `path` sits directly in `<home>/Library/Caches`. Not a sandboxed
+    /// app's `Data/Library/Caches`: the shape was only checked against browsers
+    /// that write to the home one.
+    private nonisolated static func isInHomeCaches(_ path: URL, home: String) -> Bool {
+        path.standardizedFileURL.deletingLastPathComponent().path == home + "/Library/Caches"
+    }
+
+    /// Folders this session rated Safe by their Chromium shape, standardized
+    /// paths. The rating is read at scan time, and the browser can write
+    /// something else there before the clean, so a move reads the shape again
+    /// for each of these. Only these: a folder rated by its name, or a row some
+    /// other rule offered, is never held to the shape. Kept for the life of the
+    /// app, so a later scan that rates the folder some other way still has it
+    /// checked, which only ever refuses more.
+    private nonisolated(unsafe) static var shapeRatedPaths = Set<String>()
+    private nonisolated static let shapeRatedLock = NSLock()
+
+    private nonisolated static func recordShapeRating(_ path: URL) {
+        let key = path.standardizedFileURL.path
+        shapeRatedLock.lock()
+        shapeRatedPaths.insert(key)
+        shapeRatedLock.unlock()
+    }
+
+    /// Whether this session rated `path` Safe by its Chromium shape.
+    nonisolated static func wasRatedByChromiumShape(_ path: URL) -> Bool {
+        let key = path.standardizedFileURL.path
+        shapeRatedLock.lock()
+        defer { shapeRatedLock.unlock() }
+        return shapeRatedPaths.contains(key)
+    }
+
+    /// Checked before each Trash move. A folder rated Safe by its shape, by the
+    /// rule above or through an entry marked `needs_chromium_shape`, moves only
+    /// while it still has that shape. Every other path passes.
+    nonisolated static func passesChromiumShapeBoundary(
+        _ url: URL,
+        home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    ) -> Bool {
+        guard isInHomeCaches(url, home: home), wasRatedByChromiumShape(url) else { return true }
+        return CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(url)
     }
 }

@@ -8,6 +8,10 @@ struct BundledExplanationRecord: Codable, Sendable {
     let bundleIds: [String]?
     /// Raw `kind` value; see `CacheKind`.
     let kind: String?
+    /// The entry only names the folder and explains it. Its tier holds only
+    /// while the folder has the Chromium cache shape `SafetyTierList` checks,
+    /// read again right before a move (#440).
+    var needsChromiumShape: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
@@ -15,6 +19,7 @@ struct BundledExplanationRecord: Codable, Sendable {
         case explanation
         case bundleIds = "bundle_ids"
         case kind
+        case needsChromiumShape = "needs_chromium_shape"
     }
 
     nonisolated var cacheKind: CacheKind? {
@@ -44,6 +49,7 @@ private struct BundledArrayEntry: Codable {
     let bundleIds: [String]?
     let aliases: [String]?
     let kind: String?
+    let needsChromiumShape: Bool?
 
     enum CodingKeys: String, CodingKey {
         case key
@@ -53,6 +59,7 @@ private struct BundledArrayEntry: Codable {
         case bundleIds = "bundle_ids"
         case aliases
         case kind
+        case needsChromiumShape = "needs_chromium_shape"
     }
 
     var record: BundledExplanationRecord {
@@ -61,7 +68,8 @@ private struct BundledArrayEntry: Codable {
             tag: tag,
             explanation: explanation,
             bundleIds: bundleIds,
-            kind: kind
+            kind: kind,
+            needsChromiumShape: needsChromiumShape
         )
     }
 }

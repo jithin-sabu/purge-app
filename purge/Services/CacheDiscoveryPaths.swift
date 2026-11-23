@@ -213,9 +213,11 @@ enum CacheDiscoveryPaths {
     /// Every entry on the way down must be a real, visible folder. A file, a link
     /// or a hidden entry fails the check, and so does a folder below
     /// `cachesFolderChromiumMaxDepth`. Only `chromiumProfileCacheNames` count as
-    /// caches, so a `Service Worker` folder fails it too. At least one `Cache`
-    /// must have Chromium's HTTP cache layout, and every `Cache` must have it.
-    /// Nothing inside a cache folder is read beyond that.
+    /// caches. A `Service Worker` folder fails it even when empty: it is profile
+    /// data, never a folder on the way to a cache. At least one `Cache`
+    /// must have Chromium's HTTP cache layout, and every `Cache` must have it,
+    /// with no link in it (`hasRealChromiumHTTPCacheLayout`). Nothing inside a
+    /// cache folder is read beyond that.
     nonisolated static func holdsOnlyChromiumDiskCaches(_ folder: URL) -> Bool {
         guard isVisibleRealDirectory(folder) else { return false }
         var foundHTTPCache = false
@@ -228,11 +230,11 @@ enum CacheDiscoveryPaths {
                     let name = child.lastPathComponent
                     if chromiumProfileCacheNames.contains(name) {
                         if name == "Cache" {
-                            guard hasChromiumHTTPCacheLayout(child) else { return false }
+                            guard hasRealChromiumHTTPCacheLayout(child) else { return false }
                             foundHTTPCache = true
                         }
                     } else {
-                        guard depth < cachesFolderChromiumMaxDepth else { return false }
+                        guard name != "Service Worker", depth < cachesFolderChromiumMaxDepth else { return false }
                         next.append(child)
                     }
                 }
@@ -243,15 +245,31 @@ enum CacheDiscoveryPaths {
         return foundHTTPCache
     }
 
+    /// `hasChromiumHTTPCacheLayout` without following a link: `Cache_Data` a
+    /// real folder, or `index` and `data_0` regular files. A link there would
+    /// make a name the only evidence left.
+    private nonisolated static func hasRealChromiumHTTPCacheLayout(_ cache: URL) -> Bool {
+        if isRealDirectory(cache.appendingPathComponent("Cache_Data", isDirectory: true)) { return true }
+        return ["index", "data_0"].allSatisfy {
+            isRegularFile(cache.appendingPathComponent($0, isDirectory: false))
+        }
+    }
+
+    /// A regular file, not a link. `isRegularFileKey` is false for a link.
+    private nonisolated static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+    }
+
     /// The folders in `folder`, or nil when it holds anything else: a file, a
     /// link, a hidden entry, or an entry that can't be read. Finder's
-    /// `.DS_Store` is the one file allowed. Stops at the first entry that fails,
-    /// so a large folder of files costs one read.
+    /// `.DS_Store` file is the one file allowed, and only as a regular file: a
+    /// folder or link with that name fails. Stops at the first entry that
+    /// fails, so a large folder of files costs one read.
     private nonisolated static func realSubfoldersOnly(_ folder: URL) -> [URL]? {
         var failed = false
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
-            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey, .isRegularFileKey],
             options: [.skipsSubdirectoryDescendants, .skipsPackageDescendants],
             errorHandler: { _, _ in
                 failed = true
@@ -261,7 +279,7 @@ enum CacheDiscoveryPaths {
         var folders: [URL] = []
         for case let child as URL in enumerator {
             let name = child.lastPathComponent
-            if name == ".DS_Store" { continue }
+            if name == ".DS_Store", isRegularFile(child) { continue }
             guard !name.hasPrefix("."), isVisibleRealDirectory(child) else { return nil }
             folders.append(child)
         }
