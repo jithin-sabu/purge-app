@@ -370,7 +370,7 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
             return info(String(localized: "Xcode lists it as \(state.lowercased()). \(cost)"))
         }
         guard let isXcodeDefault else {
-            return info(String(localized: "Could not check whether Xcode uses it for new simulators. \(cost)"))
+            return info(String(localized: "Could not check if Xcode uses it for new simulators. \(cost)"))
         }
         if isXcodeDefault {
             return info(String(localized: "Xcode creates new simulators on this runtime. \(cost)"))

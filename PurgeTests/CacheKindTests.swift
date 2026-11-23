@@ -37,8 +37,49 @@ struct CacheKindTests {
 
     @Test
     func aDefinitionWithoutABrandShowsItsKindSymbol() {
-        let icon = BrandIconService.shared.rowIcon(forCacheItem: item(definitionKey: "claude-updater", folder: "claude-updater"))
+        let icon = BrandIconService.shared.rowIcon(forCacheItem: item(definitionKey: "shipit-updater-cache", folder: "shipit-updater-cache"))
         #expect(icon == .symbol(CacheKind.updater.symbolName))
+    }
+
+    /// Every slug a definition maps to must be a bundled glyph, or the row
+    /// quietly falls back to a symbol.
+    @Test
+    func everyMappedGlyphIsBundled() throws {
+        for key in try allDefinitionKeys() {
+            guard let slug = BrandIconMapping.slug(forDefinitionKey: key) else { continue }
+            #expect(BrandIconService.shared.brandGlyph(slug: slug) != nil, "\(key) maps to \(slug), which is not bundled")
+        }
+    }
+
+    /// Mail ships with every Mac, so its row borrows Mail's icon on any machine.
+    @Test
+    func aDefinitionNamingAnInstalledAppShowsTheAppsIcon() {
+        let icon = BrandIconService.shared.rowIcon(forCacheItem: item(definitionKey: "apple-mail", folder: "com.apple.mail"))
+        guard case .appIcon = icon else {
+            Issue.record("Expected Mail's icon, got \(icon)")
+            return
+        }
+    }
+
+    @Test
+    func aServiceRowBorrowsItsAppsIcon() {
+        let icon = BrandIconService.shared.rowIcon(forCacheItem: item(definitionKey: "messages-previews", folder: "messages-previews"))
+        guard case .appIcon = icon else {
+            Issue.record("Expected Messages' icon, got \(icon)")
+            return
+        }
+    }
+
+    /// A cache Purge has no entry for, in a folder named after an installed app,
+    /// shows that app's icon rather than the unknown folder. TextEdit ships with
+    /// every Mac.
+    @Test(arguments: ["com.apple.TextEdit", "TextEdit"])
+    func anUnlistedCacheNamedAfterAnInstalledAppShowsItsIcon(folder: String) {
+        let icon = BrandIconService.shared.rowIcon(forCacheItem: item(definitionKey: nil, folder: folder))
+        guard case .appIcon = icon else {
+            Issue.record("Expected TextEdit's icon, got \(icon)")
+            return
+        }
     }
 
     @Test

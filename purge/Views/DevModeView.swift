@@ -1167,7 +1167,6 @@ struct DevToolsView: View {
                                     },
                                     allowsBulkSelection: true,
                                     isMetadataPending: false,
-                                    usesCompactExplanation: true,
                                     onHighlight: highlightAction(.runtime(runtime.id))
                                 )
                             }
@@ -1187,7 +1186,6 @@ struct DevToolsView: View {
                                 revealLocations: {
                                     [ScanRowLocation(url: runtime.locationURL, sizeBytes: runtime.sizeBytes)]
                                 },
-                                usesCompactExplanation: true,
                                 isFromLastScan: true,
                                 onHighlight: highlightAction(.runtime(runtime.id))
                             )
@@ -1225,14 +1223,13 @@ struct DevToolsView: View {
                                     primaryLabel: component.safetyInfo.headline,
                                     formattedSize: component.formattedSize,
                                     safetyInfo: component.safetyInfo,
-                                    brandIcon: .sfSymbol("hammer"),
+                                    brandIcon: .glyph(slug: "xcode", fallbackSymbol: "hammer"),
                                     detailCaption: xcodeComponentCaption(component),
                                     reinstallSafety: .notApplicable,
                                     revealLocations: {
                                         [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]
                                     },
                                     allowsBulkSelection: true,
-                                    usesCompactExplanation: true,
                                     onHighlight: highlightAction(.component(component.id))
                                 )
                             }
@@ -1247,12 +1244,11 @@ struct DevToolsView: View {
                                 primaryLabel: component.safetyInfo.headline,
                                 formattedSize: component.formattedSize,
                                 safetyInfo: component.safetyInfo,
-                                brandIcon: .sfSymbol("hammer"),
+                                brandIcon: .glyph(slug: "xcode", fallbackSymbol: "hammer"),
                                 detailCaption: xcodeComponentCaption(component),
                                 revealLocations: {
                                     [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]
                                 },
-                                usesCompactExplanation: true,
                                 isFromLastScan: true,
                                 onHighlight: highlightAction(.component(component.id))
                             )
