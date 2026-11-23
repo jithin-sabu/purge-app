@@ -90,6 +90,28 @@ struct DockIconPolicyTests {
         #expect(host.calls == [.setPolicy(.accessory)])
     }
 
+    /// The watcher's link opens Purge, which macOS answers by making it a regular
+    /// app (#438). Hiding the Dock icon again there must not bring back a window
+    /// the user closed: SwiftUI keeps a closed window, so it counts as revealable.
+    @Test("Hiding again after an open leaves a closed window closed")
+    func hidingWithoutRevealLeavesTheWindowAlone() {
+        let host = FakeHost()
+
+        DockIconPolicy.apply(hidesDockIcon: true, revealsWindow: false, host: host)
+
+        #expect(host.calls == [.setPolicy(.accessory)])
+    }
+
+    /// A reopen is the user asking for the window, so it keeps the reveal.
+    @Test("Hiding again after a reopen still re-fronts the window")
+    func hidingWithRevealAfterReopen() {
+        let host = FakeHost()
+
+        DockIconPolicy.apply(hidesDockIcon: true, revealsWindow: true, host: host)
+
+        #expect(host.calls == [.setPolicy(.accessory), .reveal])
+    }
+
     /// The cleaning confirmation runs a modal loop; changing policy underneath it
     /// can take the alert with it.
     @Test("Nothing happens while a modal is up")

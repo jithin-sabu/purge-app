@@ -133,18 +133,6 @@ final class StartupPreferenceStore: ObservableObject {
         applyDockPolicy(hidden)
     }
 
-    /// Hides the Dock icon again after macOS brought it back (#438).
-    ///
-    /// When LaunchServices opens a copy that is already running, it makes the app
-    /// a regular one: the watcher's `purge://` link, `open -a`, Spotlight and
-    /// Finder all do it, and the Dock icon then stays until Purge quits. By the
-    /// time the open or reopen callback runs, the switch has already happened,
-    /// and setting the policy again there holds. Uses the live value, not the
-    /// saved one, so a state that keeps the Dock icon on purpose keeps it.
-    func reapplyDockPolicy() {
-        applyDockPolicy(hidesDockIcon)
-    }
-
     /// Returns whether the login item ended up in the requested state.
     ///
     /// Registration can fail (a managed Mac, a damaged bundle), so the published

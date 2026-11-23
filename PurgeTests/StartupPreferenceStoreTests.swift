@@ -324,41 +324,4 @@ struct StartupPreferenceStoreTests {
         #expect(policy.applied.isEmpty)
         #expect(store.launchesAtLogin)
     }
-
-    /// macOS makes Purge a regular app whenever LaunchServices opens the running
-    /// copy, so the open and reopen callbacks apply the setting again (#438).
-    @Test("Applying again restores a hidden Dock icon")
-    func reapplyingHidesTheDockAgain() {
-        let defaults = suite.defaults
-        defaults.set(true, forKey: "startup.showMenuBarIcon")
-        defaults.set(true, forKey: "startup.hideDockIcon")
-        let policy = DockPolicySpy()
-
-        let store = StartupPreferenceStore(
-            userDefaults: defaults,
-            loginItem: FakeLoginItem(),
-            applyDockPolicy: { policy.record($0) }
-        )
-        store.reapplyDockPolicy()
-
-        #expect(policy.applied == [true])
-        #expect(store.hidesDockIcon)
-    }
-
-    @Test("Applying again keeps a shown Dock icon")
-    func reapplyingKeepsAShownDock() {
-        let defaults = suite.defaults
-        defaults.set(true, forKey: "startup.showMenuBarIcon")
-        let policy = DockPolicySpy()
-
-        let store = StartupPreferenceStore(
-            userDefaults: defaults,
-            loginItem: FakeLoginItem(),
-            applyDockPolicy: { policy.record($0) }
-        )
-        store.reapplyDockPolicy()
-
-        #expect(policy.applied == [false])
-        #expect(!store.hidesDockIcon)
-    }
 }
