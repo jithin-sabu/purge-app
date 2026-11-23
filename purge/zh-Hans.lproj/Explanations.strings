@@ -1237,7 +1237,7 @@
 
 /* uv-python-version */
 "uv Python Version" = "uv Python 版本";
-"An older Python patch version uv kept after an upgrade. No environment, .python-version file or interpreter setting Purge found uses it. uv python install brings it back." = "uv 升级后保留的较旧 Python 补丁版本。Purge 找到的虚拟环境、.python-version 文件和解释器设置都没有使用它。用 uv python install 可以装回来。";
+"An older uv Python patch. No environment, .python-version or setting Purge found uses it. Tools that call it by path break until uv python install restores it." = "uv 保留的较旧 Python 补丁版本。Purge 找到的虚拟环境、.python-version 文件和设置都没有使用它。按路径调用它的工具会失效，直到用 uv python install 装回。";
 /* pyenv-python-version */
 "pyenv Python Version" = "pyenv Python 版本";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv 安装的 Python，90 天内没有运行过，也不是同一次版本号下最新的。Purge 找到的版本文件、虚拟环境或配置都没有使用它。用 pyenv install 可以装回来。";

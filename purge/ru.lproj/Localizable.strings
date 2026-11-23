@@ -698,7 +698,7 @@
 "No installed app matches \"%@\"." = "Нет установленного приложения, соответствующего «%@».";
 "No items match this filter." = "Нет элементов, подходящих под этот фильтр.";
 "No junk to clean right now." = "Сейчас нет мусора для очистки.";
-"No simulator uses it, but it was used in the last month. %@" = "Симуляторов нет, но использовался за последний месяц. %@";
+"No simulator uses it, but it was used in the last month. %@" = "Симуляторов нет, использовался в последний месяц. %@";
 "No simulator uses it. Last use unknown. %@" = "Симуляторов нет, когда использовался, неизвестно. %@";
 "No simulator uses it. Last used %lld months ago. %@" = "Симуляторов нет, использовался %lld мес. назад. %@";
 "No simulator uses it. Last used 1 month ago. %@" = "Симуляторов нет, использовался месяц назад. %@";
@@ -1170,7 +1170,7 @@
 "The models are shared by every account on this Mac: %@." = "Эти модели общие для всех учётных записей на этом Mac: %@.";
 "The models don't go to the Trash. macOS deletes them permanently, and Download Again fetches them from Apple." = "Эти модели не попадают в Корзину. macOS удаляет их безвозвратно, а «Загрузить снова» скачивает их у Apple.";
 "The models in here are listed one by one on the Large Files tab, where each can be removed." = "Модели отсюда перечислены по одной на вкладке «Большие файлы», где каждую можно удалить.";
-"The only %@ runtime here that runs most devices. %@" = "Единственный для большинства устройств %@. %@";
+"The only %@ runtime here that runs most devices. %@" = "Единственный общий для %@. %@";
 "The operating system, on its own read-only volume. It can't be changed or removed." = "Операционная система на отдельном томе только для чтения. Её нельзя изменить или удалить.";
 "The profile is still installed, so downloads stay blocked" = "Профиль конфигурации всё ещё установлен, поэтому загрузки по-прежнему заблокированы";
 "The profile wasn't installed, so nothing was removed" = "Профиль не установлен, поэтому ничего не удалено";
@@ -1329,10 +1329,10 @@
 "Xcode can no longer use this runtime. %@" = "Xcode больше не может его использовать. %@";
 "Xcode creates new simulators on this runtime. %@" = "Xcode создаёт на нём новые симуляторы. %@";
 "Xcode deletes these itself. They skip the Trash, so you can't put them back." = "Xcode удаляет их сам. Они минуют Корзину, поэтому вернуть их нельзя.";
-"Xcode downloads it again (%@) if a simulator needs it." = "Xcode скачает его снова (%@).";
+"Xcode downloads it again (%@) if a simulator needs it." = "Xcode скачает его (%@), если нужно.";
 "Xcode lists it as %@. %@" = "В Xcode он указан как %@. %@";
 "Xcode's caches, simulators and archives are on the Dev Tools tab." = "Кэши, симуляторы и архивы Xcode — на вкладке «Инструменты».";
-"Xcode's shader compiler for every account on this Mac. Xcode downloads it again (%@) if needed, or run %@." = "Компилятор шейдеров Xcode для всех на этом Mac. Xcode скачает его снова (%@), или: %@.";
+"Xcode's shader compiler for every account on this Mac. Xcode downloads it again (%@) if needed, or run %@." = "Компилятор шейдеров Xcode для всех. Xcode скачает его (%@), если нужно, или выполните %@.";
 "Xcode's predictive code completion" = "Предиктивное автодополнение кода в Xcode";
 "Yesterday" = "Вчера";
 "You have unsaved code changes nearby" = "Рядом есть несохранённые изменения кода";

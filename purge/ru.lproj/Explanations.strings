@@ -619,6 +619,6 @@
 "rustup Rust Toolchain" = "Тулчейн Rust в rustup";
 "An older Rust toolchain from rustup. Not the default, and no override or rust-toolchain file Purge found names it. rustup toolchain install brings it back." = "Старый тулчейн Rust из rustup: не по умолчанию, не назван в найденных переопределениях и rust-toolchain. Вернёт rustup toolchain install.";
 "uv Python Version" = "Версия Python в uv";
-"An older Python patch version uv kept after an upgrade. No environment, .python-version file or interpreter setting Purge found uses it. uv python install brings it back." = "Старая патч-версия Python от uv. Её не используют найденные окружения, файлы .python-version и настройки. Вернёт uv python install.";
+"An older uv Python patch. No environment, .python-version or setting Purge found uses it. Tools that call it by path break until uv python install restores it." = "Старый патч Python от uv; найденные окружения, .python-version, настройки его не берут. Вызовы по пути сломаются до uv python install.";
 "pyenv Python Version" = "Версия Python в pyenv";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "Python из pyenv: 90 дней без запуска, не новейший в минорной ветке. Не нужен найденным закреплениям, venv, конфигам. Вернёт pyenv install.";

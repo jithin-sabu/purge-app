@@ -3630,7 +3630,7 @@
     "key": "uv-python-version",
     "display_name": "uv Python Version",
     "tag": "medium",
-    "explanation": "An older Python patch version uv kept after an upgrade. No environment, .python-version file or interpreter setting Purge found uses it. uv python install brings it back.",
+    "explanation": "An older uv Python patch. No environment, .python-version or setting Purge found uses it. Tools that call it by path break until uv python install restores it.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"
