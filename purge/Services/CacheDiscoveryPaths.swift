@@ -219,7 +219,7 @@ enum CacheDiscoveryPaths {
     /// caches. A `Service Worker` folder fails it even when empty: it is profile
     /// data, never a folder on the way to a cache. At least one `Cache`
     /// must have Chromium's HTTP cache layout, and every `Cache` must have it,
-    /// with no link in it (`hasRealChromiumHTTPCacheLayout`). Nothing inside a
+    /// with no link in it (`hasChromiumHTTPCacheLayout`). Nothing inside a
     /// cache folder is read beyond that.
     nonisolated static func holdsOnlyChromiumDiskCaches(_ folder: URL) -> Bool {
         guard isVisibleRealDirectory(folder) else { return false }
@@ -233,7 +233,7 @@ enum CacheDiscoveryPaths {
                     let name = child.lastPathComponent
                     if chromiumProfileCacheNames.contains(name) {
                         if name == "Cache" {
-                            guard hasRealChromiumHTTPCacheLayout(child) else { return false }
+                            guard hasChromiumHTTPCacheLayout(child) else { return false }
                             foundHTTPCache = true
                         }
                     } else {
@@ -246,21 +246,6 @@ enum CacheDiscoveryPaths {
             if level.isEmpty { break }
         }
         return foundHTTPCache
-    }
-
-    /// `hasChromiumHTTPCacheLayout` without following a link: `Cache_Data` a
-    /// real folder, or `index` and `data_0` regular files. A link there would
-    /// make a name the only evidence left.
-    private nonisolated static func hasRealChromiumHTTPCacheLayout(_ cache: URL) -> Bool {
-        if isRealDirectory(cache.appendingPathComponent("Cache_Data", isDirectory: true)) { return true }
-        return ["index", "data_0"].allSatisfy {
-            isRegularFile(cache.appendingPathComponent($0, isDirectory: false))
-        }
-    }
-
-    /// A regular file, not a link. `isRegularFileKey` is false for a link.
-    private nonisolated static func isRegularFile(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
     }
 
     /// The folders in `folder`, or nil when it holds anything else: a file, a
