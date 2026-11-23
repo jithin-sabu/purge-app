@@ -1204,7 +1204,7 @@
 
 /* clang-module-cache */
 "Clang Module Cache" = "Clang 模块缓存";
-"Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again." = "clang 和 Swift 编译器为命令行构建和脚本保留的已编译模块文件。Xcode 自身的构建使用另一个文件夹。可以安全删除，下次编译时会重新生成。";
+"Compiled modules clang and swiftc keep for command-line builds. Xcode's own builds use another folder. Safe to delete; the next compile rebuilds them." = "clang 和 Swift 编译器为命令行构建保留的已编译模块。Xcode 自身的构建使用另一个文件夹。可以安全删除，下次编译时会重新生成。";
 
 /* codexbar-cache */
 "CodexBar Cache" = "CodexBar 缓存";
@@ -1216,7 +1216,7 @@
 
 /* intelligenceflowd-cache */
 "Apple Intelligence Service Cache" = "Apple 智能服务缓存";
-"Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them." = "一个 Apple 智能后台服务保留的网络下载与已编译模型文件。不会动 Apple 智能模型本身。可以安全删除，该服务下次需要时 macOS 会重新生成。";
+"Web downloads and compiled models an Apple Intelligence service keeps. The Apple Intelligence models stay. Safe to delete; macOS rebuilds them when needed." = "一个 Apple 智能服务保留的网络下载与已编译模型。Apple 智能模型本身不受影响。可以安全删除，需要时 macOS 会重新生成。";
 
 
 /* swift-frontend-cache */
@@ -1237,7 +1237,7 @@
 
 /* uv-python-version */
 "uv Python Version" = "uv Python 版本";
-"An older Python patch version uv kept after an upgrade. uv's link for this minor version points at a newer one, and no environment, .python-version file or interpreter setting Purge found uses it. Anything else that runs it stops working until you put the folder back from the Trash, or the tool that made it sets it up again. uv python install brings the version back." = "uv 升级后保留下来的较旧 Python 补丁版本。uv 为这个次版本建立的链接指向更新的版本，Purge 找到的虚拟环境、.python-version 文件和解释器设置都没有使用它。其他用到它的东西会无法运行，直到你从废纸篓把文件夹放回原处，或由创建它的工具重新设置。用 uv python install 可以把这个版本装回来。";
+"An older Python patch version uv kept after an upgrade. No environment, .python-version file or interpreter setting Purge found uses it. uv python install brings it back." = "uv 升级后保留的较旧 Python 补丁版本。Purge 找到的虚拟环境、.python-version 文件和解释器设置都没有使用它。用 uv python install 可以装回来。";
 /* pyenv-python-version */
 "pyenv Python Version" = "pyenv Python 版本";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv 安装的 Python，90 天内没有运行过，也不是同一次版本号下最新的。Purge 找到的版本文件、虚拟环境或配置都没有使用它。用 pyenv install 可以装回来。";

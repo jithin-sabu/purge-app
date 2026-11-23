@@ -174,7 +174,7 @@ nonisolated struct XcodeComponent: Identifiable, Hashable {
             return SafetyInfo(
                 level: .medium,
                 headline: kind.displayName,
-                explanation: String(localized: "Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (\(formatBytes(sizeBytes))) when a project needs it, or run \(kind.downloadCommand)."),
+                explanation: String(localized: "Xcode's shader compiler for every account on this Mac. Xcode downloads it again (\(formatBytes(sizeBytes))) if needed, or run \(kind.downloadCommand)."),
                 recoverySteps: "",
                 reinstallCommand: nil
             )

@@ -79,7 +79,7 @@
 "A %@ file that belongs to %@, matched by its identifier. Safe to remove with the app." = "%@ uygulamasına ait, tanımlayıcısıyla eşleşen bir %@ dosyası. Uygulamayla birlikte kaldırılması güvenlidir.";
 "A hidden folder in your home folder that %@ is known to keep. It holds settings, extensions and history rather than a cache, so check it before removing." = "%@ uygulamasının ana klasörünüzde tuttuğu bilinen gizli bir klasör. Önbellek değil; ayarları, uzantıları ve geçmişi barındırır, bu yüzden kaldırmadan önce kontrol edin.";
 "A hidden folder this app is known to keep" = "Bu uygulamanın tuttuğu bilinen gizli bir klasör";
-"An unused leftover Chromium framework in %@. Relaunch the browser to clean versions still loaded; relaunching also removes old ones." = "%@ içinde kullanılmayan, artık bir Chromium çerçevesi. Hâlâ yüklü sürümleri temizlemek için tarayıcıyı yeniden başlatın; yeniden başlatma eskileri de kaldırır.";
+"An unused leftover Chromium framework in %@. Relaunch the browser to clean versions still loaded; relaunching also removes old ones." = "%@ içinde kullanılmayan artık bir Chromium çerçevesi. Hâlâ yüklü sürümleri temizlemek için tarayıcıyı yeniden başlatın; bu eskileri de kaldırır.";
 "AI Models" = "Yapay Zekâ Modelleri";
 "About" = "Hakkında";
 "About Time Machine snapshots" = "Time Machine anlık görüntüleri hakkında";
@@ -219,7 +219,7 @@
 "Mail mailboxes" = "Mail posta kutuları";
 "Moving %@ to Trash" = "%@ Çöp Sepeti'ne taşınıyor";
 "Moving %@ to Trash, freeing %@" = "%@ Çöp Sepeti'ne taşınıyor, %@ yer açılıyor";
-"Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "Şu anda çalışıyor, bu yüzden kaldırılamaz. Simulator'da kapatın, sonra tekrar tarayın.";
+"Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "Şu anda çalışıyor, kaldırılamaz. Simulator'da kapatın, sonra tekrar tarayın.";
 "Busy right now, so it can't be removed. Scan again in a moment." = "Şu anda meşgul, bu yüzden kaldırılamaz. Biraz sonra tekrar tarayın.";
 "Dependencies" = "Bağımlılıklar";
 "Dev Tools" = "Geliştirici";
@@ -846,7 +846,7 @@
 
 /* 1.9.0 özellikleri: Finder'dan kaldırma, arka plan güncellemeleri, Command-F, iCloud uyarısı, simülatör çalışma zamanları. */
 "%@ %@ Runtime" = "%@ %@ Çalışma Zamanı";
-"Only runs %@ simulators. %@" = "Yalnızca %@ simülatörlerini çalıştırır. %@";
+"Only runs %@ simulators. %@" = "Yalnızca %@ simülatörü çalıştırır. %@";
 "The only %@ runtime here that runs most devices. %@" = "Burada çoğu aygıtı çalıştıran tek %@ çalışma zamanı. %@";
 "%@ isn't in a folder Purge lists apps from" = "%@, Purge'ün uygulama listelediği bir klasörde değil";
 "%@ is part of macOS" = "%@ macOS'in bir parçasıdır";
@@ -862,17 +862,17 @@
 "Choose an app to uninstall" = "Kaldırılacak bir uygulama seçin";
 "Choose one app" = "Bir uygulama seçin";
 "Clean items marked Not Sure?" = "Emin Değil olarak işaretli öğeler temizlensin mi?";
-"Could not check whether Xcode uses it for new simulators. %@" = "Xcode'un bunu yeni simülatörler için kullanıp kullanmadığı denetlenemedi. %@";
+"Could not check whether Xcode uses it for new simulators. %@" = "Yeni simülatörler için Xcode kullanımı denetlenemedi. %@";
 "Could not check which simulators use it. %@" = "Hangi simülatörlerin bunu kullandığı denetlenemedi. %@";
 "Download and install updates automatically" = "Güncellemeleri otomatik indir ve yükle";
 "Find" = "Bul";
 "Finder" = "Finder";
 "New versions download in the background and install when Purge quits, or right away with Restart to Update in the Purge menu. When this is off, nothing is installed without your confirmation." = "Yeni sürümler arka planda indirilir ve Purge'den çıkıldığında veya Purge menüsündeki Güncellemek İçin Yeniden Başlat ile hemen yüklenir. Bu kapalıyken onayınız olmadan hiçbir şey yüklenmez.";
-"No simulator uses it, but it was used in the last month. %@" = "Hiçbir simülatör bunu kullanmıyor ama son bir ayda kullanıldı. %@";
-"No simulator uses it. Last use unknown. %@" = "Hiçbir simülatör bunu kullanmıyor. Son kullanım bilinmiyor. %@";
-"No simulator uses it. Last used %lld months ago. %@" = "Hiçbir simülatör bunu kullanmıyor. Son kullanım %lld ay önce. %@";
-"No simulator uses it. Last used 1 month ago. %@" = "Hiçbir simülatör bunu kullanmıyor. Son kullanım 1 ay önce. %@";
-"No simulator uses it. Last used over a month ago. %@" = "Hiçbir simülatör bunu kullanmıyor. Son kullanım bir aydan uzun süre önce. %@";
+"No simulator uses it, but it was used in the last month. %@" = "Kullanan simülatör yok ama son bir ayda kullanıldı. %@";
+"No simulator uses it. Last use unknown. %@" = "Kullanan simülatör yok. Son kullanım bilinmiyor. %@";
+"No simulator uses it. Last used %lld months ago. %@" = "Kullanan simülatör yok. Son kullanım %lld ay önce. %@";
+"No simulator uses it. Last used 1 month ago. %@" = "Kullanan simülatör yok. Son kullanım 1 ay önce. %@";
+"No simulator uses it. Last used over a month ago. %@" = "Kullanan simülatör yok. Son kullanım bir aydan eski. %@";
 "Purge cannot uninstall itself" = "Purge kendini kaldıramaz";
 "Purge checks once a day. When automatic installs are off, a new version opens the update window. Every download is signature-checked." = "Purge günde bir kez denetler. Otomatik yüklemeler kapalıyken yeni bir sürüm güncelleme penceresini açar. Her indirmenin imzası denetlenir.";
 "Purge doesn't know what these folders are for. They go to the Trash, so you can put them back, but check that nothing depends on them before you clean." = "Purge bu klasörlerin ne işe yaradığını bilmiyor. Çöp Sepeti'ne giderler, böylece geri koyabilirsiniz; ancak temizlemeden önce hiçbir şeyin bunlara bağlı olmadığından emin olun.";
@@ -891,8 +891,8 @@
 "To remove Purge, drag it from the Applications folder to the Trash." = "Purge'ü kaldırmak için Uygulamalar klasöründen Çöp Sepeti'ne sürükleyin.";
 "Uninstall with Purge in Finder's right-click menu" = "Finder'ın sağ tık menüsünde Purge ile Kaldır";
 "Xcode can no longer use this runtime. %@" = "Xcode artık bu çalışma zamanını kullanamıyor. %@";
-"Xcode creates new simulators on this runtime. %@" = "Xcode yeni simülatörleri bu çalışma zamanında oluşturur. %@";
-"Xcode downloads it again (%@) if a simulator needs it." = "Bir simülatörün ihtiyacı olursa Xcode bunu yeniden indirir (%@).";
+"Xcode creates new simulators on this runtime. %@" = "Xcode yeni simülatörleri bununla oluşturur. %@";
+"Xcode downloads it again (%@) if a simulator needs it." = "Simülatör isterse Xcode yeniden indirir (%@).";
 "Xcode lists it as %@. %@" = "Xcode bunu %@ olarak listeler. %@";
 
 /* Apple Intelligence modelleri (#133) */
@@ -1504,7 +1504,7 @@
 "Another copy of Purge is on this Mac, so they stay." = "Bu Mac'te Purge'ün başka bir kopyası var, bu yüzden kalırlar.";
 "Xcode Components" = "Xcode Bileşenleri";
 "Metal Toolchain" = "Metal Araç Zinciri";
-"Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Xcode'un Metal gölgelendiricileri için derleyicisi; bu Mac'teki tüm hesapların paylaştığı isteğe bağlı bir indirme. Bir proje ihtiyaç duyduğunda Xcode bunu yeniden indirir (%@) veya %@ komutunu çalıştırın.";
+"Xcode's shader compiler for every account on this Mac. Xcode downloads it again (%@) if needed, or run %@." = "Bu Mac'teki tüm hesapların Xcode gölgelendirici derleyicisi. Gerekince yeniden iner (%@) ya da %@ çalıştırın.";
 "The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again." = "Bu temizlikteki Metal Araç Zinciri Çöp Sepeti'ne taşınmaz, xcodebuild aracılığıyla kalıcı olarak silinir. Xcode bunu yeniden indirebilir.";
 
 /* Ru ile birlikte gelen yeni metinler: birimler ve Apple Intelligence ayrıntıları */

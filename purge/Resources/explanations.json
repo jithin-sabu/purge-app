@@ -3630,7 +3630,7 @@
     "key": "uv-python-version",
     "display_name": "uv Python Version",
     "tag": "medium",
-    "explanation": "An older Python patch version uv kept after an upgrade. uv's link for this minor version points at a newer one, and no environment, .python-version file or interpreter setting Purge found uses it. Anything else that runs it stops working until you put the folder back from the Trash, or the tool that made it sets it up again. uv python install brings the version back.",
+    "explanation": "An older Python patch version uv kept after an upgrade. No environment, .python-version file or interpreter setting Purge found uses it. uv python install brings it back.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"
@@ -3666,7 +3666,7 @@
     "key": "clang-module-cache",
     "display_name": "Clang Module Cache",
     "tag": "safe",
-    "explanation": "Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again.",
+    "explanation": "Compiled modules clang and swiftc keep for command-line builds. Xcode's own builds use another folder. Safe to delete; the next compile rebuilds them.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "build"
@@ -3699,7 +3699,7 @@
     "key": "intelligenceflowd-cache",
     "display_name": "Apple Intelligence Service Cache",
     "tag": "safe",
-    "explanation": "Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them.",
+    "explanation": "Web downloads and compiled models an Apple Intelligence service keeps. The Apple Intelligence models stay. Safe to delete; macOS rebuilds them when needed.",
     "bundle_ids": [],
     "aliases": [
       "com.apple.intelligenceflow.intelligenceflowd"

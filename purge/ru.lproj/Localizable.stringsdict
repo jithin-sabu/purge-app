@@ -365,7 +365,7 @@
 	<key>Last used %lld months ago. %@</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>Последнее использование %#@n@ назад. %@</string>
+		<string>Использовалось %#@n@ назад. %@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
