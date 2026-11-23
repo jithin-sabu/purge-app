@@ -84,6 +84,8 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     /// is already running — the only "click the app" route left once the Dock
     /// icon is hidden.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        // The reopen itself put Purge back in the Dock (#438).
+        StartupPreferenceStore.shared.reapplyDockPolicy()
         RemovedAppMonitor.shared.userOpenedWindow()
         guard !hasVisibleWindows else { return true }
         // No window object to raise: let SwiftUI make one rather than guessing.
@@ -95,6 +97,8 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     /// `purge://` links from the deleted-apps watcher, and app bundles dropped
     /// on the Dock icon (`CFBundleDocumentTypes` in Info.plist).
     func application(_ application: NSApplication, open urls: [URL]) {
+        // Opening a running Purge put it back in the Dock (#438).
+        StartupPreferenceStore.shared.reapplyDockPolicy()
         let dropped = urls.filter(\.isFileURL)
         if !dropped.isEmpty {
             ExternalUninstallHandler.handle(urls: dropped)
