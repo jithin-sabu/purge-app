@@ -183,7 +183,22 @@ enum SafetyTierList {
             return .medium
         }
 
+        // A folder in `Library/Caches` that no name above knows, holding nothing
+        // but a browser's disk caches. The shape decides, as for the Application
+        // Support caches above, so a new Chromium browser needs no entry. Checked
+        // last, so it only ever lifts a folder that would be Not Sure.
+        if let path, isInLibraryCaches(path), CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(path) {
+            return .safe
+        }
+
         // Unknown, let AI decide
         return nil
+    }
+
+    /// Whether `path` sits directly in a `Library/Caches` folder.
+    private nonisolated static func isInLibraryCaches(_ path: URL) -> Bool {
+        let parent = path.standardizedFileURL.deletingLastPathComponent()
+        return parent.lastPathComponent == "Caches"
+            && parent.deletingLastPathComponent().lastPathComponent == "Library"
     }
 }

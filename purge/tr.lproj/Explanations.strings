@@ -249,6 +249,9 @@
 "Zen Browser" = "Zen Tarayıcısı";
 "This stores temporary data for the Zen web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch." = "Bu, Zen web tarayıcısının geçici verilerini saklar. Silmek güvenlidir ancak tarayıcı bir sonraki açılışta bazı web sitesi verilerini daha yavaş yükleyebilir.";
 
+"Yab Browser" = "Yab Tarayıcısı";
+"Website files and scripts Yab saved while you browsed. Websites may load a little slower until Yab downloads them again." = "Yab'in gezinirken kaydettiği web sitesi dosyaları ve betikler. Yab bunları yeniden indirene kadar web siteleri biraz daha yavaş yüklenebilir.";
+
 "Xcode Device Support" = "Xcode Aygıt Desteği";
 "Temporary files Xcode uses to install and test apps on connected Apple devices. Safe to delete, but Xcode may download device support files again." = "Xcode'un bağlı Apple aygıtlarına uygulama yüklemek ve test etmek için kullandığı geçici dosyalar. Silmek güvenlidir ancak Xcode aygıt desteği dosyalarını yeniden indirebilir.";
 

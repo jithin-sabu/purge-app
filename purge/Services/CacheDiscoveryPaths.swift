@@ -197,6 +197,77 @@ enum CacheDiscoveryPaths {
                                      names: applicationSupportDirectCacheNames)
     }
 
+    /// How many folders may sit between a browser's folder in `~/Library/Caches`
+    /// and one profile's cache folders: one for `Vivaldi/Default`, two for
+    /// `Google/Chrome/Default` and `Yab/Chromium/space-<id>`, three for a profile
+    /// in a `User Data` folder one level further down.
+    nonisolated static let cachesFolderChromiumMaxDepth = 3
+
+    /// Whether `folder`, a folder in a `Library/Caches` folder, holds nothing but
+    /// Chromium disk caches. Chromium on macOS keeps a profile in Application
+    /// Support and writes its HTTP cache and code cache to the matching folder in
+    /// `~/Library/Caches` (`Google/Chrome/Default/Cache`,
+    /// `Yab/Chromium/space-<id>/Cache`). A browser with no `explanations.json`
+    /// entry is then known by what it wrote, not by its name.
+    ///
+    /// Every entry on the way down must be a real, visible folder. A file, a link
+    /// or a hidden entry fails the check, and so does a folder below
+    /// `cachesFolderChromiumMaxDepth`. Only `chromiumProfileCacheNames` count as
+    /// caches, so a `Service Worker` folder fails it too. At least one `Cache`
+    /// must have Chromium's HTTP cache layout, and every `Cache` must have it.
+    /// Nothing inside a cache folder is read beyond that.
+    nonisolated static func holdsOnlyChromiumDiskCaches(_ folder: URL) -> Bool {
+        guard isVisibleRealDirectory(folder) else { return false }
+        var foundHTTPCache = false
+        var level = [folder]
+        for depth in 0...cachesFolderChromiumMaxDepth {
+            var next: [URL] = []
+            for parent in level {
+                guard let children = realSubfoldersOnly(parent) else { return false }
+                for child in children {
+                    let name = child.lastPathComponent
+                    if chromiumProfileCacheNames.contains(name) {
+                        if name == "Cache" {
+                            guard hasChromiumHTTPCacheLayout(child) else { return false }
+                            foundHTTPCache = true
+                        }
+                    } else {
+                        guard depth < cachesFolderChromiumMaxDepth else { return false }
+                        next.append(child)
+                    }
+                }
+            }
+            level = next
+            if level.isEmpty { break }
+        }
+        return foundHTTPCache
+    }
+
+    /// The folders in `folder`, or nil when it holds anything else: a file, a
+    /// link, a hidden entry, or an entry that can't be read. Finder's
+    /// `.DS_Store` is the one file allowed. Stops at the first entry that fails,
+    /// so a large folder of files costs one read.
+    private nonisolated static func realSubfoldersOnly(_ folder: URL) -> [URL]? {
+        var failed = false
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
+            options: [.skipsSubdirectoryDescendants, .skipsPackageDescendants],
+            errorHandler: { _, _ in
+                failed = true
+                return false
+            }
+        ) else { return nil }
+        var folders: [URL] = []
+        for case let child as URL in enumerator {
+            let name = child.lastPathComponent
+            if name == ".DS_Store" { continue }
+            guard !name.hasPrefix("."), isVisibleRealDirectory(child) else { return nil }
+            folders.append(child)
+        }
+        return failed ? nil : folders
+    }
+
     /// A folder that is not a link. `isDirectoryKey` is false for a link to a folder.
     private nonisolated static func isRealDirectory(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
