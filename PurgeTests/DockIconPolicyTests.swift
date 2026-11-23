@@ -35,6 +35,18 @@ struct DockIconPolicyTests {
         /// Synchronous so the test does not have to spin a runloop. The real hop
         /// is covered by manual verification, not here.
         func afterCurrentRunloopTurn(_ work: @escaping () -> Void) { work() }
+
+        /// Held until the test ends the modal, as the real run loop holds it.
+        private var waitingForModal: [() -> Void] = []
+
+        func afterModalEnds(_ work: @escaping () -> Void) { waitingForModal.append(work) }
+
+        func endModal() {
+            isShowingModal = false
+            let work = waitingForModal
+            waitingForModal = []
+            work.forEach { $0() }
+        }
     }
 
     @Test("Hiding the Dock icon switches to accessory, then re-fronts the open window")
@@ -110,6 +122,45 @@ struct DockIconPolicyTests {
         DockIconPolicy.apply(hidesDockIcon: true, revealsWindow: true, host: host)
 
         #expect(host.calls == [.setPolicy(.accessory), .reveal])
+    }
+
+    /// An open can arrive while the cleaning alert is up (#438). The policy must
+    /// not change under the alert, and must change once it closes, or the Dock
+    /// icon stays after Keep Cleaning.
+    @Test("An open during a modal alert hides the Dock icon once the alert closes")
+    func restoreWaitsForTheModalToEnd() {
+        let host = FakeHost()
+        host.isShowingModal = true
+
+        DockIconPolicy.restoreAfterOpen(revealsWindow: false, host: host) { true }
+        #expect(host.calls.isEmpty)
+
+        host.endModal()
+        #expect(host.calls == [.setPolicy(.accessory)])
+    }
+
+    /// The setting may change while the alert is up; the value applied is the
+    /// one in effect when it closes.
+    @Test("The value applied after a modal is read when the modal ends")
+    func restoreReadsTheValueAfterTheModal() {
+        let host = FakeHost()
+        host.isShowingModal = true
+        var hides = true
+
+        DockIconPolicy.restoreAfterOpen(revealsWindow: false, host: host) { hides }
+        hides = false
+        host.endModal()
+
+        #expect(host.calls.isEmpty)
+    }
+
+    @Test("With no modal up, an open hides the Dock icon at once")
+    func restoreWithoutAModalAppliesAtOnce() {
+        let host = FakeHost()
+
+        DockIconPolicy.restoreAfterOpen(revealsWindow: false, host: host) { true }
+
+        #expect(host.calls == [.setPolicy(.accessory)])
     }
 
     /// The cleaning confirmation runs a modal loop; changing policy underneath it

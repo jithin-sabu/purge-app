@@ -29,6 +29,7 @@ protocol ActivationPolicyHost: AnyObject {
     func setPolicy(_ policy: NSApplication.ActivationPolicy) -> Bool
     func revealWindow()
     func afterCurrentRunloopTurn(_ work: @escaping () -> Void)
+    func afterModalEnds(_ work: @escaping () -> Void)
 }
 
 extension NSApplication: ActivationPolicyHost {
@@ -47,6 +48,14 @@ extension NSApplication: ActivationPolicyHost {
 
     func afterCurrentRunloopTurn(_ work: @escaping () -> Void) {
         onNextRunloopTurn(work)
+    }
+
+    /// A modal alert runs the run loop in its own mode, so a block queued for the
+    /// default mode waits until the alert has closed, then runs at once.
+    func afterModalEnds(_ work: @escaping () -> Void) {
+        RunLoop.main.perform(inModes: [.default]) {
+            MainActor.assumeIsolated(work)
+        }
     }
 }
 
@@ -95,7 +104,27 @@ enum DockIconPolicy {
     /// time the open or reopen callback runs, the switch has already happened,
     /// and setting the policy again there holds. Reads the store's live value, not
     /// the saved one, so a state that keeps the Dock icon on purpose keeps it.
+    ///
+    /// An open can arrive while the cleaning alert's modal loop runs. `apply`
+    /// will not change the policy under the alert, so this waits until the alert
+    /// closes, then reads the value again and applies it.
+    static func restoreAfterOpen(
+        revealsWindow: Bool,
+        host: ActivationPolicyHost,
+        hidesDockIcon: @escaping @MainActor () -> Bool
+    ) {
+        guard !host.isShowingModal else {
+            host.afterModalEnds {
+                restoreAfterOpen(revealsWindow: revealsWindow, host: host, hidesDockIcon: hidesDockIcon)
+            }
+            return
+        }
+        apply(hidesDockIcon: hidesDockIcon(), revealsWindow: revealsWindow, host: host)
+    }
+
     static func restoreAfterOpen(revealsWindow: Bool) {
-        apply(hidesDockIcon: StartupPreferenceStore.shared.hidesDockIcon, revealsWindow: revealsWindow)
+        restoreAfterOpen(revealsWindow: revealsWindow, host: NSApplication.shared) {
+            StartupPreferenceStore.shared.hidesDockIcon
+        }
     }
 }
