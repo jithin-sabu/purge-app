@@ -1078,39 +1078,41 @@ private struct EverythingElseNestedMap: View {
         return Button {
             opened = selection
         } label: {
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                    .fill(EverythingElseStyle.color(bucket))
-                    .brightness(-0.05 * Double(tile.shade))
-                if showsName {
-                    // The label is laid out against the tile's final width, not
-                    // the width it is animating through, so it never re-wraps
-                    // mid-move: it rides the tile's corner and is clipped until
-                    // the tile has grown to fit it.
-                    VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                        Text(EverythingElseMapLabel.title(item))
-                            .font(AppStyle.Typography.metadataEmphasis)
-                            .lineLimit(titleLines)
-                        if showsSize {
-                            Text(formatStorageBytes(item.bytes))
-                                .font(AppStyle.Typography.metadata.numbers)
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .opacity(0.75)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                .fill(EverythingElseStyle.color(bucket))
+                .brightness(-0.05 * Double(tile.shade))
+                // An overlay, so a label wider than the tile it rides never
+                // widens the tile and stays pinned to its top-left corner.
+                .overlay(alignment: .topLeading) {
+                    if showsName {
+                        // The label is laid out against the tile's final width, not
+                        // the width it is animating through, so it never re-wraps
+                        // mid-move: it rides the tile's corner and is clipped until
+                        // the tile has grown to fit it.
+                        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                            Text(EverythingElseMapLabel.title(item))
+                                .font(AppStyle.Typography.metadataEmphasis)
+                                .lineLimit(titleLines)
+                            if showsSize {
+                                Text(formatStorageBytes(item.bytes))
+                                    .font(AppStyle.Typography.metadata.numbers)
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .opacity(0.75)
+                            }
                         }
+                        .foregroundStyle(EverythingElseStyle.labelColor(bucket))
+                        .frame(width: max(0, tile.rect.width - 2 * Self.labelInset), alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, Self.labelInset)
+                        .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
                     }
-                    .foregroundStyle(EverythingElseStyle.labelColor(bucket))
-                    .frame(width: max(0, tile.rect.width - 2 * Self.labelInset), alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Self.labelInset)
-                    .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
                 }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                    .strokeBorder(AppColors.textPrimary, lineWidth: isRinged ? 2 : 0)
-            }
-            .contentShape(Rectangle())
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                        .strokeBorder(AppColors.textPrimary, lineWidth: isRinged ? 2 : 0)
+                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .frame(width: rect.width, height: rect.height)
