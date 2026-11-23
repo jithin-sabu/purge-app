@@ -174,6 +174,102 @@ struct ApplicationSupportCacheShapeTests {
         #expect(fake.allowed(root, "Cache"))
     }
 
+    /// Where a `Cache` folder is offered in Application Support: directly in an
+    /// Electron app's folder, at the root of its `User Data` folder, in a
+    /// profile, and in a storage folder below the app's folder.
+    private static let httpCacheShapes = ["Cache", "User Data/Cache", "User Data/Default/Cache", "Partitions/main/Cache"]
+
+    /// An app whose Chromium data folders all hold `Local State`, with an empty
+    /// folder at `shape`.
+    private func appWithEmptyCache(_ fake: FakeHome, shape: String) throws -> URL {
+        try fake.app(
+            "Recordly",
+            folders: [shape, "User Data", "Partitions/main"],
+            files: ["Local State", "User Data/Local State", "Partitions/main/Local State"]
+        )
+    }
+
+    /// The layout made of real items counts in every shape: `Cache_Data` a
+    /// folder, or `index` and `data_0` files.
+    @Test(arguments: httpCacheShapes, [true, false])
+    func realMarkersCount(shape: String, blockfile: Bool) throws {
+        let fake = try makeHome()
+        defer { try? FileManager.default.removeItem(at: fake.home) }
+        let root = try appWithEmptyCache(fake, shape: shape)
+        let cache = root.appendingPathComponent(shape, isDirectory: true)
+        #expect(fake.listed(root).isEmpty)
+        #expect(!fake.allowed(root, shape))
+
+        if blockfile {
+            try Data().write(to: cache.appendingPathComponent("index"))
+            try Data().write(to: cache.appendingPathComponent("data_0"))
+        } else {
+            try FileManager.default.createDirectory(
+                at: cache.appendingPathComponent("Cache_Data"), withIntermediateDirectories: false
+            )
+        }
+        #expect(fake.listed(root) == [shape])
+        #expect(fake.allowed(root, shape))
+    }
+
+    /// Ways a `Cache` folder can carry Chromium's marker names without
+    /// Chromium's layout (#443).
+    enum FakeMarker: String, CaseIterable, Sendable {
+        /// `Cache_Data` is a link to a real folder elsewhere.
+        case cacheDataLink
+        /// `index` and `data_0` are links to real files elsewhere.
+        case blockfileLinks
+        /// `index` and `data_0` are folders.
+        case blockfileFolders
+        /// `Cache_Data` is a file.
+        case cacheDataFile
+    }
+
+    /// Plants `marker` in `cache`, with any link pointing into `elsewhere`.
+    private func plant(_ marker: FakeMarker, in cache: URL, elsewhere: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        switch marker {
+        case .cacheDataLink:
+            let target = elsewhere.appendingPathComponent("Cache_Data", isDirectory: true)
+            try fm.createDirectory(at: target, withIntermediateDirectories: false)
+            try fm.createSymbolicLink(at: cache.appendingPathComponent("Cache_Data"), withDestinationURL: target)
+        case .blockfileLinks:
+            for name in ["index", "data_0"] {
+                let target = elsewhere.appendingPathComponent(name)
+                try Data().write(to: target)
+                try fm.createSymbolicLink(at: cache.appendingPathComponent(name), withDestinationURL: target)
+            }
+        case .blockfileFolders:
+            for name in ["index", "data_0"] {
+                try fm.createDirectory(at: cache.appendingPathComponent(name), withIntermediateDirectories: false)
+            }
+        case .cacheDataFile:
+            try Data().write(to: cache.appendingPathComponent("Cache_Data"))
+        }
+    }
+
+    /// A link or a folder with a marker's name is no evidence: `fileExists`
+    /// follows links and accepts folders, so the name alone used to pass. The
+    /// `Cache` folder is neither listed nor allowed, in any shape, until the
+    /// real layout appears beside it.
+    @Test(arguments: httpCacheShapes, FakeMarker.allCases)
+    func fakeMarkersDoNotCount(shape: String, marker: FakeMarker) throws {
+        let fake = try makeHome()
+        defer { try? FileManager.default.removeItem(at: fake.home) }
+        let root = try appWithEmptyCache(fake, shape: shape)
+        let cache = root.appendingPathComponent(shape, isDirectory: true)
+        try plant(marker, in: cache, elsewhere: fake.home.appendingPathComponent("Elsewhere", isDirectory: true))
+
+        let markers = marker == .cacheDataLink || marker == .cacheDataFile ? ["Cache_Data"] : ["index", "data_0"]
+        for name in markers {
+            #expect(FileManager.default.fileExists(atPath: cache.appendingPathComponent(name).path))
+        }
+        #expect(!CacheDiscoveryPaths.hasChromiumHTTPCacheLayout(cache))
+        #expect(fake.listed(root).isEmpty)
+        #expect(!fake.allowed(root, shape))
+    }
+
     /// An app with no `explanations.json` entry gets its tier from the shape, so
     /// its GPU caches are Safe instead of hidden as Not Sure.
     @Test(arguments: ["DawnCache", "DawnWebGPUCache", "DawnGraphiteCache", "GraphiteDawnCache", "GrShaderCache"])

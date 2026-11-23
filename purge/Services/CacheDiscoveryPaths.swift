@@ -132,16 +132,19 @@ enum CacheDiscoveryPaths {
     /// A folder named `Cache` is Chromium's HTTP cache only with Chromium's
     /// layout inside: `Cache_Data` since Chromium 96, or the older blockfile
     /// `index` and `data_0`. A folder merely named Cache could be anything (#226).
+    /// No link is followed: `Cache_Data` must be a real folder, and `index` and
+    /// `data_0` regular files. A link, or a folder with a file's name, would
+    /// leave the name as the only evidence (#443).
     nonisolated static func hasChromiumHTTPCacheLayout(_ cache: URL) -> Bool {
-        let fm = FileManager.default
-        var isDir: ObjCBool = false
-        if fm.fileExists(atPath: cache.appendingPathComponent("Cache_Data", isDirectory: true).path, isDirectory: &isDir),
-           isDir.boolValue {
-            return true
-        }
+        if isRealDirectory(cache.appendingPathComponent("Cache_Data", isDirectory: true)) { return true }
         return ["index", "data_0"].allSatisfy {
-            fm.fileExists(atPath: cache.appendingPathComponent($0, isDirectory: false).path)
+            isRegularFile(cache.appendingPathComponent($0, isDirectory: false))
         }
+    }
+
+    /// A regular file, not a link. `isRegularFileKey` is false for a link.
+    private nonisolated static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
     }
 
     /// Whether `parts`, a path inside the Application Support folder `appRoot`,
