@@ -241,7 +241,7 @@ nonisolated final class FileDeleter: Sendable {
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
     /// The move check every real clean uses: nvm's rules, then Vite+'s, then
-    /// rustup's, then uv's, then pyenv's. Tests pass a throwaway home and fake reads to prove each part runs.
+    /// rustup's, then uv's, then pyenv's, then a browser cache's shape (#440). Tests pass a throwaway home and fake reads to prove each part runs.
     static func defaultImmediateMoveCheck(
         home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
         nvm: NvmNodeVersionPolicy.Context? = nil,
@@ -256,6 +256,7 @@ nonisolated final class FileDeleter: Sendable {
                 && RustupToolchainPolicy.passesImmediateTrashBoundary(url, home: home, context: rustup)
                 && UvPythonVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: uv)
                 && PyenvPythonVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: pyenv)
+                && SafetyTierList.passesChromiumShapeBoundary(url, home: home)
         }
     }
 

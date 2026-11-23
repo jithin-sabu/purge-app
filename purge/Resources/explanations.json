@@ -1054,6 +1054,18 @@
     "kind": "browser"
   },
   {
+    "key": "yab",
+    "display_name": "Yab Browser",
+    "tag": "safe",
+    "explanation": "Website files and scripts Yab saved while you browsed. Websites may load a little slower until Yab downloads them again.",
+    "bundle_ids": [],
+    "aliases": [
+      "Yab"
+    ],
+    "kind": "browser",
+    "needs_chromium_shape": true
+  },
+  {
     "key": "xcode-itunes-service",
     "display_name": "Xcode Device Support",
     "tag": "medium",

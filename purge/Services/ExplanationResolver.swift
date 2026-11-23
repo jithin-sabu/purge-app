@@ -19,12 +19,18 @@ enum ExplanationResolver {
     nonisolated static func initialSafetyForCacheFolder(
         folderName: String,
         friendlyHeadline: String,
-        path: URL? = nil
+        path: URL? = nil,
+        home: String = DeletionSafetyPolicy.cachedHomePath
     ) -> SafetyInfo {
-        if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName) {
+        // An entry marked `needs_chromium_shape` names the browser and explains
+        // it, but its tier holds only while the folder has the shape. Without
+        // it the folder falls through to the tier list, as if it had no entry.
+        if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName),
+           record.needsChromiumShape != true
+            || SafetyTierList.evaluate(folderName: folderName, path: path, home: home) == .safe {
             return ExplanationDatabase.safetyInfo(from: record)
         }
-        if let tierLevel = SafetyTierList.evaluate(folderName: folderName, path: path) {
+        if let tierLevel = SafetyTierList.evaluate(folderName: folderName, path: path, home: home) {
             return tierSafetyInfo(level: tierLevel, headline: friendlyHeadline)
         }
         return SafetyInfo(
