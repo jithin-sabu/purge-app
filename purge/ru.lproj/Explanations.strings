@@ -558,6 +558,7 @@
 "Warp Terminal" = "Терминал Warp";
 "Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them." = "Сетевые загрузки и скомпилированные файлы моделей, которые хранит фоновая служба Apple Intelligence. Сами модели Apple Intelligence не затрагиваются. Можно безопасно удалить — macOS соберёт их заново, когда службе они понадобятся.";
 "Web downloads and update files the CodexBar menu bar app keeps. Safe to delete; CodexBar downloads them again when needed." = "Сетевые загрузки и файлы обновлений, которые хранит приложение CodexBar в строке меню. Можно безопасно удалить — CodexBar скачает их заново, когда понадобится.";
+"Website files and scripts Yab saved while you browsed. Websites may load a little slower until Yab downloads them again." = "Файлы сайтов и скрипты, которые Yab сохранил во время просмотра. Сайты могут загружаться чуть медленнее, пока Yab не скачает их заново.";
 "WhatsApp" = "WhatsApp";
 "Widgets Cache" = "Кэш виджетов";
 "Xcode" = "Xcode";
@@ -568,6 +569,7 @@
 "Xcode Test Devices" = "Тестовые устройства Xcode";
 "Xcode iOS Device Support" = "Xcode: поддержка устройств iOS";
 "Xnapper Screenshot Tool" = "Инструмент снимков экрана Xnapper";
+"Yab Browser" = "Браузер Yab";
 "Yarn Package Cache" = "Кэш пакетов Yarn";
 "Zed Editor Cache" = "Кэш редактора Zed";
 "Zen Browser" = "Браузер Zen";

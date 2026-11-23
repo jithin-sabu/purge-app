@@ -332,6 +332,10 @@
 "Zen Browser" = "Zen 浏览器";
 "This stores temporary data for the Zen web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch." = "Zen 浏览器的临时数据。可以安全删除，但下次启动时，部分网站数据可能加载较慢。";
 
+/* yab */
+"Yab Browser" = "Yab 浏览器";
+"Website files and scripts Yab saved while you browsed. Websites may load a little slower until Yab downloads them again." = "Yab 在你浏览时保存的网站文件和脚本。在 Yab 重新下载之前，网站可能加载稍慢。";
+
 /* xcode-itunes-service */
 "Xcode Device Support" = "Xcode 设备支持";
 "Temporary files Xcode uses to install and test apps on connected Apple devices. Safe to delete, but Xcode may download device support files again." = "Xcode 在连接的 Apple 设备上安装或测试应用时使用的临时文件。可以安全删除，但 Xcode 可能需要重新下载设备支持文件。";
