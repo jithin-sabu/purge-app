@@ -276,7 +276,7 @@ struct EverythingElseView: View {
                         Text(verbatim: " ")
                             .font(AppStyle.Typography.pageTitle)
                             .accessibilityHidden(true)
-                        EverythingElseBreadcrumb(openFolders: openFolders, passedThrough: store.everythingElsePassedThrough) { count in
+                        EverythingElseBreadcrumb(openFolders: openFolders, passedThrough: store.everythingElsePassedThroughFolders()) { count in
                             store.closeEverythingElseFolders(keeping: count)
                         }
                     }
@@ -462,12 +462,30 @@ private struct EverythingElseBreadcrumb: View {
             // Taken whenever nothing fits, so it must work at any width.
             path(steps, hiding: max(0, steps.count - 1))
         }
+        // On the path as a whole, not on the step above the open folder,
+        // which the narrowest path keeps under the ellipsis.
+        .background { upKeys(keeping: steps.count >= 2 ? steps[steps.count - 2].keeping : 0) }
+    }
+
+    /// Command–Up Arrow, as in Finder, and Command–[, as a browser's Back
+    /// does, go up one step. The buttons are never seen.
+    private func upKeys(keeping count: Int) -> some View {
+        ZStack {
+            Button(String(localized: "Goes back up to here")) { onClose(count) }
+                .keyboardShortcut(.upArrow, modifiers: [.command])
+            Button(String(localized: "Goes back up to here")) { onClose(count) }
+                .keyboardShortcut("[", modifiers: [.command])
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     /// The path with the first `hidden` steps under an ellipsis.
     private func path(_ steps: [Step], hiding hidden: Int) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
-            step(String(localized: "Everything else"), keeping: 0, isParent: steps.count == 1)
+            step(String(localized: "Everything else"), keeping: 0)
                 .fixedSize()
             if hidden > 0 {
                 separator
@@ -488,7 +506,7 @@ private struct EverythingElseBreadcrumb: View {
                         .help(item.folders.last.map { displayDirectoryPath(for: $0.url) } ?? item.name)
                         .accessibilityAddTraits(.isHeader)
                 } else {
-                    step(item.name, keeping: item.keeping, isParent: index == steps.count - 2)
+                    step(item.name, keeping: item.keeping)
                         .fixedSize()
                 }
             }
@@ -503,11 +521,9 @@ private struct EverythingElseBreadcrumb: View {
             .accessibilityHidden(true)
     }
 
-    /// A step above the open folder. The one just above it answers Command–Up
-    /// Arrow, and Command–[ as a browser's Back does.
-    @ViewBuilder
-    private func step(_ title: String, keeping count: Int, isParent: Bool) -> some View {
-        let button = Button {
+    /// A step above the open folder.
+    private func step(_ title: String, keeping count: Int) -> some View {
+        Button {
             onClose(count)
         } label: {
             Text(Self.shortened(title, to: Self.parentStepLength))
@@ -521,20 +537,6 @@ private struct EverythingElseBreadcrumb: View {
         .help(count == 0 ? String(localized: "Back to the whole map") : String(localized: "Back to \(title)"))
         .accessibilityLabel(Text(title))
         .accessibilityHint("Goes back up to here")
-        if isParent {
-            button
-                .keyboardShortcut(.upArrow, modifiers: [.command])
-                .background {
-                    Button(title) { onClose(count) }
-                        .keyboardShortcut("[", modifiers: [.command])
-                        .frame(width: 0, height: 0)
-                        .opacity(0)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-        } else {
-            button
-        }
     }
 }
 
@@ -909,6 +911,9 @@ private struct EverythingElseNestedMap: View {
     }
 
     private var isComplete: Bool { breakdown?.isComplete == true }
+    /// Folders inside the open folder excluded from scans. Their space is in
+    /// its loose files tile, which says so.
+    private var excludedInside: Int { openFolders.isEmpty ? 0 : (level?.excludedFolderCount ?? 0) }
     /// The glass is down while the walk is queued or running, and until the
     /// figures have stopped moving afterwards.
     private var isUnderGlass: Bool {
@@ -1336,7 +1341,7 @@ private struct EverythingElseNestedMap: View {
                     // mid-move: it rides the tile's corner and is clipped until
                     // the tile has grown to fit it.
                     VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                        Text(EverythingElseMapLabel.title(item))
+                        Text(EverythingElseMapLabel.title(item, excludedFolders: excludedInside))
                             .font(AppStyle.Typography.metadataEmphasis)
                             .lineLimit(titleLines)
                         if showsSize {
@@ -1388,13 +1393,19 @@ private struct EverythingElseNestedMap: View {
         .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
         .popover(isPresented: isOpen(selection), arrowEdge: .bottom) {
             if let breakdown {
-                EverythingElseDetail(breakdown: breakdown, group: item.group, item: item, isInsideFolder: !openFolders.isEmpty)
+                EverythingElseDetail(
+                    breakdown: breakdown,
+                    group: item.group,
+                    item: item,
+                    isInsideFolder: !openFolders.isEmpty,
+                    excludedInside: excludedInside
+                )
             }
         }
         .position(x: rect.midX, y: rect.midY)
         .opacity(isDimmed(item.group) ? 0.3 : 1)
         .contextMenu { tileMenu(item) }
-        .accessibilityLabel(EverythingElseMapLabel.title(item) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
+        .accessibilityLabel(EverythingElseMapLabel.title(item, excludedFolders: excludedInside) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
         .accessibilityHint("Shows what this is and what you can do about it")
         .modifier(EverythingElseLookInsideAction(folder: openable) { store.openEverythingElseFolder($0) })
     }
@@ -1447,7 +1458,7 @@ private struct EverythingElseNestedMap: View {
            !Self.carriesOwnLabel(tile) {
             let item = tile.item
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(EverythingElseMapLabel.title(item))
+                Text(EverythingElseMapLabel.title(item, excludedFolders: excludedInside))
                     .font(AppStyle.Typography.headline)
                     .lineLimit(1)
                 Text(formatStorageBytes(item.bytes))
@@ -1862,10 +1873,14 @@ private struct EverythingElseStatus: View {
 
 /// What a tile or the detail calls a row.
 private enum EverythingElseMapLabel {
-    static func title(_ item: EverythingElseItem) -> String {
+    /// `excludedFolders` is how many folders inside an opened folder were
+    /// excluded from scans: their space is in its loose files row.
+    static func title(_ item: EverythingElseItem, excludedFolders: Int = 0) -> String {
         switch item.kind {
         case .folder(let folder): return folder.displayName
-        case .smaller(let count, _): return EverythingElseStyle.smallerTitle(count: count)
+        case .smaller(let count, _):
+            if count == 0, excludedFolders > 0 { return String(localized: "Loose files and excluded folders") }
+            return EverythingElseStyle.smallerTitle(count: count)
         case .locked, .system: return EverythingElseStyle.name(item.group)
         }
     }
@@ -1883,13 +1898,15 @@ private struct EverythingElseDetail: View {
     /// The tile is inside an opened folder (#437), so its loose files are that
     /// one folder's.
     var isInsideFolder = false
+    /// Folders inside the open folder excluded from scans, in its loose files.
+    var excludedInside = 0
 
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var trashStore: TrashStore
     @State private var isShowingWhy = false
 
     private var title: String {
-        item.map(EverythingElseMapLabel.title) ?? EverythingElseStyle.name(group)
+        item.map { EverythingElseMapLabel.title($0, excludedFolders: excludedInside) } ?? EverythingElseStyle.name(group)
     }
 
     private var bytes: Int64 {
@@ -1945,9 +1962,12 @@ private struct EverythingElseDetail: View {
             return path
         case .smaller(let count, let biggest):
             if count == 0 {
-                return isInsideFolder
-                    ? String(localized: "Files that sit directly in this folder rather than in a folder inside it.")
-                    : String(localized: "Files that sit directly in these folders rather than in a folder of their own.")
+                guard isInsideFolder else {
+                    return String(localized: "Files that sit directly in these folders rather than in a folder of their own.")
+                }
+                return excludedInside > 0
+                    ? String(localized: "Files that sit directly in this folder, and the folders inside it you excluded from scans.")
+                    : String(localized: "Files that sit directly in this folder rather than in a folder inside it.")
             }
             return biggest.isEmpty
                 ? String(localized: "Each is too small to show on the map by itself.")

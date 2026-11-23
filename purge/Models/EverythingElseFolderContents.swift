@@ -15,30 +15,50 @@ nonisolated struct EverythingElseFolderContents: Equatable, Sendable {
     let looseFileBytes: Int64
     /// Folders inside that a limited scan may not read, so they have no figure.
     let lockedFolderCount: Int
+    /// Folders inside the user excluded from scans: they get no tile, but
+    /// their space is still inside the folder that was opened.
+    let excludedFolderCount: Int
+    let excludedFolderBytes: Int64
 
-    /// Everything inside as counted.
+    /// Everything inside as counted, the excluded folders too, so the level
+    /// still adds up to the tile that was opened.
     var totalBytes: Int64 {
-        folders.reduce(looseFileBytes) { $0 + $1.bytes }
+        folders.reduce(looseFileBytes + excludedFolderBytes) { $0 + $1.bytes }
     }
 
-    init(path: String, folders: [OverviewSizedItem], openablePaths: Set<String>, looseFileBytes: Int64, lockedFolderCount: Int = 0) {
+    init(
+        path: String,
+        folders: [OverviewSizedItem],
+        openablePaths: Set<String>,
+        looseFileBytes: Int64,
+        lockedFolderCount: Int = 0,
+        excludedFolderCount: Int = 0,
+        excludedFolderBytes: Int64 = 0
+    ) {
         self.path = OverviewSizedItem.normalized(path)
         self.folders = folders
         self.openablePaths = openablePaths
         self.looseFileBytes = max(0, looseFileBytes)
         self.lockedFolderCount = max(0, lockedFolderCount)
+        self.excludedFolderCount = max(0, excludedFolderCount)
+        self.excludedFolderBytes = max(0, excludedFolderBytes)
     }
 
-    /// The contents with every folder the user excluded taken out.
+    /// The contents with every folder the user excluded taken out of the
+    /// tiles. Their space joins the loose files, the way the remainder takes
+    /// it on the whole map, so the level still adds up.
     func droppingFolders(where isHidden: (String) -> Bool) -> EverythingElseFolderContents {
         let kept = folders.filter { !isHidden($0.path) }
         guard kept.count != folders.count else { return self }
+        let dropped = folders.filter { isHidden($0.path) }
         return EverythingElseFolderContents(
             path: path,
             folders: kept,
             openablePaths: openablePaths.filter { !isHidden($0) },
             looseFileBytes: looseFileBytes,
-            lockedFolderCount: lockedFolderCount
+            lockedFolderCount: lockedFolderCount,
+            excludedFolderCount: excludedFolderCount + dropped.count,
+            excludedFolderBytes: excludedFolderBytes + dropped.reduce(0) { $0 + $1.bytes }
         )
     }
 }
@@ -55,6 +75,9 @@ nonisolated struct EverythingElseFolderLevel: Equatable, Sendable {
     let items: [EverythingElseItem]
     let openablePaths: Set<String>
     let lockedFolderCount: Int
+    /// Folders inside excluded from scans, whose space is in the loose files
+    /// row, which the map then calls "Loose files and excluded folders".
+    let excludedFolderCount: Int
 
     var bytes: Int64 { items.reduce(0) { $0 + $1.bytes } }
 
@@ -81,6 +104,7 @@ nonisolated struct EverythingElseFolderLevel: Equatable, Sendable {
         }
         self.openablePaths = contents.openablePaths
         self.lockedFolderCount = contents.lockedFolderCount
+        self.excludedFolderCount = contents.excludedFolderCount
     }
 }
 

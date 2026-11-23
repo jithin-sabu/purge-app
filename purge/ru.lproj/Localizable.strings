@@ -1531,6 +1531,8 @@
 "Double-click to look inside" = "Дважды щёлкните, чтобы заглянуть внутрь";
 "Go back to a folder further up" = "Вернуться в одну из папок выше";
 "Folders further up" = "Папки выше";
+"Loose files and excluded folders" = "Отдельные файлы и исключённые папки";
+"Files that sit directly in this folder, and the folders inside it you excluded from scans." = "Файлы, лежащие прямо в этой папке, и папки внутри неё, которые вы исключили из сканирования.";
 
 "Back to the whole map" = "Назад ко всей карте";
 

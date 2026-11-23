@@ -1572,6 +1572,8 @@
 "Double-click to look inside" = "双击查看内部";
 "Go back to a folder further up" = "返回上层的某个文件夹";
 "Folders further up" = "更上层的文件夹";
+"Loose files and excluded folders" = "零散文件和已排除的文件夹";
+"Files that sit directly in this folder, and the folders inside it you excluded from scans." = "直接位于此文件夹中的文件，以及其中你已从扫描中排除的文件夹。";
 
 "Back to the whole map" = "返回完整地图";
 

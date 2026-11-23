@@ -126,6 +126,8 @@ struct EverythingElseNoDeleteTests {
             "showPendingEverythingElseFolders",
             "continueOpeningEverythingElseFolder",
             "everythingElseFolderLanded",
+            "everythingElsePassedThroughFolders",
+            "everythingElsePassThrough",
             "droppingFolders"
         ])
         // The views add nothing to the store of their own.

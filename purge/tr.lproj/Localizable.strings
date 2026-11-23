@@ -1572,6 +1572,8 @@
 "Double-click to look inside" = "İçine bakmak için çift tıklayın";
 "Go back to a folder further up" = "Daha yukarıdaki bir klasöre dön";
 "Folders further up" = "Daha yukarıdaki klasörler";
+"Loose files and excluded folders" = "Tek başına dosyalar ve hariç tutulan klasörler";
+"Files that sit directly in this folder, and the folders inside it you excluded from scans." = "Doğrudan bu klasörde duran dosyalar ve içindeki, taramalardan hariç tuttuğunuz klasörler.";
 
 "Back to the whole map" = "Haritanın tamamına dön";
 

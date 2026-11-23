@@ -99,7 +99,7 @@ extension PurgeStore {
         // Opened folders were claimed against the last walk's figures.
         closeEverythingElseFolders(keeping: 0)
         everythingElseFolderContents = [:]
-        everythingElsePassedThrough = []
+        everythingElseOpenableCache = [:]
         everythingElseFolderContentsRevision &+= 1
         let access: ScanAccess = hasFullDiskAccess ? .full : .limited
         var measurement = EverythingElseMeasurement(access: access)
@@ -188,14 +188,20 @@ extension PurgeStore {
            contents.folders.contains(where: { $0.path == path }) {
             return contents.openablePaths.contains(path)
         }
-        // Asked for every tile on every render, so string work only: a URL
-        // made without `isDirectory` would stat the disk to find out.
-        return EverythingElseFolderOpening.canOpen(
+        // Asked for every tile on every render. A URL made without
+        // `isDirectory` would stat the disk, and a limited scan's answer
+        // reads links on the way, so each answer is kept until the next walk.
+        let access: ScanAccess = hasFullDiskAccess ? .full : .limited
+        let key = "\(access == .full ? "full" : "limited") \(folder.group.rawValue) \(path)"
+        if let known = everythingElseOpenableCache[key] { return known }
+        let canOpen = EverythingElseFolderOpening.canOpen(
             URL(fileURLWithPath: path, isDirectory: true),
             group: folder.group,
-            access: hasFullDiskAccess ? .full : .limited,
+            access: access,
             home: FileManager.default.homeDirectoryForCurrentUser
         )
+        everythingElseOpenableCache[key] = canOpen
+        return canOpen
     }
 
     /// How long an open waits for the folder's sizing before the map moves. A
@@ -230,15 +236,16 @@ extension PurgeStore {
     }
 
     /// Goes back up the path: `count` folders stay open, 0 shows the whole map.
-    /// A folder that was passed through closes too, since its level is one
-    /// tile filling the map, with nothing to zoom back out to. An open still
+    /// A folder passed through closes too, since its level is one tile
+    /// filling the map, with nothing to zoom back out to. An open still
     /// waiting to show is dropped, and a sizing for a folder that closes stops.
     func closeEverythingElseFolders(keeping count: Int) {
         everythingElseOpenGeneration += 1
         everythingElsePendingFolders = []
+        let passedThrough = everythingElsePassedThroughFolders()
         var kept = max(0, min(count, everythingElseOpenFolders.count))
         while kept > 0, kept < everythingElseOpenFolders.count,
-              everythingElsePassedThrough.contains(OverviewSizedItem.normalized(everythingElseOpenFolders[kept - 1].path)) {
+              passedThrough.contains(OverviewSizedItem.normalized(everythingElseOpenFolders[kept - 1].path)) {
             kept -= 1
         }
         if kept < everythingElseOpenFolders.count {
@@ -268,6 +275,49 @@ extension PurgeStore {
         let level = everythingElseLevel(for: open, top: top)
         everythingElseLevelCache = (key, level)
         return level
+    }
+
+    /// The open folders, by normalized path, that open straight through to the
+    /// next one on the path: their own level would be one tile filling the
+    /// map. Worked out from the figures as they are now, so a folder that an
+    /// exclusion or a new count changes stops being passed through. The path
+    /// shows each with the folder after it as one step.
+    func everythingElsePassedThroughFolders() -> Set<String> {
+        let open = everythingElseOpenFolders
+        guard let top = open.first, open.count > 1 else { return [] }
+        let key = EverythingElseLevelKey(
+            openPaths: open.map(\.path),
+            contentsRevision: everythingElseFolderContentsRevision,
+            inputsRevision: categoryInputsRevision,
+            measurementRevision: everythingElseMeasurementRevision,
+            excludedPaths: excludedPaths
+        )
+        if let cached = everythingElsePassThroughCache, cached.key == key {
+            return cached.paths
+        }
+        var paths: Set<String> = []
+        for (folder, next) in zip(open, open.dropFirst()) {
+            guard let level = everythingElseLevel(for: folder, top: top),
+                  let through = Self.everythingElsePassThrough(of: level),
+                  OverviewSizedItem.normalized(through.path) == OverviewSizedItem.normalized(next.path)
+            else { continue }
+            paths.insert(OverviewSizedItem.normalized(folder.path))
+        }
+        everythingElsePassThroughCache = (key, paths)
+        return paths
+    }
+
+    /// The folder a level opens straight through to: nearly all it holds is
+    /// one folder that opens. Never a level with folders a limited scan
+    /// could not read, so its note that they need Full Disk Access shows.
+    static func everythingElsePassThrough(of level: EverythingElseFolderLevel) -> EverythingElseFolder? {
+        guard level.lockedFolderCount == 0,
+              let biggest = level.items.first,
+              case .folder(let only) = biggest.kind,
+              level.openablePaths.contains(OverviewSizedItem.normalized(only.path)),
+              Double(level.bytes - biggest.bytes) < everythingElsePassThroughShare * Double(level.bytes)
+        else { return nil }
+        return only
     }
 
     /// The tiles for `folder` once it is sized, counted below `top`, the
@@ -312,11 +362,7 @@ extension PurgeStore {
         if opened.count < Self.everythingElsePassThroughLimit,
            let top = opened.first,
            let level = everythingElseLevel(for: folder, top: top),
-           let biggest = level.items.first,
-           case .folder(let only) = biggest.kind,
-           level.openablePaths.contains(OverviewSizedItem.normalized(only.path)),
-           Double(level.bytes - biggest.bytes) < Self.everythingElsePassThroughShare * Double(level.bytes) {
-            everythingElsePassedThrough.insert(OverviewSizedItem.normalized(folder.path))
+           let only = Self.everythingElsePassThrough(of: level) {
             if everythingElsePendingFolders.isEmpty {
                 everythingElseOpenFolders.append(only)
             } else {

@@ -351,7 +351,7 @@ struct EverythingElseFolderStoreTests {
         #expect(store.everythingElseOpenLevel()?.items.count == 2)
         #expect(fake.everythingElseFolderRequests.map(\.path) == ["\(base)/Photos", "\(base)/Photos/Library"])
 
-        #expect(store.everythingElsePassedThrough == ["\(base)/Photos"])
+        #expect(store.everythingElsePassedThroughFolders() == ["\(base)/Photos"])
 
         store.closeEverythingElseFolders(keeping: 1)
         #expect(store.everythingElseOpenFolders.isEmpty)
@@ -364,7 +364,74 @@ struct EverythingElseFolderStoreTests {
         // A new walk forgets it with the sizes.
         store.measureEverythingElseAgain()
         #expect(await eventually { store.everythingElsePhase == .ready })
-        #expect(store.everythingElsePassedThrough.isEmpty)
+        #expect(store.everythingElsePassedThroughFolders().isEmpty)
+        fake.cleanUp()
+    }
+
+    /// Excluding the one folder a folder held stops it passing through, and
+    /// the excluded folder's space stays in the level, in its loose files, so
+    /// the level still adds up to the tile that was opened.
+    @Test func excludingTheFolderPassedThroughToKeepsTheLevelWhole() async throws {
+        let fake = FakeScans()
+        let store = await measuredStore(fake)
+        fake.everythingElseFolders["\(base)/Photos"] = EverythingElseFolderContents(
+            path: "\(base)/Photos",
+            folders: [OverviewSizedItem(path: "\(base)/Photos/Library", bytes: 20 * gb)],
+            openablePaths: ["\(base)/Photos/Library"],
+            looseFileBytes: 0
+        )
+        fake.everythingElseFolders["\(base)/Photos/Library"] = EverythingElseFolderContents(
+            path: "\(base)/Photos/Library",
+            folders: [OverviewSizedItem(path: "\(base)/Photos/Library/2024", bytes: 20 * gb)],
+            openablePaths: [],
+            looseFileBytes: 0
+        )
+        let photos = try tile(store, "Photos")
+        store.openEverythingElseFolder(photos)
+        #expect(await eventually { store.everythingElseOpenFolders.count == 2 })
+        #expect(store.everythingElsePassedThroughFolders() == ["\(base)/Photos"])
+
+        // Photos was passed through, so going up from Library goes past it.
+        let library = try #require(store.everythingElseOpenFolders.last)
+        store.hideFromEverythingElse(library)
+        #expect(store.everythingElseOpenFolders.isEmpty)
+
+        // Opened again, it no longer passes through: Library has no tile.
+        store.openEverythingElseFolder(try tile(store, "Photos"))
+        #expect(await eventually { !store.everythingElseOpenFolders.isEmpty })
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(store.everythingElseOpenFolders.map(\.path) == ["\(base)/Photos"])
+        #expect(store.everythingElsePassedThroughFolders().isEmpty)
+        let level = try #require(store.everythingElseOpenLevel())
+        #expect(level.bytes == photos.bytes)
+        #expect(level.excludedFolderCount == 1)
+        #expect(level.items.count == 1)
+        if case .smaller(let count, _) = level.items.first?.kind {
+            #expect(count == 0)
+        } else {
+            Issue.record("the excluded folder's space should be in the loose files row")
+        }
+        fake.cleanUp()
+    }
+
+    /// A folder with folders inside that a limited scan could not read is
+    /// never passed through, so its note that they need Full Disk Access shows.
+    @Test func aFolderWithLockedFoldersIsNeverPassedThrough() async throws {
+        let fake = FakeScans()
+        let store = await measuredStore(fake)
+        fake.everythingElseFolders["\(base)/Photos"] = EverythingElseFolderContents(
+            path: "\(base)/Photos",
+            folders: [OverviewSizedItem(path: "\(base)/Photos/Library", bytes: 20 * gb)],
+            openablePaths: ["\(base)/Photos/Library"],
+            looseFileBytes: 0,
+            lockedFolderCount: 2
+        )
+        store.openEverythingElseFolder(try tile(store, "Photos"))
+        #expect(await eventually { !store.everythingElseOpenFolders.isEmpty })
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(store.everythingElseOpenFolders.map(\.path) == ["\(base)/Photos"])
+        #expect(store.everythingElseOpenLevel()?.lockedFolderCount == 2)
+        #expect(fake.everythingElseFolderRequests.map(\.path) == ["\(base)/Photos"])
         fake.cleanUp()
     }
 

@@ -626,11 +626,12 @@ final class PurgeStore: ObservableObject {
     @Published var everythingElseFolderContents: [String: EverythingElseFolderContents] = [:]
     /// The folder being sized now, and how far along.
     @Published var everythingElseFolderSizing: EverythingElseFolderSizing?
-    /// Opened folders that were passed through to the one folder they hold,
-    /// by normalized path. Their own level would be one tile filling the
-    /// map, so going back up never stops at one, and the path shows each
-    /// with the folder after it as one step.
-    @Published var everythingElsePassedThrough: Set<String> = []
+    /// The open folders passed through, and what they were worked out from.
+    var everythingElsePassThroughCache: (key: EverythingElseLevelKey, paths: Set<String>)?
+    /// Whether each folder tile on the whole map can open, by normalized path
+    /// and access. Asked for every tile on every render, and a limited scan's
+    /// answer reads links on disk, so it is kept until the next walk.
+    var everythingElseOpenableCache: [String: Bool] = [:]
     var everythingElseFolderContentsRevision = 0
     var everythingElseFolderGeneration = 0
     /// Folders opened but not on the map yet: the map waits a moment for their
