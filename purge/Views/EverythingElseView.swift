@@ -269,12 +269,20 @@ struct EverythingElseView: View {
                         .font(AppStyle.Typography.pageTitle)
                         .accessibilityAddTraits(.isHeader)
                 } else {
-                    EverythingElseBreadcrumb(openFolders: openFolders) { count in
-                        store.closeEverythingElseFolders(keeping: count)
+                    // A blank in the title's size keeps the row as tall as it
+                    // is on the whole map, so the map doesn't move up a few
+                    // points on the way in.
+                    ZStack(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+                        Text(verbatim: " ")
+                            .font(AppStyle.Typography.pageTitle)
+                            .accessibilityHidden(true)
+                        EverythingElseBreadcrumb(openFolders: openFolders) { count in
+                            store.closeEverythingElseFolders(keeping: count)
+                        }
                     }
                 }
                 Spacer(minLength: AppStyle.Spacing.medium)
-                if let level, store.everythingElseFolderSizing == nil {
+                if let level {
                     Text(formatStorageBytes(level.bytes))
                         .font(AppStyle.Typography.callout.numbers)
                         .foregroundStyle(AppColors.textSecondary)
@@ -293,7 +301,11 @@ struct EverythingElseView: View {
                 highlightedBucket: highlightedBucket,
                 openFolders: openFolders,
                 level: level,
-                folderSizing: openFolders.isEmpty ? nil : store.everythingElseFolderSizing,
+                // The glass is for the open folder only: one still waiting to
+                // show is measured with the map left as it is.
+                folderSizing: store.everythingElseFolderSizing.flatMap { sizing in
+                    openFolders.last.map { OverviewSizedItem.normalized($0.path) } == sizing.path ? sizing : nil
+                },
                 onMeasure: { store.measureEverythingElseAgain() }
             )
             if let shown {
@@ -400,15 +412,18 @@ private struct EverythingElseBreadcrumb: View {
 
     /// Steps after the first that stay shown before the ellipsis takes the rest.
     private static let trailingSteps = 2
+    /// A size down from the page title: on the whole map "Everything else" is
+    /// the heading, inside a folder the path is, and a path is longer.
+    private static let font = AppStyle.Typography.sectionTitle
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmall) {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
             step(String(localized: "Everything else"), keeping: 0)
             let hidden = max(0, openFolders.count - Self.trailingSteps)
             if hidden > 0 {
                 separator
                 Text(verbatim: "…")
-                    .font(AppStyle.Typography.pageTitle)
+                    .font(Self.font)
                     .foregroundStyle(AppColors.textTertiary)
                     .help(openFolders.prefix(hidden).map(\.displayName).joined(separator: " › "))
             }
@@ -416,7 +431,7 @@ private struct EverythingElseBreadcrumb: View {
                 separator
                 if index == openFolders.count - 1 {
                     Text(folder.displayName)
-                        .font(AppStyle.Typography.pageTitle)
+                        .font(Self.font)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .layoutPriority(1)
@@ -431,7 +446,7 @@ private struct EverythingElseBreadcrumb: View {
 
     private var separator: some View {
         Image(systemName: "chevron.right")
-            .font(AppStyle.Typography.callout)
+            .font(.system(size: 11, weight: .bold))
             .foregroundStyle(AppColors.textTertiary)
             .accessibilityHidden(true)
     }
@@ -443,7 +458,7 @@ private struct EverythingElseBreadcrumb: View {
             onClose(count)
         } label: {
             Text(title)
-                .font(AppStyle.Typography.pageTitle)
+                .font(Self.font)
                 .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -473,9 +488,6 @@ enum EverythingElseMotion {
     static let fade = Animation.easeInOut(duration: 0.4)
     /// How long `curve` takes, so the glass over an opened folder waits for it.
     static let zoomDuration: TimeInterval = 0.7
-    /// How long the glass says "Done" over an opened folder before it lifts.
-    /// Shorter than `driftDelay`: no late figures follow a folder's sizing.
-    static let folderDoneHold: TimeInterval = 0.4
     /// The capsule's width following its text, the way the Clean button's does.
     static let capsuleWidth = Animation.spring(response: 0.38, dampingFraction: 0.92, blendDuration: 0.12)
     static let capsuleText = Animation.easeInOut(duration: 0.45)
@@ -703,13 +715,13 @@ private struct EverythingElseNestedMap: View {
     /// for `driftDelay`, so the map is still when it comes into view.
     @State private var holdsGlass = false
     @State private var liftWork: DispatchWorkItem?
-    /// The sizing last seen, so its end can be told from a cancel.
-    @State private var lastSizing: EverythingElseFolderSizing?
-    /// A finished folder sizing the glass is holding "Done" for.
-    @State private var doneSizing: EverythingElseFolderSizing?
-    /// When the zoom into or out of a folder settles, so the glass does not
-    /// lift on a map that is still moving.
+    /// When the zoom into or out of a folder settles, so a folder's tiles that
+    /// land mid-zoom wait for it rather than jump in under a moving tile.
     @State private var zoomEndsAt = Date.distantPast
+    /// Keeps the glass down while landed tiles wait for the zoom to settle.
+    @State private var holdsFolderGlass = false
+    /// The last folder sizing, so the capsule keeps its name through that wait.
+    @State private var lastFolderSizing: EverythingElseFolderSizing?
 
     /// Tiles smaller than this keep their colour but drop the label; the hover
     /// label names them.
@@ -724,7 +736,9 @@ private struct EverythingElseNestedMap: View {
     private var isComplete: Bool { breakdown?.isComplete == true }
     /// The glass is down while the walk is queued or running, and until the
     /// figures have stopped moving afterwards.
-    private var isUnderGlass: Bool { phase == .waiting || phase == .measuring || holdsGlass || folderSizing != nil }
+    private var isUnderGlass: Bool {
+        phase == .waiting || phase == .measuring || holdsGlass || folderSizing != nil || holdsFolderGlass
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
@@ -752,8 +766,7 @@ private struct EverythingElseNestedMap: View {
                             phase: phase,
                             measurement: measurement,
                             runningStep: runningStep,
-                            folder: folderSizing ?? doneSizing,
-                            folderIsDone: folderSizing == nil && doneSizing != nil
+                            folder: folderSizing ?? (holdsFolderGlass ? lastFolderSizing : nil)
                         )
                             .zIndex(3)
                             .transition(.opacity)
@@ -771,7 +784,7 @@ private struct EverythingElseNestedMap: View {
                 }
                 .onChange(of: computed) { layoutDidChange(to: $0) }
                 .onChange(of: phase) { phaseDidChange(to: $0) }
-                .onChange(of: folderSizing) { folderSizingDidChange(to: $0) }
+                .onChange(of: folderSizing) { if let sizing = $0 { lastFolderSizing = sizing } }
                 // One tracker for the whole map, hit-testing the tiles itself, so
                 // the label always belongs to what is under the pointer.
                 .onContinuousHover(coordinateSpace: .local) { hoverPhase in
@@ -818,36 +831,14 @@ private struct EverythingElseNestedMap: View {
         }
     }
 
-    private func scheduleLift(after delay: TimeInterval = EverythingElseMotion.driftDelay) {
+    private func scheduleLift() {
         liftWork?.cancel()
         let work = DispatchWorkItem {
             liftWork = nil
-            withAnimation(reduceMotion ? nil : EverythingElseMotion.fade) {
-                holdsGlass = false
-                doneSizing = nil
-            }
+            withAnimation(reduceMotion ? nil : EverythingElseMotion.fade) { holdsGlass = false }
         }
         liftWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-    }
-
-    /// A folder's sizing ended. If it finished, the glass holds "Done" for a
-    /// beat once the zoom has settled, then lifts on the folder's tiles. If it
-    /// was stopped by going back up, the glass just goes.
-    private func folderSizingDidChange(to sizing: EverythingElseFolderSizing?) {
-        defer { lastSizing = sizing }
-        guard sizing == nil, var finished = lastSizing else {
-            if sizing != nil { doneSizing = nil }
-            return
-        }
-        // Read from the store, which is current.
-        let isOpen = store.everythingElseOpenFolders.last.map { OverviewSizedItem.normalized($0.path) } == finished.path
-        guard isOpen, store.everythingElseFolderContents[finished.path] != nil else { return }
-        finished.fraction = 1
-        doneSizing = finished
-        holdsGlass = true
-        let untilStill = max(0, zoomEndsAt.timeIntervalSinceNow)
-        scheduleLift(after: untilStill + EverythingElseMotion.folderDoneHold)
+        DispatchQueue.main.asyncAfter(deadline: .now() + EverythingElseMotion.driftDelay, execute: work)
     }
 
     // MARK: Taking a new layout
@@ -865,9 +856,23 @@ private struct EverythingElseNestedMap: View {
                 navigate(from: current, to: layout)
                 return
             }
-            // An opened folder's tiles landing under the glass.
+            // An opened folder's tiles landing. They take the folder's tile
+            // over once the zoom into it has settled, and the glass, if the
+            // sizing was slow enough to need it, lifts as they do. No "Done"
+            // beat: a folder is measured in a moment, unlike the walk.
             if current.isPlaceholder {
-                adopt(layout, animated: true)
+                let wait = zoomEndsAt.timeIntervalSinceNow
+                guard wait > 0 else {
+                    adopt(layout, animated: true)
+                    return
+                }
+                holdsFolderGlass = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                    if shown?.openPaths == layout.openPaths, shown?.isPlaceholder == true {
+                        adopt(layout, animated: true)
+                    }
+                    withAnimation(reduceMotion ? nil : EverythingElseMotion.fade) { holdsFolderGlass = false }
+                }
                 return
             }
         }
@@ -1273,7 +1278,6 @@ private struct EverythingElseGlass: View {
     /// A folder opened on the map being sized (#437). It takes the capsule
     /// over from the walk.
     var folder: EverythingElseFolderSizing?
-    var folderIsDone = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The text column's natural width, read from a hidden copy, so the
@@ -1357,7 +1361,7 @@ private struct EverythingElseGlass: View {
     @ViewBuilder
     private var ring: some View {
         if let folder {
-            EverythingElseRing(fraction: folderIsDone ? 1 : folder.fraction, ceiling: 1)
+            EverythingElseRing(fraction: folder.fraction, ceiling: 1)
         // The ring stays, full, for the beat the glass holds after the walk.
         } else if phase == .measuring || phase == .ready, let measurement, !measurement.plannedRoots.isEmpty {
             EverythingElseRing(fraction: measurement.walkFraction, ceiling: measurement.walkCeiling)
@@ -1370,7 +1374,7 @@ private struct EverythingElseGlass: View {
 
     private var title: String {
         if let folder {
-            return folderIsDone ? String(localized: "Done") : String(localized: "Measuring \(folder.name)")
+            return String(localized: "Measuring \(folder.name)")
         }
         switch phase {
         case .waiting:
@@ -1389,7 +1393,7 @@ private struct EverythingElseGlass: View {
 
     private var subtitle: String {
         if let folder {
-            return folderIsDone ? "" : displayDirectoryPath(for: URL(fileURLWithPath: folder.path))
+            return displayDirectoryPath(for: URL(fileURLWithPath: folder.path, isDirectory: true))
         }
         switch phase {
         case .waiting:

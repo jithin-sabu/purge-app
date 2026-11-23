@@ -122,6 +122,10 @@ struct EverythingElseNoDeleteTests {
             "everythingElseOpenLevel",
             "sizeEverythingElseFolder",
             "cancelEverythingElseFolderSizing",
+            "everythingElseLevel",
+            "showPendingEverythingElseFolders",
+            "continueOpeningEverythingElseFolder",
+            "everythingElseFolderLanded",
             "droppingFolders"
         ])
         // The views add nothing to the store of their own.

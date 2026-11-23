@@ -267,8 +267,11 @@ struct EverythingElseFolderStoreTests {
         #expect(store.everythingElseCanOpen(work))
 
         store.openEverythingElseFolder(work)
+        // A quick sizing puts the folder on the map with its tiles, never
+        // without them.
+        #expect(await eventually { !store.everythingElseOpenFolders.isEmpty })
         #expect(store.everythingElseOpenFolders.map(\.path) == ["\(base)/Work"])
-        #expect(await eventually { store.everythingElseOpenLevel() != nil })
+        #expect(store.everythingElseOpenLevel() != nil)
         #expect(store.everythingElseFolderSizing == nil)
         #expect(fake.everythingElseFolderRequests.map(\.path) == ["\(base)/Work"])
         #expect(fake.everythingElseFolderRequests.map(\.access) == [.full])
@@ -283,9 +286,11 @@ struct EverythingElseFolderStoreTests {
         store.openEverythingElseFolder(source)
         #expect(store.everythingElseOpenFolders.count == 1)
 
+        // Renders holds one folder, but it can't open, so the path stops here.
         store.openEverythingElseFolder(renders)
         #expect(await eventually { store.everythingElseOpenLevel()?.folder.path == "\(base)/Work/Renders" })
         #expect(store.everythingElseOpenFolders.count == 2)
+        #expect(store.everythingElseOpenLevel()?.items.count == 1)
 
         // Back up one, then into Renders again: no second sizing.
         store.closeEverythingElseFolders(keeping: 1)
@@ -297,6 +302,56 @@ struct EverythingElseFolderStoreTests {
         store.closeEverythingElseFolders(keeping: 0)
         #expect(store.everythingElseOpenFolders.isEmpty)
         #expect(store.everythingElseOpenLevel() == nil)
+        fake.cleanUp()
+    }
+
+    /// A slow sizing leaves the map alone for a moment, then opens the folder
+    /// as one tile under the glass until its tiles land.
+    @Test func aSlowSizingOpensTheFolderAfterAMoment() async throws {
+        let fake = FakeScans()
+        let store = await measuredStore(fake)
+        fake.holdsEverythingElseFolders = true
+        store.openEverythingElseFolder(try tile(store, "Work"))
+        #expect(store.everythingElseOpenFolders.isEmpty)
+        #expect(store.everythingElseFolderSizing?.path == "\(base)/Work")
+        #expect(await eventually { !store.everythingElseOpenFolders.isEmpty })
+        #expect(store.everythingElseOpenLevel() == nil)
+        fake.finishHeldEverythingElseFolders()
+        #expect(await eventually { store.everythingElseOpenLevel() != nil })
+        #expect(store.everythingElseOpenFolders.map(\.path) == ["\(base)/Work"])
+        fake.cleanUp()
+    }
+
+    /// A folder whose content is nearly all one folder that opens is passed
+    /// through, so `Metadata/CoreSpotlight` is one click, and the path keeps
+    /// both steps to go back up to.
+    @Test func aFolderHoldingOneFolderOpensThroughToIt() async throws {
+        let fake = FakeScans()
+        let store = await measuredStore(fake)
+        fake.everythingElseFolders["\(base)/Photos"] = EverythingElseFolderContents(
+            path: "\(base)/Photos",
+            folders: [OverviewSizedItem(path: "\(base)/Photos/Library", bytes: 20 * gb)],
+            openablePaths: ["\(base)/Photos/Library"],
+            // A `.DS_Store`'s worth of loose files doesn't stop it.
+            looseFileBytes: 8_192
+        )
+        fake.everythingElseFolders["\(base)/Photos/Library"] = EverythingElseFolderContents(
+            path: "\(base)/Photos/Library",
+            folders: [
+                OverviewSizedItem(path: "\(base)/Photos/Library/2024", bytes: 12 * gb),
+                OverviewSizedItem(path: "\(base)/Photos/Library/2025", bytes: 8 * gb)
+            ],
+            openablePaths: [],
+            looseFileBytes: 0
+        )
+        store.openEverythingElseFolder(try tile(store, "Photos"))
+        #expect(await eventually { !store.everythingElseOpenFolders.isEmpty })
+        #expect(store.everythingElseOpenFolders.map(\.path) == ["\(base)/Photos", "\(base)/Photos/Library"])
+        #expect(store.everythingElseOpenLevel()?.items.count == 2)
+        #expect(fake.everythingElseFolderRequests.map(\.path) == ["\(base)/Photos", "\(base)/Photos/Library"])
+
+        store.closeEverythingElseFolders(keeping: 1)
+        #expect(store.everythingElseOpenLevel()?.folder.path == "\(base)/Photos")
         fake.cleanUp()
     }
 
@@ -322,7 +377,9 @@ struct EverythingElseFolderStoreTests {
         let fake = FakeScans()
         let store = await measuredStore(fake)
         store.openEverythingElseFolder(try tile(store, "Photos"))
-        #expect(await eventually { store.everythingElseOpenFolders.isEmpty && store.everythingElseFolderSizing == nil })
+        #expect(await eventually { fake.everythingElseFolderRequests.count == 1 && store.everythingElseFolderSizing == nil })
+        try await Task.sleep(nanoseconds: 400_000_000)
+        #expect(store.everythingElseOpenFolders.isEmpty)
         #expect(fake.everythingElseFolderRequests.map(\.path) == ["\(base)/Photos"])
         fake.cleanUp()
     }

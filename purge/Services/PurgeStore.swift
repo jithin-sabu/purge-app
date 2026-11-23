@@ -628,6 +628,10 @@ final class PurgeStore: ObservableObject {
     @Published var everythingElseFolderSizing: EverythingElseFolderSizing?
     var everythingElseFolderContentsRevision = 0
     var everythingElseFolderGeneration = 0
+    /// Folders opened but not on the map yet: the map waits a moment for their
+    /// sizing, so a quick folder zooms straight into its tiles.
+    var everythingElsePendingFolders: [EverythingElseFolder] = []
+    var everythingElseOpenGeneration = 0
     var everythingElseFolderTask: Task<Void, Never>?
     var everythingElseLevelCache: (key: EverythingElseLevelKey, level: EverythingElseFolderLevel?)?
     /// The last Overview breakdown and what it was computed from. Scan flushes re-render
