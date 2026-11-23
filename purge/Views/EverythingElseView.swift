@@ -484,7 +484,8 @@ private struct EverythingElseBreadcrumb: View {
             .accessibilityHidden(true)
     }
 
-    /// A step above the open folder. The one just above it answers Command–Up Arrow.
+    /// A step above the open folder. The one just above it answers Command–Up
+    /// Arrow, and Command–[ as a browser's Back does.
     @ViewBuilder
     private func step(_ title: String, keeping count: Int, isParent: Bool) -> some View {
         let button = Button {
@@ -501,7 +502,16 @@ private struct EverythingElseBreadcrumb: View {
         .help(count == 0 ? String(localized: "Back to the whole map") : String(localized: "Back to \(title)"))
         .accessibilityHint("Goes back up to here")
         if isParent {
-            button.keyboardShortcut(.upArrow, modifiers: [.command])
+            button
+                .keyboardShortcut(.upArrow, modifiers: [.command])
+                .background {
+                    Button(title) { onClose(count) }
+                        .keyboardShortcut("[", modifiers: [.command])
+                        .frame(width: 0, height: 0)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
         } else {
             button
         }
@@ -743,6 +753,7 @@ private struct EverythingElseNestedMap: View {
     @State private var opened: EverythingElseMapSelection?
     /// Where the pointer is, so the hover label sits beside it.
     @State private var hoverPoint: CGPoint = .zero
+    @State private var pointerIsInside = false
     /// The hover label's size, read from the label itself, so it can be kept
     /// inside the map without guessing its width.
     @State private var hoverLabelSize: CGSize = .zero
@@ -795,6 +806,39 @@ private struct EverythingElseNestedMap: View {
     /// The label's distance from the tile's left and right edges.
     private static let labelInset: CGFloat = AppStyle.Spacing.xxSmallPlus
     private static let settle = EverythingElseMotion.curve
+    static let lookInsideHint = String(localized: "Double-click to look inside")
+
+    /// The folder a tile stands for, when it can be opened.
+    private static func openableFolder(_ tile: EverythingElseMapLayout.Tile, store: PurgeStore) -> EverythingElseFolder? {
+        guard case .folder(let folder) = tile.item.kind, store.everythingElseCanOpen(folder) else { return nil }
+        return folder
+    }
+
+    /// The folder under the pointer, for Return and Command–Down Arrow, as in
+    /// Finder and other disk maps. Nothing while the map is under glass.
+    private func pointedFolder(in layout: EverythingElseMapLayout) -> EverythingElseFolder? {
+        guard isComplete, !isUnderGlass, case .item(let id) = hovered,
+              let tile = layout.tiles.first(where: { $0.id == id })
+        else { return nil }
+        return Self.openableFolder(tile, store: store)
+    }
+
+    /// Return and Command–Down Arrow open the folder under the pointer. The
+    /// buttons are never seen; they are there for their shortcuts, which do
+    /// nothing, and let the key through, when no folder is under the pointer.
+    private func lookInsideKeys(_ folder: EverythingElseFolder?) -> some View {
+        ZStack {
+            Button("Look Inside") { if let folder { store.openEverythingElseFolder(folder) } }
+                .keyboardShortcut(.return, modifiers: [])
+            Button("Look Inside") { if let folder { store.openEverythingElseFolder(folder) } }
+                .keyboardShortcut(.downArrow, modifiers: [.command])
+        }
+        .disabled(folder == nil)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 
     private var isComplete: Bool { breakdown?.isComplete == true }
     /// The glass is down while the walk is queued or running, and until the
@@ -846,6 +890,7 @@ private struct EverythingElseNestedMap: View {
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                 .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
+                .background { lookInsideKeys(pointedFolder(in: layout)) }
                 .contentShape(Rectangle())
                 .animation(reduceMotion ? nil : EverythingElseMotion.fade, value: isUnderGlass)
                 .onAppear {
@@ -863,9 +908,11 @@ private struct EverythingElseNestedMap: View {
                     switch hoverPhase {
                     case .active(let point):
                         hoverPoint = point
+                        pointerIsInside = true
                         let target = Self.selection(at: point, in: layout)
                         if target != hovered { hovered = target }
                     case .ended:
+                        pointerIsInside = false
                         hovered = nil
                     }
                 }
@@ -1075,6 +1122,11 @@ private struct EverythingElseNestedMap: View {
                 leaving = []
                 revealingTileID = nil
             }
+            // A still pointer points at the tile now under it, so Return can
+            // go further in without a nudge of the mouse.
+            if pointerIsInside, hovered == nil, let shown {
+                hovered = Self.selection(at: hoverPoint, in: shown)
+            }
         }
     }
 
@@ -1246,9 +1298,17 @@ private struct EverythingElseNestedMap: View {
             openable = folder
         }
         return Button {
-            opened = selection
+            // The second click of a double-click opens a folder, as in Finder.
+            // The first has already shown the details; they close as it opens.
+            if let openable, (NSApp.currentEvent?.clickCount ?? 1) >= 2 {
+                opened = nil
+                store.openEverythingElseFolder(openable)
+            } else {
+                opened = selection
+            }
         } label: {
             tileFace(tile)
+                .modifier(EverythingElseLookInsideTooltip(shows: openable != nil && Self.carriesOwnLabel(tile)))
                 .overlay {
                     RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                         .strokeBorder(AppColors.textPrimary, lineWidth: isRinged ? 2 : 0)
@@ -1269,6 +1329,11 @@ private struct EverythingElseNestedMap: View {
         .accessibilityLabel(EverythingElseMapLabel.title(item) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
         .accessibilityHint("Shows what this is and what you can do about it")
         .modifier(EverythingElseLookInsideAction(folder: openable) { store.openEverythingElseFolder($0) })
+    }
+
+    /// Whether a tile is big enough to show its name and size itself.
+    private static func carriesOwnLabel(_ tile: EverythingElseMapLayout.Tile) -> Bool {
+        tile.rect.width >= labelWidth && tile.rect.height >= labelHeight
     }
 
     /// A tile of the level being left, moving with the zoom as it fades.
@@ -1311,7 +1376,7 @@ private struct EverythingElseNestedMap: View {
         // the label is for the tiles that had to drop one or both.
         if case .item(let id) = hovered, opened != hovered,
            let tile = layout.tiles.first(where: { $0.id == id }),
-           !(tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight) {
+           !Self.carriesOwnLabel(tile) {
             let item = tile.item
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(EverythingElseMapLabel.title(item))
@@ -1322,6 +1387,12 @@ private struct EverythingElseNestedMap: View {
                     .monospacedDigit()
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
+                if Self.openableFolder(tile, store: store) != nil {
+                    Text(Self.lookInsideHint)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
             }
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
@@ -1403,6 +1474,22 @@ private struct EverythingElseLookInsideAction: ViewModifier {
     func body(content: Content) -> some View {
         if let folder {
             content.accessibilityAction(named: Text("Look Inside")) { open(folder) }
+        } else {
+            content
+        }
+    }
+}
+
+/// A tooltip saying a double-click opens the tile. A tile too small for its
+/// own label gets the line in the hover label instead, so the two never show
+/// at once. It sits on the tile's face, inside the button, so the button
+/// keeps its VoiceOver hint.
+private struct EverythingElseLookInsideTooltip: ViewModifier {
+    let shows: Bool
+
+    func body(content: Content) -> some View {
+        if shows {
+            content.help(EverythingElseNestedMap.lookInsideHint)
         } else {
             content
         }
@@ -1943,7 +2030,9 @@ struct EverythingElseHeaderBar: View {
             // A light fill without an outline: lighter than Measure again, with an
             // edge that lines up with the heading below it.
             .buttonStyle(.purge(.soft))
-            .keyboardShortcut("[", modifiers: [.command])
+            // Inside a folder, Command–[ goes back up a step instead: the
+            // breadcrumb's step above the open folder takes it.
+            .keyboardShortcut(store.everythingElseOpenFolders.isEmpty ? KeyboardShortcut("[", modifiers: [.command]) : nil)
             .help("Back to the Overview")
 
             Spacer(minLength: AppStyle.Spacing.medium)
