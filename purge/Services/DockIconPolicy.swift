@@ -29,6 +29,7 @@ protocol ActivationPolicyHost: AnyObject {
     func setPolicy(_ policy: NSApplication.ActivationPolicy) -> Bool
     func revealWindow()
     func afterCurrentRunloopTurn(_ work: @escaping () -> Void)
+    func afterModalEnds(_ work: @escaping () -> Void)
 }
 
 extension NSApplication: ActivationPolicyHost {
@@ -48,6 +49,14 @@ extension NSApplication: ActivationPolicyHost {
     func afterCurrentRunloopTurn(_ work: @escaping () -> Void) {
         onNextRunloopTurn(work)
     }
+
+    /// A modal alert runs the run loop in its own mode, so a block queued for the
+    /// default mode waits until the alert has closed, then runs at once.
+    func afterModalEnds(_ work: @escaping () -> Void) {
+        RunLoop.main.perform(inModes: [.default]) {
+            MainActor.assumeIsolated(work)
+        }
+    }
 }
 
 /// Shows or hides the Dock icon by flipping the app's activation policy.
@@ -56,7 +65,11 @@ extension NSApplication: ActivationPolicyHost {
 /// entry, and no app menu bar along the top of the screen.
 @MainActor
 enum DockIconPolicy {
-    static func apply(hidesDockIcon: Bool, host: ActivationPolicyHost) {
+    /// `revealsWindow: false` changes the policy and stops there. The open route
+    /// uses it (#438): the watcher's link must not bring back a window the user
+    /// closed, because the deleted-apps review decides whether the window shows.
+    /// `hasRevealableWindow` matches a closed window too, since SwiftUI keeps it.
+    static func apply(hidesDockIcon: Bool, revealsWindow: Bool = true, host: ActivationPolicyHost) {
         let target: NSApplication.ActivationPolicy = hidesDockIcon ? .accessory : .regular
 
         // Re-applying the current policy makes the menu bar flicker for nothing.
@@ -66,6 +79,7 @@ enum DockIconPolicy {
         // so skipping is enough — the pref is persisted and applies on next launch.
         guard !host.isShowingModal else { return }
         guard host.setPolicy(target) else { return }
+        guard revealsWindow else { return }
 
         // Hiding with no window open: nothing to bring forward, and activating would
         // steal focus to show the user nothing. Showing always reveals, because that
@@ -78,7 +92,39 @@ enum DockIconPolicy {
         }
     }
 
-    static func apply(hidesDockIcon: Bool) {
-        apply(hidesDockIcon: hidesDockIcon, host: NSApplication.shared)
+    static func apply(hidesDockIcon: Bool, revealsWindow: Bool = true) {
+        apply(hidesDockIcon: hidesDockIcon, revealsWindow: revealsWindow, host: NSApplication.shared)
+    }
+
+    /// Hides the Dock icon again after macOS brought it back (#438).
+    ///
+    /// When LaunchServices opens a copy that is already running, it makes the app
+    /// a regular one: the watcher's `purge://` link, `open -a`, Spotlight and
+    /// Finder all do it, and the Dock icon then stays until Purge quits. By the
+    /// time the open or reopen callback runs, the switch has already happened,
+    /// and setting the policy again there holds. Reads the store's live value, not
+    /// the saved one, so a state that keeps the Dock icon on purpose keeps it.
+    ///
+    /// An open can arrive while the cleaning alert's modal loop runs. `apply`
+    /// will not change the policy under the alert, so this waits until the alert
+    /// closes, then reads the value again and applies it.
+    static func restoreAfterOpen(
+        revealsWindow: Bool,
+        host: ActivationPolicyHost,
+        hidesDockIcon: @escaping @MainActor () -> Bool
+    ) {
+        guard !host.isShowingModal else {
+            host.afterModalEnds {
+                restoreAfterOpen(revealsWindow: revealsWindow, host: host, hidesDockIcon: hidesDockIcon)
+            }
+            return
+        }
+        apply(hidesDockIcon: hidesDockIcon(), revealsWindow: revealsWindow, host: host)
+    }
+
+    static func restoreAfterOpen(revealsWindow: Bool) {
+        restoreAfterOpen(revealsWindow: revealsWindow, host: NSApplication.shared) {
+            StartupPreferenceStore.shared.hidesDockIcon
+        }
     }
 }
