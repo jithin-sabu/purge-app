@@ -402,24 +402,31 @@ struct EverythingElseView: View {
 
 /// The heading while a folder is open on the map (#437): the way back up, one
 /// step per folder. Each step above the open folder goes back to it; the open
-/// folder itself is the heading. A deep path keeps the first step and the last
-/// two, with an ellipsis between. Command–Up Arrow goes up one folder, as in
-/// Finder.
+/// folder itself is the heading. The whole path shows while it fits; one too
+/// long for the row keeps the first step and the last two, with an ellipsis
+/// between. Command–Up Arrow goes up one folder, as in Finder.
 private struct EverythingElseBreadcrumb: View {
     let openFolders: [EverythingElseFolder]
     /// How many folders stay open: 0 is the whole map.
     let onClose: (Int) -> Void
 
-    /// Steps after the first that stay shown before the ellipsis takes the rest.
+    /// Steps after the first that stay shown when the path is too long to fit.
     private static let trailingSteps = 2
     /// A size down from the page title: on the whole map "Everything else" is
     /// the heading, inside a folder the path is, and a path is longer.
     private static let font = AppStyle.Typography.sectionTitle
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            path(hiding: 0)
+            path(hiding: max(0, openFolders.count - Self.trailingSteps))
+        }
+    }
+
+    /// The path with the first `hidden` folders under an ellipsis.
+    private func path(hiding hidden: Int) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
             step(String(localized: "Everything else"), keeping: 0)
-            let hidden = max(0, openFolders.count - Self.trailingSteps)
             if hidden > 0 {
                 separator
                 Text(verbatim: "…")
@@ -488,9 +495,19 @@ enum EverythingElseMotion {
     static let fade = Animation.easeInOut(duration: 0.4)
     /// How long `curve` takes, so the glass over an opened folder waits for it.
     static let zoomDuration: TimeInterval = 0.7
-    /// The level being left fades a little ahead of the zoom, so it is gone
-    /// by the time the new level settles.
-    static let leavingFade = Animation.easeOut(duration: 0.5)
+    /// Going in, the level being left fades as it moves out, so it is half
+    /// gone when it is half off the map.
+    static let leavingFadeIn = curve
+    /// Going back up, it holds until it has nearly shrunk into its tile and
+    /// fades at the end. Inside a folder every tile has the same colour, so a
+    /// level that fades early reads as a fade, not as a step back out.
+    static let leavingFadeUp = Animation.easeOut(duration: 0.2).delay(0.5)
+    /// The folder's own tile comes in under it first, so the two are never
+    /// both see-through at once, which muddies the colour.
+    static let revealUp = Animation.easeIn(duration: 0.2).delay(0.3)
+    /// Its names go first either way, so they never sit over the names of
+    /// the level coming in.
+    static let leavingLabelFade = Animation.easeOut(duration: 0.3)
     /// The capsule's width following its text, the way the Clean button's does.
     static let capsuleWidth = Animation.spring(response: 0.38, dampingFraction: 0.92, blendDuration: 0.12)
     static let capsuleText = Animation.easeInOut(duration: 0.45)
@@ -731,9 +748,16 @@ private struct EverythingElseNestedMap: View {
     @State private var leaving: [EverythingElseMapLayout.Tile] = []
     @State private var leavingRects: [String: CGRect] = [:]
     @State private var leavingOpacity: Double = 0
+    @State private var leavingLabelOpacity: Double = 0
     /// Going back up, the leaving tiles sit over the map they shrink into;
     /// going in, under the tiles growing over them.
     @State private var leavingOnTop = false
+    /// Going back up, the tile of the folder being left. It is hidden while
+    /// that folder's tiles shrink into its place: drawn under them in the
+    /// same colour, it would fill the gaps between them, and they would read
+    /// as one block fading rather than a level going back into its tile.
+    @State private var revealingTileID: String?
+    @State private var revealOpacity: Double = 1
     @State private var leavingGeneration = 0
 
     /// Tiles smaller than this keep their colour but drop the label; the hover
@@ -764,6 +788,9 @@ private struct EverythingElseNestedMap: View {
                     ZStack(alignment: .topLeading) {
                         ForEach(layout.tiles) { tile in
                             tileView(tile, rect: drawnRect(tile, origin: layout.originTileID))
+                                // Going back up, the folder's own tile comes in as
+                                // its folders fade, in the place they shrank into.
+                                .opacity(tile.id == revealingTileID ? revealOpacity : 1)
                                 // The remainder sits underneath, so a piece leaving
                                 // it is seen growing out of it.
                                 .zIndex(tile.id == layout.originTileID ? 0 : 1)
@@ -949,14 +976,20 @@ private struct EverythingElseNestedMap: View {
         let targets = Self.targets(new)
         let full = CGRect(origin: .zero, size: new.size)
         let oldRects = Self.targets(old).merging(drawn) { _, current in current }
-        // Every tile of the old level that the new one doesn't keep, from
-        // where it is now.
-        let going = old.tiles.filter { targets[$0.id] == nil }
+        // Every tile of the old level leaves. No tile is on both: a level's
+        // loose files and smaller folders share an id with the level above,
+        // and a kept one would jump to its new place instead of moving.
+        var going = old.tiles
         var start: [String: CGRect]?
         var leavingTargets: [String: CGRect] = [:]
+        var revealing: String?
         if new.openPaths.count > old.openPaths.count {
             let id = new.openPaths[old.openPaths.count]
             if let anchor = oldRects[id] {
+                // The opened tile itself goes at once: its folders take its
+                // place exactly, and its colour under them would fill the gaps
+                // that show them as folders.
+                going.removeAll { $0.id == id }
                 start = targets.mapValues { Self.map($0, from: full, to: anchor) }
                 // The camera's move: what was around the opened tile goes out
                 // past the edges as that tile grows to fill the map.
@@ -967,6 +1000,7 @@ private struct EverythingElseNestedMap: View {
         } else if new.openPaths.count < old.openPaths.count {
             let id = old.openPaths[new.openPaths.count]
             if let anchor = targets[id] {
+                revealing = id
                 start = targets.mapValues { Self.map($0, from: anchor, to: full) }
                 // Back into the tile they were inside.
                 for tile in going {
@@ -980,6 +1014,7 @@ private struct EverythingElseNestedMap: View {
             withTransaction(still) {
                 drawn = targets
                 leaving = []
+                revealingTileID = nil
             }
             return
         }
@@ -991,20 +1026,29 @@ private struct EverythingElseNestedMap: View {
             leaving = going
             leavingRects = oldRects.filter { id, _ in leavingTargets[id] != nil }
             leavingOpacity = 1
+            leavingLabelOpacity = 1
             leavingOnTop = new.openPaths.count < old.openPaths.count
+            revealingTileID = revealing
+            revealOpacity = 0
         }
+        let fade = leavingOnTop ? EverythingElseMotion.leavingFadeUp : EverythingElseMotion.leavingFadeIn
         DispatchQueue.main.async {
             withAnimation(Self.settle) {
                 drawn = targets
                 leavingRects = leavingTargets
             }
-            withAnimation(EverythingElseMotion.leavingFade) { leavingOpacity = 0 }
+            withAnimation(fade) { leavingOpacity = 0 }
+            withAnimation(EverythingElseMotion.revealUp) { revealOpacity = 1 }
+            withAnimation(EverythingElseMotion.leavingLabelFade) { leavingLabelOpacity = 0 }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + EverythingElseMotion.zoomDuration + 0.05) {
             guard leavingGeneration == generation else { return }
             var still = Transaction()
             still.disablesAnimations = true
-            withTransaction(still) { leaving = [] }
+            withTransaction(still) {
+                leaving = []
+                revealingTileID = nil
+            }
         }
     }
 
@@ -1128,7 +1172,7 @@ private struct EverythingElseNestedMap: View {
 
     /// A tile's fill and label, with nothing to click: what `itemTile` draws
     /// inside its button, and what a tile leaving the map draws as it goes.
-    private func tileFace(_ tile: EverythingElseMapLayout.Tile) -> some View {
+    private func tileFace(_ tile: EverythingElseMapLayout.Tile, labelOpacity: Double = 1) -> some View {
         let item = tile.item
         let bucket = item.group.bucket
         let showsSize = tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight
@@ -1162,6 +1206,7 @@ private struct EverythingElseNestedMap: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Self.labelInset)
                     .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
+                    .opacity(labelOpacity)
                 }
             }
     }
@@ -1203,7 +1248,7 @@ private struct EverythingElseNestedMap: View {
     /// A tile of the level being left, moving with the zoom as it fades.
     private func leavingTile(_ tile: EverythingElseMapLayout.Tile) -> some View {
         let rect = leavingRects[tile.id] ?? tile.rect
-        return tileFace(tile)
+        return tileFace(tile, labelOpacity: leavingLabelOpacity)
             .frame(width: rect.width, height: rect.height)
             .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
             .position(x: rect.midX, y: rect.midY)
