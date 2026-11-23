@@ -187,8 +187,10 @@ extension PurgeStore {
            contents.folders.contains(where: { $0.path == path }) {
             return contents.openablePaths.contains(path)
         }
+        // Asked for every tile on every render, so string work only: a URL
+        // made without `isDirectory` would stat the disk to find out.
         return EverythingElseFolderOpening.canOpen(
-            folder.url,
+            URL(fileURLWithPath: path, isDirectory: true),
             group: folder.group,
             access: hasFullDiskAccess ? .full : .limited,
             home: FileManager.default.homeDirectoryForCurrentUser

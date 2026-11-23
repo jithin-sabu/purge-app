@@ -1075,6 +1075,10 @@ private struct EverythingElseNestedMap: View {
         let showsSize = tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight
         let showsName = showsSize || (tile.rect.width >= Self.labelWidth - 12 && tile.rect.height >= Self.nameOnlyHeight)
         let titleLines = tile.rect.height >= 56 ? 2 : 1
+        var openable: EverythingElseFolder?
+        if case .folder(let folder) = item.kind, store.everythingElseCanOpen(folder) {
+            openable = folder
+        }
         return Button {
             opened = selection
         } label: {
@@ -1127,9 +1131,7 @@ private struct EverythingElseNestedMap: View {
         .contextMenu { tileMenu(item) }
         .accessibilityLabel(EverythingElseMapLabel.title(item) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
         .accessibilityHint("Shows what this is and what you can do about it")
-        .accessibilityAction(named: Text("Look Inside")) {
-            if case .folder(let folder) = item.kind { store.openEverythingElseFolder(folder) }
-        }
+        .modifier(EverythingElseLookInsideAction(folder: openable) { store.openEverythingElseFolder($0) })
     }
 
     @ViewBuilder
@@ -1240,6 +1242,20 @@ private struct EverythingElseNestedMap: View {
             .font(AppStyle.Typography.metadata)
             .foregroundStyle(AppColors.textTertiary)
             .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// Look Inside as an accessibility action, on the tiles that can open only.
+private struct EverythingElseLookInsideAction: ViewModifier {
+    let folder: EverythingElseFolder?
+    let open: (EverythingElseFolder) -> Void
+
+    func body(content: Content) -> some View {
+        if let folder {
+            content.accessibilityAction(named: Text("Look Inside")) { open(folder) }
+        } else {
+            content
         }
     }
 }
