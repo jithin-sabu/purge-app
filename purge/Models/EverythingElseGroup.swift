@@ -51,6 +51,19 @@ nonisolated enum EverythingElseGroup: String, CaseIterable, Sendable, Codable {
         }
     }
 
+    /// Whether the group's folders can be opened on the map to show the folders
+    /// inside them (#437). Not the groups measured as one block: a library's or
+    /// another user's insides are not something to list, and walking a media
+    /// library or Mail can raise a privacy prompt in Purge's name.
+    var opensFolders: Bool {
+        switch self {
+        case .otherApps, .protectedCaches, .developer, .appData, .documents:
+            return true
+        case .mediaLibraries, .mailAndMessages, .otherUsers, .trash, .macOS, .systemData:
+            return false
+        }
+    }
+
     /// What the user can do about the space, which is what the page sorts by.
     var bucket: EverythingElseBucket {
         switch self {

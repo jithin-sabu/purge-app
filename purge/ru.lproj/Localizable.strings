@@ -1524,3 +1524,24 @@
 "Reached the scan limit of %lld folder levels." = "Достигнут предел глубины сканирования: %lld уровней.";
 
 "Skipped subfolders because this folder has more than %lld entries." = "Подпапки пропущены, поскольку в этой папке более %lld элементов.";
+
+"Look Inside" = "Заглянуть внутрь";
+
+"Show the folders inside, by size" = "Показать папки внутри по размеру";
+"Double-click to look inside" = "Дважды щёлкните, чтобы заглянуть внутрь";
+"Go back to a folder further up" = "Вернуться в одну из папок выше";
+"Folders further up" = "Папки выше";
+"Loose files and excluded folders" = "Отдельные файлы и исключённые папки";
+"Files that sit directly in this folder, and the folders inside it you excluded from scans." = "Файлы, лежащие прямо в этой папке, и папки внутри неё, которые вы исключили из сканирования.";
+
+"Back to the whole map" = "Назад ко всей карте";
+
+"Back to %@" = "Назад к «%@»";
+
+"Goes back up to here" = "Возвращает на этот уровень";
+
+"Files that sit directly in this folder rather than in a folder inside it." = "Файлы, которые лежат прямо в этой папке, а не во вложенной папке.";
+
+"1 folder inside needs Full Disk Access to measure" = "Для измерения одной папки внутри нужен полный доступ к диску";
+
+"%lld folders inside need Full Disk Access to measure" = "Папок внутри, которым для измерения нужен полный доступ к диску: %lld";

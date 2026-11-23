@@ -22,6 +22,9 @@ struct ScanSources {
     var fullAccessStep: ((ScanStep, _ forced: Bool) async -> Void)?
     /// The Everything else walk (#220), with the access it may read with.
     var everythingElse: (ScanAccess) -> AsyncStream<EverythingElseMeasureEvent>
+    /// One folder opened on the Everything else map (#437): the folders inside
+    /// it, sized. Nil when it can't be read or the caller was cancelled.
+    var everythingElseFolder: (URL, EverythingElseGroup, ScanAccess, @escaping @Sendable (Double) -> Void) async -> EverythingElseFolderContents?
     /// The uninstaller's Command-line tools scan (#225).
     var commandLineTools: () async -> CommandLineToolScanResult
     /// Git status for the rows a scan found, keyed by standardized path. A clean
@@ -51,6 +54,17 @@ struct ScanSources {
             aiModels: { aiModelScanner.scanStream(minBytes: $0, staleDays: $1, access: $2, pass: $3) },
             fullAccessStep: nil,
             everythingElse: { everythingElseMeasurer.measureStream(access: $0) },
+            everythingElseFolder: { url, group, access, progress in
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let task = Task.detached(priority: .userInitiated) {
+                    EverythingElseFolderSizer.contents(of: url, group: group, access: access, home: home, progress: progress)
+                }
+                return await withTaskCancellationHandler {
+                    await task.value
+                } onCancel: {
+                    task.cancel()
+                }
+            },
             commandLineTools: { await CommandLineToolScanner().scan() },
             gitStatuses: { await gitChecker.cleanupStatuses(for: $0) },
             prepareFullScan: { access in

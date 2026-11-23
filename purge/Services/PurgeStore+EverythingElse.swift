@@ -27,6 +27,22 @@ struct EverythingElseBreakdownKey: Equatable {
     let excludedPaths: Set<String>
 }
 
+/// A folder opened on the map being sized, and how far along, 0...1 (#437).
+nonisolated struct EverythingElseFolderSizing: Equatable, Sendable {
+    let path: String
+    let name: String
+    var fraction: Double
+}
+
+/// Everything an opened folder's tiles are computed from.
+struct EverythingElseLevelKey: Equatable {
+    let openPaths: [String]
+    let contentsRevision: Int
+    let inputsRevision: Int
+    let measurementRevision: Int
+    let excludedPaths: Set<String>
+}
+
 /// The Everything else walk (#159, #220): measuring on demand, and the read-only
 /// breakdown the drill-in shows. There is no delete path in this file, and the
 /// views built on it have none either; the only ways out of these screens are
@@ -46,6 +62,7 @@ extension PurgeStore {
     /// The Overview row was clicked: Everything else as its own page, measured
     /// if this session has no result yet.
     func showEverythingElsePage() {
+        closeEverythingElseFolders(keeping: 0)
         overviewPage = .everythingElse
         selectedTab = .overview
         requestScanIfNeeded(.everythingElse)
@@ -79,6 +96,11 @@ extension PurgeStore {
         let generation = everythingElseMeasureGeneration
         let previous = everythingElseMeasurement?.isComplete == true ? everythingElseMeasurement : nil
         isMeasuringEverythingElse = true
+        // Opened folders were claimed against the last walk's figures.
+        closeEverythingElseFolders(keeping: 0)
+        everythingElseFolderContents = [:]
+        everythingElseOpenableCache = [:]
+        everythingElseFolderContentsRevision &+= 1
         let access: ScanAccess = hasFullDiskAccess ? .full : .limited
         var measurement = EverythingElseMeasurement(access: access)
         everythingElseMeasurement = measurement
@@ -147,7 +169,261 @@ extension PurgeStore {
     /// rows under it go too, so nothing excluded stays ready to clean. Nothing
     /// is deleted; the remainder absorbs its bytes.
     func hideFromEverythingElse(_ folder: EverythingElseFolder) {
+        // An opened folder at or under the excluded one closes with it.
+        if let index = everythingElseOpenFolders.firstIndex(where: { PathContainment.isSameOrInside($0.path, folder.path) }) {
+            closeEverythingElseFolders(keeping: index)
+        }
         excludeFoldersFromScans([folder.url])
+    }
+
+    // MARK: Opening a folder (#437)
+
+    /// Whether a folder tile can be opened to show the folders inside it. A
+    /// folder inside an opened one can when its sizing found it could; a tile
+    /// on the whole map, by its group and the access the scan has now.
+    func everythingElseCanOpen(_ folder: EverythingElseFolder) -> Bool {
+        let path = OverviewSizedItem.normalized(folder.path)
+        if let open = everythingElseOpenFolders.last,
+           let contents = everythingElseFolderContents[OverviewSizedItem.normalized(open.path)],
+           contents.folders.contains(where: { $0.path == path }) {
+            return contents.openablePaths.contains(path)
+        }
+        // Asked for every tile on every render. A URL made without
+        // `isDirectory` would stat the disk, and a limited scan's answer
+        // reads links on the way, so each answer is kept until the next walk.
+        let access: ScanAccess = hasFullDiskAccess ? .full : .limited
+        let key = "\(access == .full ? "full" : "limited") \(folder.group.rawValue) \(path)"
+        if let known = everythingElseOpenableCache[key] { return known }
+        let canOpen = EverythingElseFolderOpening.canOpen(
+            URL(fileURLWithPath: path, isDirectory: true),
+            group: folder.group,
+            access: access,
+            home: FileManager.default.homeDirectoryForCurrentUser
+        )
+        everythingElseOpenableCache[key] = canOpen
+        return canOpen
+    }
+
+    /// How long an open waits for the folder's sizing before the map moves. A
+    /// folder sized within it zooms straight into its tiles; a slower one zooms
+    /// into its own tile and is measured under the glass.
+    static let everythingElseOpenGrace: UInt64 = 250_000_000
+
+    /// A folder that holds only one folder opens through to it, this many
+    /// steps at most, so a chain like `Metadata/CoreSpotlight` is one click.
+    static let everythingElsePassThroughLimit = 8
+    /// Passed through when everything beside that one folder is under this
+    /// share of the level: a few loose files or an empty folder would
+    /// otherwise stop it, and the map would show one tile anyway.
+    static let everythingElsePassThroughShare = 0.01
+
+    /// Opens a folder on the map: its folders replace the map, sized now unless
+    /// this walk already sized them. Only a folder on the map as it stands can
+    /// be opened, so the path always runs down from a tile. The map waits
+    /// `everythingElseOpenGrace` for the sizing before it moves, and a folder
+    /// whose only content is one folder that opens is passed through.
+    func openEverythingElseFolder(_ folder: EverythingElseFolder) {
+        guard everythingElsePhase == .ready, everythingElseCanOpen(folder) else { return }
+        everythingElseOpenGeneration += 1
+        let generation = everythingElseOpenGeneration
+        everythingElsePendingFolders = [folder]
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.everythingElseOpenGrace)
+            guard let self, self.everythingElseOpenGeneration == generation else { return }
+            self.showPendingEverythingElseFolders()
+        }
+        continueOpeningEverythingElseFolder(folder)
+    }
+
+    /// Goes back up the path: `count` folders stay open, 0 shows the whole map.
+    /// A folder passed through closes too, since its level is one tile
+    /// filling the map, with nothing to zoom back out to. An open still
+    /// waiting to show is dropped, and a sizing for a folder that closes stops.
+    func closeEverythingElseFolders(keeping count: Int) {
+        everythingElseOpenGeneration += 1
+        everythingElsePendingFolders = []
+        let passedThrough = everythingElsePassedThroughFolders()
+        var kept = max(0, min(count, everythingElseOpenFolders.count))
+        while kept > 0, kept < everythingElseOpenFolders.count,
+              passedThrough.contains(OverviewSizedItem.normalized(everythingElseOpenFolders[kept - 1].path)) {
+            kept -= 1
+        }
+        if kept < everythingElseOpenFolders.count {
+            everythingElseOpenFolders.removeSubrange(kept...)
+        }
+        if let sizing = everythingElseFolderSizing,
+           !everythingElseOpenFolders.contains(where: { OverviewSizedItem.normalized($0.path) == sizing.path }) {
+            cancelEverythingElseFolderSizing()
+        }
+    }
+
+    /// The tiles for the folder open now, or nil on the whole map and while its
+    /// sizing runs. Claimed against the categories and the groups before the
+    /// outermost open folder, as the breakdown claims, so the tiles add up to it.
+    func everythingElseOpenLevel() -> EverythingElseFolderLevel? {
+        guard let top = everythingElseOpenFolders.first, let open = everythingElseOpenFolders.last else { return nil }
+        let key = EverythingElseLevelKey(
+            openPaths: everythingElseOpenFolders.map(\.path),
+            contentsRevision: everythingElseFolderContentsRevision,
+            inputsRevision: categoryInputsRevision,
+            measurementRevision: everythingElseMeasurementRevision,
+            excludedPaths: excludedPaths
+        )
+        if let cached = everythingElseLevelCache, cached.key == key {
+            return cached.level
+        }
+        let level = everythingElseLevel(for: open, top: top)
+        everythingElseLevelCache = (key, level)
+        return level
+    }
+
+    /// The open folders, by normalized path, that open straight through to the
+    /// next one on the path: their own level would be one tile filling the
+    /// map. Worked out from the figures as they are now, so a folder that an
+    /// exclusion or a new count changes stops being passed through. The path
+    /// shows each with the folder after it as one step.
+    func everythingElsePassedThroughFolders() -> Set<String> {
+        let open = everythingElseOpenFolders
+        guard let top = open.first, open.count > 1 else { return [] }
+        let key = EverythingElseLevelKey(
+            openPaths: open.map(\.path),
+            contentsRevision: everythingElseFolderContentsRevision,
+            inputsRevision: categoryInputsRevision,
+            measurementRevision: everythingElseMeasurementRevision,
+            excludedPaths: excludedPaths
+        )
+        if let cached = everythingElsePassThroughCache, cached.key == key {
+            return cached.paths
+        }
+        var paths: Set<String> = []
+        for (folder, next) in zip(open, open.dropFirst()) {
+            guard let level = everythingElseLevel(for: folder, top: top),
+                  let through = Self.everythingElsePassThrough(of: level),
+                  OverviewSizedItem.normalized(through.path) == OverviewSizedItem.normalized(next.path)
+            else { continue }
+            paths.insert(OverviewSizedItem.normalized(folder.path))
+        }
+        everythingElsePassThroughCache = (key, paths)
+        return paths
+    }
+
+    /// The folder a level opens straight through to: nearly all it holds is
+    /// one folder that opens. Never a level with folders a limited scan
+    /// could not read, so its note that they need Full Disk Access shows.
+    static func everythingElsePassThrough(of level: EverythingElseFolderLevel) -> EverythingElseFolder? {
+        guard level.lockedFolderCount == 0,
+              let biggest = level.items.first,
+              case .folder(let only) = biggest.kind,
+              level.openablePaths.contains(OverviewSizedItem.normalized(only.path)),
+              Double(level.bytes - biggest.bytes) < everythingElsePassThroughShare * Double(level.bytes)
+        else { return nil }
+        return only
+    }
+
+    /// The tiles for `folder` once it is sized, counted below `top`, the
+    /// outermost folder on its path.
+    private func everythingElseLevel(for folder: EverythingElseFolder, top: EverythingElseFolder) -> EverythingElseFolderLevel? {
+        guard let measurement = everythingElseMeasurement,
+              let contents = everythingElseFolderContents[OverviewSizedItem.normalized(folder.path)]
+        else { return nil }
+        let exclusions = ScanExclusions(keys: Set(excludedPaths.map(OverviewSizedItem.normalized)))
+        let claims = measurement
+            .droppingFolders { exclusions.covers(path: $0) }
+            .claims(before: top.path, claimedFirst: overviewLiveItemsInClaimOrder())
+        return EverythingElseFolderLevel(
+            folder: folder,
+            contents: contents.droppingFolders { exclusions.covers(path: $0) },
+            claims: claims
+        )
+    }
+
+    /// The folders opened but not shown yet join the path, so the map moves.
+    private func showPendingEverythingElseFolders() {
+        guard !everythingElsePendingFolders.isEmpty else { return }
+        everythingElseOpenFolders.append(contentsOf: everythingElsePendingFolders)
+        everythingElsePendingFolders = []
+    }
+
+    /// Sizes `folder` unless this walk already did, then lands it.
+    private func continueOpeningEverythingElseFolder(_ folder: EverythingElseFolder) {
+        if everythingElseFolderContents[OverviewSizedItem.normalized(folder.path)] != nil {
+            cancelEverythingElseFolderSizing()
+            everythingElseFolderLanded(folder)
+        } else {
+            sizeEverythingElseFolder(folder)
+        }
+    }
+
+    /// `folder` is sized. If nearly all it holds is one folder that opens,
+    /// that one opens too: still waiting with it if the map has not moved yet, on the
+    /// map at once if it has. Otherwise whatever is waiting is shown.
+    private func everythingElseFolderLanded(_ folder: EverythingElseFolder) {
+        let opened = everythingElseOpenFolders + everythingElsePendingFolders
+        if opened.count < Self.everythingElsePassThroughLimit,
+           let top = opened.first,
+           let level = everythingElseLevel(for: folder, top: top),
+           let only = Self.everythingElsePassThrough(of: level) {
+            if everythingElsePendingFolders.isEmpty {
+                everythingElseOpenFolders.append(only)
+            } else {
+                everythingElsePendingFolders.append(only)
+            }
+            continueOpeningEverythingElseFolder(only)
+            return
+        }
+        everythingElseOpenGeneration += 1
+        showPendingEverythingElseFolders()
+    }
+
+    private func sizeEverythingElseFolder(_ folder: EverythingElseFolder) {
+        cancelEverythingElseFolderSizing()
+        everythingElseFolderGeneration += 1
+        let generation = everythingElseFolderGeneration
+        let path = OverviewSizedItem.normalized(folder.path)
+        everythingElseFolderSizing = EverythingElseFolderSizing(path: path, name: folder.displayName, fraction: 0)
+        let access: ScanAccess = hasFullDiskAccess ? .full : .limited
+        let sources = scanSources
+        // Called on a sizing thread. The store outlives any sizing, so holding
+        // it here until the sizing ends costs nothing.
+        let onProgress: @Sendable (Double) -> Void = { fraction in
+            Task { @MainActor in
+                guard self.everythingElseFolderGeneration == generation,
+                      var sizing = self.everythingElseFolderSizing, sizing.path == path
+                else { return }
+                // Folders finish on their own threads; the figure only moves forward.
+                sizing.fraction = max(sizing.fraction, min(1, fraction))
+                self.everythingElseFolderSizing = sizing
+            }
+        }
+        everythingElseFolderTask = Task { [weak self] in
+            let contents = await sources.everythingElseFolder(folder.url, folder.group, access, onProgress)
+            guard let self, self.everythingElseFolderGeneration == generation, !Task.isCancelled else { return }
+            self.everythingElseFolderSizing = nil
+            self.everythingElseFolderTask = nil
+            guard let contents else {
+                // A folder that can't be read closes again rather than showing
+                // an empty map that would read as an empty folder. One still
+                // waiting goes, and the folders above it show.
+                if let index = self.everythingElsePendingFolders.firstIndex(where: { OverviewSizedItem.normalized($0.path) == path }) {
+                    self.everythingElsePendingFolders.removeSubrange(index...)
+                    self.everythingElseOpenGeneration += 1
+                    self.showPendingEverythingElseFolders()
+                } else if let index = self.everythingElseOpenFolders.firstIndex(where: { OverviewSizedItem.normalized($0.path) == path }) {
+                    self.closeEverythingElseFolders(keeping: index)
+                }
+                return
+            }
+            self.everythingElseFolderContents[path] = contents
+            self.everythingElseFolderContentsRevision &+= 1
+            self.everythingElseFolderLanded(folder)
+        }
+    }
+
+    private func cancelEverythingElseFolderSizing() {
+        everythingElseFolderGeneration += 1
+        everythingElseFolderTask?.cancel()
+        everythingElseFolderTask = nil
+        everythingElseFolderSizing = nil
     }
 
     /// The app that owns a folder, when its name is a bundle id (a container) and

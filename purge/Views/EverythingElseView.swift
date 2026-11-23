@@ -255,16 +255,42 @@ struct EverythingElseView: View {
         )
         // A walk that Stop ended leaves no figures: the map goes back to one tile.
         let shown = phase == .notMeasured ? nil : breakdown
+        let openFolders = shown == nil ? [] : store.everythingElseOpenFolders
+        let level = openFolders.isEmpty ? nil : store.everythingElseOpenLevel()
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             // The heading sits under the way back, in the page itself. The walk's
             // one line of status is at the right of it: why it has not started,
-            // or which group it is on. Plain text that changes in place.
+            // or which group it is on. Plain text that changes in place. With a
+            // folder open (#437) the heading is the way back up, and the right
+            // side says what the open folder holds.
             HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
-                Text("Everything else")
-                    .font(AppStyle.Typography.pageTitle)
-                    .accessibilityAddTraits(.isHeader)
+                if openFolders.isEmpty {
+                    Text("Everything else")
+                        .font(AppStyle.Typography.pageTitle)
+                        .accessibilityAddTraits(.isHeader)
+                } else {
+                    // A blank in the title's size keeps the row as tall as it
+                    // is on the whole map, so the map doesn't move up a few
+                    // points on the way in.
+                    ZStack(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+                        Text(verbatim: " ")
+                            .font(AppStyle.Typography.pageTitle)
+                            .accessibilityHidden(true)
+                        EverythingElseBreadcrumb(openFolders: openFolders, passedThrough: store.everythingElsePassedThroughFolders()) { count in
+                            store.closeEverythingElseFolders(keeping: count)
+                        }
+                    }
+                }
                 Spacer(minLength: AppStyle.Spacing.medium)
-                EverythingElseStatusLine(phase: phase, measurement: store.everythingElseMeasurement)
+                if let level {
+                    Text(formatStorageBytes(level.bytes))
+                        .font(AppStyle.Typography.callout.numbers)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .monospacedDigit()
+                        .fixedSize()
+                } else {
+                    EverythingElseStatusLine(phase: phase, measurement: store.everythingElseMeasurement)
+                }
             }
             bucketFigures(shown)
             EverythingElseNestedMap(
@@ -273,6 +299,13 @@ struct EverythingElseView: View {
                 measurement: store.everythingElseMeasurement,
                 runningStep: store.scanQueue.active,
                 highlightedBucket: highlightedBucket,
+                openFolders: openFolders,
+                level: level,
+                // The glass is for the open folder only: one still waiting to
+                // show is measured with the map left as it is.
+                folderSizing: store.everythingElseFolderSizing.flatMap { sizing in
+                    openFolders.last.map { OverviewSizedItem.normalized($0.path) } == sizing.path ? sizing : nil
+                },
                 onMeasure: { store.measureEverythingElseAgain() }
             )
             if let shown {
@@ -365,6 +398,196 @@ struct EverythingElseView: View {
     }
 }
 
+// MARK: - Breadcrumb
+
+/// The heading while a folder is open on the map (#437): the way back up, one
+/// step per folder. Each step above the open folder goes back to it; the open
+/// folder itself is the heading. A folder that was passed through shares a
+/// step with the folder it holds, as `Metadata / CoreSpotlight`: its own level
+/// would be one tile filling the map. The whole path shows while it fits; one
+/// too long for the row keeps the first step and the last two, then the last
+/// one only, with an ellipsis between that lists the steps it stands for.
+/// "Everything else" and the steps above the open folder never shrink, a
+/// long step name is cut to `parentStepLength` characters, and the open
+/// folder's name gives way instead, so the way back is always there. Command–Up Arrow goes up one step, as in Finder.
+private struct EverythingElseBreadcrumb: View {
+    let openFolders: [EverythingElseFolder]
+    /// Normalized paths of the open folders that were passed through.
+    let passedThrough: Set<String>
+    /// How many folders stay open: 0 is the whole map.
+    let onClose: (Int) -> Void
+
+    /// Steps after the first that stay shown when the path is too long to fit.
+    private static let trailingSteps = 2
+    /// The most characters a step above the open folder shows. A longer name
+    /// is cut in the middle; its tooltip has it in full.
+    private static let parentStepLength = 28
+
+    /// `name` cut in the middle to `limit` characters, with an ellipsis.
+    static func shortened(_ name: String, to limit: Int) -> String {
+        guard name.count > limit else { return name }
+        let side = (limit - 1) / 2
+        return String(name.prefix(side)) + "…" + String(name.suffix(side))
+    }
+    /// A size down from the page title: on the whole map "Everything else" is
+    /// the heading, inside a folder the path is, and a path is longer.
+    private static let font = AppStyle.Typography.sectionTitle
+
+    /// One step on the path: a folder, with any folders passed through to it.
+    private struct Step {
+        let folders: ArraySlice<EverythingElseFolder>
+        /// How many folders stay open when this step is clicked.
+        let keeping: Int
+
+        var id: String { folders.last?.path ?? "" }
+        var name: String { folders.map(\.displayName).joined(separator: " / ") }
+    }
+
+    private var steps: [Step] {
+        var steps: [Step] = []
+        var first = 0
+        for (index, folder) in openFolders.enumerated()
+        where index == openFolders.count - 1 || !passedThrough.contains(OverviewSizedItem.normalized(folder.path)) {
+            steps.append(Step(folders: openFolders[first...index], keeping: index + 1))
+            first = index + 1
+        }
+        return steps
+    }
+
+    var body: some View {
+        let steps = steps
+        ViewThatFits(in: .horizontal) {
+            path(steps, hiding: 0)
+            path(steps, hiding: max(0, steps.count - Self.trailingSteps))
+            // Taken whenever nothing fits, so it must work at any width.
+            path(steps, hiding: max(0, steps.count - 1))
+        }
+        // On the path as a whole, not on the step above the open folder,
+        // which the narrowest path keeps under the ellipsis.
+        .background { upKeys(keeping: steps.count >= 2 ? steps[steps.count - 2].keeping : 0) }
+    }
+
+    /// Command–Up Arrow, as in Finder, and Command–[, as a browser's Back
+    /// does, go up one step. The buttons are never seen.
+    private func upKeys(keeping count: Int) -> some View {
+        ZStack {
+            Button(String(localized: "Goes back up to here")) { onClose(count) }
+                .keyboardShortcut(.upArrow, modifiers: [.command])
+            Button(String(localized: "Goes back up to here")) { onClose(count) }
+                .keyboardShortcut("[", modifiers: [.command])
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// The path with the first `hidden` steps under an ellipsis.
+    private func path(_ steps: [Step], hiding hidden: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
+            step(String(localized: "Everything else"), keeping: 0)
+                .fixedSize()
+            if hidden > 0 {
+                separator
+                EverythingElseHiddenSteps(
+                    steps: steps.prefix(hidden).map { (name: $0.name, keeping: $0.keeping) },
+                    font: Self.font,
+                    onClose: onClose
+                )
+                .fixedSize()
+            }
+            ForEach(Array(steps.enumerated()).dropFirst(hidden), id: \.element.id) { index, item in
+                separator
+                if index == steps.count - 1 {
+                    Text(item.name)
+                        .font(Self.font)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(item.folders.last.map { displayDirectoryPath(for: $0.url) } ?? item.name)
+                        .accessibilityAddTraits(.isHeader)
+                } else {
+                    step(item.name, keeping: item.keeping)
+                        .fixedSize()
+                }
+            }
+        }
+    }
+
+    private var separator: some View {
+        Image(systemName: "chevron.right")
+            .fixedSize()
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(AppColors.textTertiary)
+            .accessibilityHidden(true)
+    }
+
+    /// A step above the open folder.
+    private func step(_ title: String, keeping count: Int) -> some View {
+        Button {
+            onClose(count)
+        } label: {
+            Text(Self.shortened(title, to: Self.parentStepLength))
+                .font(Self.font)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(count == 0 ? String(localized: "Back to the whole map") : String(localized: "Back to \(title)"))
+        .accessibilityLabel(Text(title))
+        .accessibilityHint("Goes back up to here")
+    }
+}
+
+/// The ellipsis in a long path: a click lists the steps it stands for,
+/// outermost first, and each goes back up to its folder.
+private struct EverythingElseHiddenSteps: View {
+    let steps: [(name: String, keeping: Int)]
+    let font: AppStyle.TextStyle
+    let onClose: (Int) -> Void
+
+    @State private var isShown = false
+
+    /// The most characters a name in the list shows before it is cut in the middle.
+    private static let nameLength = 44
+
+    var body: some View {
+        Button {
+            isShown = true
+        } label: {
+            Text(verbatim: "…")
+                .font(font)
+                .foregroundStyle(AppColors.textSecondary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "Go back to a folder further up"))
+        .accessibilityLabel(Text("Folders further up"))
+        .popover(isPresented: $isShown, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                ForEach(steps, id: \.keeping) { step in
+                    Button {
+                        isShown = false
+                        onClose(step.keeping)
+                    } label: {
+                        Text(EverythingElseBreadcrumb.shortened(step.name, to: Self.nameLength))
+                            .font(AppStyle.Typography.body)
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(String(localized: "Back to \(step.name)"))
+                    .accessibilityLabel(Text(step.name))
+                }
+            }
+            .padding(AppStyle.Spacing.small)
+        }
+    }
+}
+
 // MARK: - Motion
 
 /// The page's motions. The tiles divide on `curve` under the glass while the
@@ -376,6 +599,21 @@ enum EverythingElseMotion {
     /// longer starved by it, and it is taken under the glass.
     static let driftDelay: TimeInterval = 1.5
     static let fade = Animation.easeInOut(duration: 0.4)
+    /// How long `curve` takes, so the glass over an opened folder waits for it.
+    static let zoomDuration: TimeInterval = 0.7
+    /// Going in, the level being left fades as it moves out, so it is half
+    /// gone when it is half off the map.
+    static let leavingFadeIn = curve
+    /// Going back up, it holds until it has nearly shrunk into its tile and
+    /// fades at the end. Inside a folder every tile has the same colour, so a
+    /// level that fades early reads as a fade, not as a step back out.
+    static let leavingFadeUp = Animation.easeOut(duration: 0.2).delay(0.5)
+    /// The folder's own tile comes in under it first, so the two are never
+    /// both see-through at once, which muddies the colour.
+    static let revealUp = Animation.easeIn(duration: 0.2).delay(0.3)
+    /// Its names go first either way, so they never sit over the names of
+    /// the level coming in.
+    static let leavingLabelFade = Animation.easeOut(duration: 0.3)
     /// The capsule's width following its text, the way the Clean button's does.
     static let capsuleWidth = Animation.spring(response: 0.38, dampingFraction: 0.92, blendDuration: 0.12)
     static let capsuleText = Animation.easeInOut(duration: 0.45)
@@ -436,6 +674,14 @@ private struct EverythingElseMapLayout: Equatable {
     let tiles: [Tile]
     /// The size the map was cut for.
     let size: CGSize
+    /// The folders opened to get here, outermost first (#437). Empty for the
+    /// whole map.
+    let openPaths: [String]
+    /// The tile new tiles grow out of: the remainder on the whole map, the
+    /// opened folder's own tile inside it.
+    let originTileID: String
+    /// True while an opened folder is being sized: its one tile fills the map.
+    let isPlaceholder: Bool
 
     /// The id of the remainder's tile, which is the whole map before anything
     /// is measured.
@@ -455,6 +701,9 @@ private struct EverythingElseMapLayout: Equatable {
     init(breakdown: EverythingElseBreakdown?, size: CGSize) {
         let whole = CGRect(origin: .zero, size: size).insetBy(dx: Self.tileGap, dy: Self.tileGap)
         self.size = size
+        openPaths = []
+        originTileID = Self.wholeTileID
+        isPlaceholder = false
         guard let breakdown else {
             tiles = [Tile(
                 item: EverythingElseItem(group: .systemData, kind: .system, bytes: 0),
@@ -512,6 +761,37 @@ private struct EverythingElseMapLayout: Equatable {
         }
         self.tiles = tiles
     }
+
+    /// The map for an opened folder (#437): a tile per folder inside it, and
+    /// the loose files, in the opened tile's colour. Before its sizing lands,
+    /// one tile for the folder itself fills the map.
+    init(level: EverythingElseFolderLevel?, folder: EverythingElseFolder, openPaths: [String], size: CGSize) {
+        let whole = CGRect(origin: .zero, size: size).insetBy(dx: Self.tileGap, dy: Self.tileGap)
+        self.size = size
+        self.openPaths = openPaths
+        originTileID = folder.path
+        let rows: [EverythingElseItem] = (level?.items ?? []).filter { $0.bytes > 0 }
+        guard !rows.isEmpty else {
+            isPlaceholder = level == nil
+            let item = EverythingElseItem(group: folder.group, kind: .folder(folder), bytes: folder.bytes)
+            tiles = [Tile(item: item, rect: Self.onPixelGrid(whole.insetBy(dx: Self.tileGap, dy: Self.tileGap)), shade: 0)]
+            return
+        }
+        isPlaceholder = false
+        let total = rows.reduce(0.0) { $0 + Double($1.bytes) }
+        let minimumWeight = Double(Self.minimumTileArea) * total / Double(max(1, whole.width * whole.height))
+        let items = EverythingElseSection.rollingUpTinyRows(rows, group: folder.group, below: minimumWeight)
+            .sorted { $0.bytes > $1.bytes }
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        var tiles: [Tile] = []
+        for (index, tile) in TreemapLayout.squarify(items.map { TreemapItem(id: $0.id, weight: Double($0.bytes)) }, in: whole).enumerated() {
+            guard let item = byID[tile.id] else { continue }
+            let rect = Self.onPixelGrid(tile.rect.insetBy(dx: Self.tileGap, dy: Self.tileGap))
+            guard rect.width >= 2, rect.height >= 2 else { continue }
+            tiles.append(Tile(item: item, rect: rect, shade: min(index, 4)))
+        }
+        self.tiles = tiles
+    }
 }
 
 // MARK: - Map
@@ -530,6 +810,11 @@ private struct EverythingElseNestedMap: View {
     let measurement: EverythingElseMeasurement?
     let runningStep: ScanStep?
     let highlightedBucket: EverythingElseBucket?
+    /// The folders opened to get here, outermost first, and the tiles for the
+    /// last one once it is sized (#437).
+    let openFolders: [EverythingElseFolder]
+    let level: EverythingElseFolderLevel?
+    let folderSizing: EverythingElseFolderSizing?
     let onMeasure: () -> Void
 
     @EnvironmentObject private var store: PurgeStore
@@ -538,6 +823,7 @@ private struct EverythingElseNestedMap: View {
     @State private var opened: EverythingElseMapSelection?
     /// Where the pointer is, so the hover label sits beside it.
     @State private var hoverPoint: CGPoint = .zero
+    @State private var pointerIsInside = false
     /// The hover label's size, read from the label itself, so it can be kept
     /// inside the map without guessing its width.
     @State private var hoverLabelSize: CGSize = .zero
@@ -556,6 +842,30 @@ private struct EverythingElseNestedMap: View {
     /// for `driftDelay`, so the map is still when it comes into view.
     @State private var holdsGlass = false
     @State private var liftWork: DispatchWorkItem?
+    /// When the zoom into or out of a folder settles, so a folder's tiles that
+    /// land mid-zoom wait for it rather than jump in under a moving tile.
+    @State private var zoomEndsAt = Date.distantPast
+    /// Keeps the glass down while landed tiles wait for the zoom to settle.
+    @State private var holdsFolderGlass = false
+    /// The last folder sizing, so the capsule keeps its name through that wait.
+    @State private var lastFolderSizing: EverythingElseFolderSizing?
+    /// The tiles of the level being left (#437). They don't vanish: going in
+    /// they move out past the edges as the opened tile grows, going back up
+    /// they shrink into the tile they came from, and either way they fade.
+    @State private var leaving: [EverythingElseMapLayout.Tile] = []
+    @State private var leavingRects: [String: CGRect] = [:]
+    @State private var leavingOpacity: Double = 0
+    @State private var leavingLabelOpacity: Double = 0
+    /// Going back up, the leaving tiles sit over the map they shrink into;
+    /// going in, under the tiles growing over them.
+    @State private var leavingOnTop = false
+    /// Going back up, the tile of the folder being left. It is hidden while
+    /// that folder's tiles shrink into its place: drawn under them in the
+    /// same colour, it would fill the gaps between them, and they would read
+    /// as one block fading rather than a level going back into its tile.
+    @State private var revealingTileID: String?
+    @State private var revealOpacity: Double = 1
+    @State private var leavingGeneration = 0
 
     /// Tiles smaller than this keep their colour but drop the label; the hover
     /// label names them.
@@ -566,39 +876,94 @@ private struct EverythingElseNestedMap: View {
     /// The label's distance from the tile's left and right edges.
     private static let labelInset: CGFloat = AppStyle.Spacing.xxSmallPlus
     private static let settle = EverythingElseMotion.curve
+    static let lookInsideHint = String(localized: "Double-click to look inside")
+
+    /// The folder a tile stands for, when it can be opened.
+    private static func openableFolder(_ tile: EverythingElseMapLayout.Tile, store: PurgeStore) -> EverythingElseFolder? {
+        guard case .folder(let folder) = tile.item.kind, store.everythingElseCanOpen(folder) else { return nil }
+        return folder
+    }
+
+    /// The folder under the pointer, for Return and Command–Down Arrow, as in
+    /// Finder and other disk maps. Nothing while the map is under glass.
+    private func pointedFolder(in layout: EverythingElseMapLayout) -> EverythingElseFolder? {
+        guard isComplete, !isUnderGlass, case .item(let id) = hovered,
+              let tile = layout.tiles.first(where: { $0.id == id })
+        else { return nil }
+        return Self.openableFolder(tile, store: store)
+    }
+
+    /// Return and Command–Down Arrow open the folder under the pointer. The
+    /// buttons are never seen; they are there for their shortcuts, which do
+    /// nothing, and let the key through, when no folder is under the pointer.
+    private func lookInsideKeys(_ folder: EverythingElseFolder?) -> some View {
+        ZStack {
+            Button("Look Inside") { if let folder { store.openEverythingElseFolder(folder) } }
+                .keyboardShortcut(.return, modifiers: [])
+            Button("Look Inside") { if let folder { store.openEverythingElseFolder(folder) } }
+                .keyboardShortcut(.downArrow, modifiers: [.command])
+        }
+        .disabled(folder == nil)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 
     private var isComplete: Bool { breakdown?.isComplete == true }
+    /// Folders inside the open folder excluded from scans. Their space is in
+    /// its loose files tile, which says so.
+    private var excludedInside: Int { openFolders.isEmpty ? 0 : (level?.excludedFolderCount ?? 0) }
     /// The glass is down while the walk is queued or running, and until the
     /// figures have stopped moving afterwards.
-    private var isUnderGlass: Bool { phase == .waiting || phase == .measuring || holdsGlass }
+    private var isUnderGlass: Bool {
+        phase == .waiting || phase == .measuring || holdsGlass || folderSizing != nil || holdsFolderGlass
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             GeometryReader { geometry in
-                let computed = EverythingElseMapLayout(breakdown: breakdown, size: geometry.size)
+                let computed = openFolders.last.map { folder in
+                    EverythingElseMapLayout(level: level, folder: folder, openPaths: openFolders.map(\.path), size: geometry.size)
+                } ?? EverythingElseMapLayout(breakdown: breakdown, size: geometry.size)
                 let layout = shown ?? computed
                 ZStack(alignment: .topLeading) {
                     ZStack(alignment: .topLeading) {
                         ForEach(layout.tiles) { tile in
-                            tileView(tile, rect: drawnRect(tile))
+                            tileView(tile, rect: drawnRect(tile, origin: layout.originTileID))
+                                // Going back up, the folder's own tile comes in as
+                                // its folders fade, in the place they shrank into.
+                                .opacity(tile.id == revealingTileID ? revealOpacity : 1)
                                 // The remainder sits underneath, so a piece leaving
                                 // it is seen growing out of it.
-                                .zIndex(tile.id == EverythingElseMapLayout.wholeTileID ? 0 : 1)
+                                .zIndex(tile.id == layout.originTileID ? 0 : 1)
                                 .transition(.identity)
                         }
+                        // Its own identity, apart from the tiles arriving: a
+                        // "smaller folders" tile can be on both levels.
+                        ForEach(leaving, id: \.id) { tile in
+                            leavingTile(tile)
+                        }
+                        .zIndex(leavingOnTop ? 2 : 0.5)
                     }
                     if isComplete {
                         hoverLabel(layout: layout, size: geometry.size)
                             .zIndex(2)
                     }
                     if isUnderGlass {
-                        EverythingElseGlass(phase: phase, measurement: measurement, runningStep: runningStep)
+                        EverythingElseGlass(
+                            phase: phase,
+                            measurement: measurement,
+                            runningStep: runningStep,
+                            folder: folderSizing ?? (holdsFolderGlass ? lastFolderSizing : nil)
+                        )
                             .zIndex(3)
                             .transition(.opacity)
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                 .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
+                .background { lookInsideKeys(pointedFolder(in: layout)) }
                 .contentShape(Rectangle())
                 .animation(reduceMotion ? nil : EverythingElseMotion.fade, value: isUnderGlass)
                 .onAppear {
@@ -609,15 +974,18 @@ private struct EverythingElseNestedMap: View {
                 }
                 .onChange(of: computed) { layoutDidChange(to: $0) }
                 .onChange(of: phase) { phaseDidChange(to: $0) }
+                .onChange(of: folderSizing) { if let sizing = $0 { lastFolderSizing = sizing } }
                 // One tracker for the whole map, hit-testing the tiles itself, so
                 // the label always belongs to what is under the pointer.
                 .onContinuousHover(coordinateSpace: .local) { hoverPhase in
                     switch hoverPhase {
                     case .active(let point):
                         hoverPoint = point
+                        pointerIsInside = true
                         let target = Self.selection(at: point, in: layout)
                         if target != hovered { hovered = target }
                     case .ended:
+                        pointerIsInside = false
                         hovered = nil
                     }
                 }
@@ -628,7 +996,9 @@ private struct EverythingElseNestedMap: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Map of Everything else")
 
-            if let breakdown {
+            if !openFolders.isEmpty {
+                folderLockedLine
+            } else if let breakdown {
                 lockedLine(breakdown)
             }
         }
@@ -672,6 +1042,32 @@ private struct EverythingElseNestedMap: View {
     /// once, since the map must fit.
     private func layoutDidChange(to layout: EverythingElseMapLayout) {
         pendingLayout = nil
+        if let current = shown, current.size == layout.size {
+            // Opening a folder or going back up is always taken, at once.
+            if current.openPaths != layout.openPaths {
+                navigate(from: current, to: layout)
+                return
+            }
+            // An opened folder's tiles landing. They take the folder's tile
+            // over once the zoom into it has settled, and the glass, if the
+            // sizing was slow enough to need it, lifts as they do. No "Done"
+            // beat: a folder is measured in a moment, unlike the walk.
+            if current.isPlaceholder {
+                let wait = zoomEndsAt.timeIntervalSinceNow
+                guard wait > 0 else {
+                    adopt(layout, animated: true)
+                    return
+                }
+                holdsFolderGlass = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                    if shown?.openPaths == layout.openPaths, shown?.isPlaceholder == true {
+                        adopt(layout, animated: true)
+                    }
+                    withAnimation(reduceMotion ? nil : EverythingElseMotion.fade) { holdsFolderGlass = false }
+                }
+                return
+            }
+        }
         // Read from the store, which is current; the view's own `phase` and
         // `breakdown` in this handler are the ones it was made with.
         let phase = store.everythingElsePhase
@@ -713,14 +1109,121 @@ private struct EverythingElseNestedMap: View {
         }
     }
 
+    // MARK: Opening a folder
+
+    /// Going into a folder, the new map starts inside the tile that was opened
+    /// and grows to fill the map. Going back up, it starts blown up so the
+    /// folder that was open fills the map, and shrinks until that folder is
+    /// its own tile again. A jump the old map has no tile for is taken still.
+    private func navigate(from old: EverythingElseMapLayout, to new: EverythingElseMapLayout) {
+        hovered = nil
+        opened = nil
+        shown = new
+        let targets = Self.targets(new)
+        let full = CGRect(origin: .zero, size: new.size)
+        let oldRects = Self.targets(old).merging(drawn) { _, current in current }
+        // Every tile of the old level leaves. No tile is on both: a level's
+        // loose files and smaller folders share an id with the level above,
+        // and a kept one would jump to its new place instead of moving.
+        var going = old.tiles
+        var start: [String: CGRect]?
+        var leavingTargets: [String: CGRect] = [:]
+        var revealing: String?
+        if new.openPaths.count > old.openPaths.count {
+            let id = new.openPaths[old.openPaths.count]
+            if let anchor = oldRects[id] {
+                // The opened tile itself goes at once: its folders take its
+                // place exactly, and its colour under them would fill the gaps
+                // that show them as folders.
+                going.removeAll { $0.id == id }
+                start = targets.mapValues { Self.map($0, from: full, to: anchor) }
+                // The camera's move: what was around the opened tile goes out
+                // past the edges as that tile grows to fill the map.
+                for tile in going {
+                    leavingTargets[tile.id] = Self.map(oldRects[tile.id] ?? tile.rect, from: anchor, to: full)
+                }
+            }
+        } else if new.openPaths.count < old.openPaths.count {
+            let id = old.openPaths[new.openPaths.count]
+            if let anchor = targets[id] {
+                revealing = id
+                start = targets.mapValues { Self.map($0, from: anchor, to: full) }
+                // Back into the tile they were inside.
+                for tile in going {
+                    leavingTargets[tile.id] = Self.map(oldRects[tile.id] ?? tile.rect, from: full, to: anchor)
+                }
+            }
+        }
+        var still = Transaction()
+        still.disablesAnimations = true
+        guard let start, !reduceMotion else {
+            withTransaction(still) {
+                drawn = targets
+                leaving = []
+                revealingTileID = nil
+            }
+            return
+        }
+        zoomEndsAt = Date().addingTimeInterval(EverythingElseMotion.zoomDuration)
+        leavingGeneration += 1
+        let generation = leavingGeneration
+        withTransaction(still) {
+            drawn = start
+            leaving = going
+            leavingRects = oldRects.filter { id, _ in leavingTargets[id] != nil }
+            leavingOpacity = 1
+            leavingLabelOpacity = 1
+            leavingOnTop = new.openPaths.count < old.openPaths.count
+            revealingTileID = revealing
+            revealOpacity = 0
+        }
+        let fade = leavingOnTop ? EverythingElseMotion.leavingFadeUp : EverythingElseMotion.leavingFadeIn
+        DispatchQueue.main.async {
+            withAnimation(Self.settle) {
+                drawn = targets
+                leavingRects = leavingTargets
+            }
+            withAnimation(fade) { leavingOpacity = 0 }
+            withAnimation(EverythingElseMotion.revealUp) { revealOpacity = 1 }
+            withAnimation(EverythingElseMotion.leavingLabelFade) { leavingLabelOpacity = 0 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + EverythingElseMotion.zoomDuration + 0.05) {
+            guard leavingGeneration == generation else { return }
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) {
+                leaving = []
+                revealingTileID = nil
+            }
+            // A still pointer points at the tile now under it, so Return can
+            // go further in without a nudge of the mouse.
+            if pointerIsInside, hovered == nil, let shown {
+                hovered = Self.selection(at: hoverPoint, in: shown)
+            }
+        }
+    }
+
+    /// `rect` moved from `source`'s frame into `target`'s, scaled to match.
+    static func map(_ rect: CGRect, from source: CGRect, to target: CGRect) -> CGRect {
+        guard source.width > 0, source.height > 0 else { return target }
+        let scaleX = target.width / source.width
+        let scaleY = target.height / source.height
+        return CGRect(
+            x: target.minX + (rect.minX - source.minX) * scaleX,
+            y: target.minY + (rect.minY - source.minY) * scaleY,
+            width: rect.width * scaleX,
+            height: rect.height * scaleY
+        )
+    }
+
     // MARK: Growing out
 
     private static func targets(_ layout: EverythingElseMapLayout) -> [String: CGRect] {
         Dictionary(uniqueKeysWithValues: layout.tiles.map { ($0.id, $0.rect) })
     }
 
-    private func drawnRect(_ tile: EverythingElseMapLayout.Tile) -> CGRect {
-        drawn[tile.id] ?? Self.origin(of: tile.rect, from: drawn[EverythingElseMapLayout.wholeTileID])
+    private func drawnRect(_ tile: EverythingElseMapLayout.Tile, origin: String) -> CGRect {
+        drawn[tile.id] ?? Self.origin(of: tile.rect, from: drawn[origin])
     }
 
     /// Where a new tile starts. The part of its place that the remainder tile
@@ -751,7 +1254,7 @@ private struct EverythingElseNestedMap: View {
             drawn = targets
             return
         }
-        let remainder = drawn[EverythingElseMapLayout.wholeTileID]
+        let remainder = drawn[layout.originTileID]
         var start = drawn.filter { targets[$0.key] != nil }
         for tile in layout.tiles where start[tile.id] == nil {
             start[tile.id] = Self.origin(of: tile.rect, from: remainder)
@@ -818,28 +1321,27 @@ private struct EverythingElseNestedMap: View {
         .position(x: rect.midX, y: rect.midY)
     }
 
-    private func itemTile(_ tile: EverythingElseMapLayout.Tile, rect: CGRect) -> some View {
+    /// A tile's fill and label, with nothing to click: what `itemTile` draws
+    /// inside its button, and what a tile leaving the map draws as it goes.
+    private func tileFace(_ tile: EverythingElseMapLayout.Tile, labelOpacity: Double = 1) -> some View {
         let item = tile.item
         let bucket = item.group.bucket
-        let selection = EverythingElseMapSelection.item(item.id)
-        let isRinged = hovered == selection || opened == selection
         let showsSize = tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight
         let showsName = showsSize || (tile.rect.width >= Self.labelWidth - 12 && tile.rect.height >= Self.nameOnlyHeight)
         let titleLines = tile.rect.height >= 56 ? 2 : 1
-        return Button {
-            opened = selection
-        } label: {
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                    .fill(EverythingElseStyle.color(bucket))
-                    .brightness(-0.05 * Double(tile.shade))
+        return RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+            .fill(EverythingElseStyle.color(bucket))
+            .brightness(-0.05 * Double(tile.shade))
+            // An overlay, so a label wider than the tile it rides never
+            // widens the tile and stays pinned to its top-left corner.
+            .overlay(alignment: .topLeading) {
                 if showsName {
                     // The label is laid out against the tile's final width, not
                     // the width it is animating through, so it never re-wraps
                     // mid-move: it rides the tile's corner and is clipped until
                     // the tile has grown to fit it.
                     VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                        Text(EverythingElseMapLabel.title(item))
+                        Text(EverythingElseMapLabel.title(item, excludedFolders: excludedInside))
                             .font(AppStyle.Typography.metadataEmphasis)
                             .lineLimit(titleLines)
                         if showsSize {
@@ -855,32 +1357,83 @@ private struct EverythingElseNestedMap: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Self.labelInset)
                     .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
+                    .opacity(labelOpacity)
                 }
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                    .strokeBorder(AppColors.textPrimary, lineWidth: isRinged ? 2 : 0)
+    }
+
+    private func itemTile(_ tile: EverythingElseMapLayout.Tile, rect: CGRect) -> some View {
+        let item = tile.item
+        let selection = EverythingElseMapSelection.item(item.id)
+        let isRinged = hovered == selection || opened == selection
+        var openable: EverythingElseFolder?
+        if case .folder(let folder) = item.kind, store.everythingElseCanOpen(folder) {
+            openable = folder
+        }
+        return Button {
+            // The second click of a double-click opens a folder, as in Finder.
+            // The first has already shown the details; they close as it opens.
+            if let openable, (NSApp.currentEvent?.clickCount ?? 1) >= 2 {
+                opened = nil
+                store.openEverythingElseFolder(openable)
+            } else {
+                opened = selection
             }
-            .contentShape(Rectangle())
+        } label: {
+            tileFace(tile)
+                .modifier(EverythingElseLookInsideTooltip(shows: openable != nil && Self.carriesOwnLabel(tile)))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                        .strokeBorder(AppColors.textPrimary, lineWidth: isRinged ? 2 : 0)
+                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .frame(width: rect.width, height: rect.height)
         .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
         .popover(isPresented: isOpen(selection), arrowEdge: .bottom) {
             if let breakdown {
-                EverythingElseDetail(breakdown: breakdown, group: item.group, item: item)
+                EverythingElseDetail(
+                    breakdown: breakdown,
+                    group: item.group,
+                    item: item,
+                    isInsideFolder: !openFolders.isEmpty,
+                    excludedInside: excludedInside
+                )
             }
         }
         .position(x: rect.midX, y: rect.midY)
         .opacity(isDimmed(item.group) ? 0.3 : 1)
         .contextMenu { tileMenu(item) }
-        .accessibilityLabel(EverythingElseMapLabel.title(item) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
+        .accessibilityLabel(EverythingElseMapLabel.title(item, excludedFolders: excludedInside) + ", " + formatStorageBytes(item.bytes) + ", " + EverythingElseStyle.name(item.group))
         .accessibilityHint("Shows what this is and what you can do about it")
+        .modifier(EverythingElseLookInsideAction(folder: openable) { store.openEverythingElseFolder($0) })
+    }
+
+    /// Whether a tile is big enough to show its name and size itself.
+    private static func carriesOwnLabel(_ tile: EverythingElseMapLayout.Tile) -> Bool {
+        tile.rect.width >= labelWidth && tile.rect.height >= labelHeight
+    }
+
+    /// A tile of the level being left, moving with the zoom as it fades.
+    private func leavingTile(_ tile: EverythingElseMapLayout.Tile) -> some View {
+        let rect = leavingRects[tile.id] ?? tile.rect
+        return tileFace(tile, labelOpacity: leavingLabelOpacity)
+            .frame(width: rect.width, height: rect.height)
+            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
+            .position(x: rect.midX, y: rect.midY)
+            .opacity(leavingOpacity)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
     private func tileMenu(_ item: EverythingElseItem) -> some View {
         if case .folder(let folder) = item.kind {
+            if store.everythingElseCanOpen(folder) {
+                Button("Look Inside") { store.openEverythingElseFolder(folder) }
+                Divider()
+            }
             Button("Show in Finder") { FinderReveal.show(folder.url) }
             Button("Copy Path") { FinderReveal.copyPaths([folder.url]) }
             if let action = store.everythingElseFolderHint(for: folder)?.action {
@@ -902,10 +1455,10 @@ private struct EverythingElseNestedMap: View {
         // the label is for the tiles that had to drop one or both.
         if case .item(let id) = hovered, opened != hovered,
            let tile = layout.tiles.first(where: { $0.id == id }),
-           !(tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight) {
+           !Self.carriesOwnLabel(tile) {
             let item = tile.item
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(EverythingElseMapLabel.title(item))
+                Text(EverythingElseMapLabel.title(item, excludedFolders: excludedInside))
                     .font(AppStyle.Typography.headline)
                     .lineLimit(1)
                 Text(formatStorageBytes(item.bytes))
@@ -913,6 +1466,12 @@ private struct EverythingElseNestedMap: View {
                     .monospacedDigit()
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
+                if Self.openableFolder(tile, store: store) != nil {
+                    Text(Self.lookInsideHint)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
             }
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
@@ -967,6 +1526,53 @@ private struct EverythingElseNestedMap: View {
             .accessibilityElement(children: .combine)
         }
     }
+
+    /// Folders inside the opened one that a limited scan could not read.
+    @ViewBuilder
+    private var folderLockedLine: some View {
+        if let count = level?.lockedFolderCount, count > 0 {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
+                Image(systemName: "lock")
+                    .font(.system(size: 11, weight: .medium))
+                Text(count == 1
+                    ? String(localized: "1 folder inside needs Full Disk Access to measure")
+                    : String(localized: "\(count) folders inside need Full Disk Access to measure"))
+            }
+            .font(AppStyle.Typography.metadata)
+            .foregroundStyle(AppColors.textTertiary)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// Look Inside as an accessibility action, on the tiles that can open only.
+private struct EverythingElseLookInsideAction: ViewModifier {
+    let folder: EverythingElseFolder?
+    let open: (EverythingElseFolder) -> Void
+
+    func body(content: Content) -> some View {
+        if let folder {
+            content.accessibilityAction(named: Text("Look Inside")) { open(folder) }
+        } else {
+            content
+        }
+    }
+}
+
+/// A tooltip saying a double-click opens the tile. A tile too small for its
+/// own label gets the line in the hover label instead, so the two never show
+/// at once. It sits on the tile's face, inside the button, so the button
+/// keeps its VoiceOver hint.
+private struct EverythingElseLookInsideTooltip: ViewModifier {
+    let shows: Bool
+
+    func body(content: Content) -> some View {
+        if shows {
+            content.help(EverythingElseNestedMap.lookInsideHint)
+        } else {
+            content
+        }
+    }
 }
 
 // MARK: - Glass
@@ -979,6 +1585,9 @@ private struct EverythingElseGlass: View {
     let phase: EverythingElsePhase
     let measurement: EverythingElseMeasurement?
     let runningStep: ScanStep?
+    /// A folder opened on the map being sized (#437). It takes the capsule
+    /// over from the walk.
+    var folder: EverythingElseFolderSizing?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The text column's natural width, read from a hidden copy, so the
@@ -1061,8 +1670,10 @@ private struct EverythingElseGlass: View {
     /// is an indeterminate spinner: something is running, just not this.
     @ViewBuilder
     private var ring: some View {
+        if let folder {
+            EverythingElseRing(fraction: folder.fraction, ceiling: 1)
         // The ring stays, full, for the beat the glass holds after the walk.
-        if phase == .measuring || phase == .ready, let measurement, !measurement.plannedRoots.isEmpty {
+        } else if phase == .measuring || phase == .ready, let measurement, !measurement.plannedRoots.isEmpty {
             EverythingElseRing(fraction: measurement.walkFraction, ceiling: measurement.walkCeiling)
         } else {
             ProgressView()
@@ -1072,6 +1683,9 @@ private struct EverythingElseGlass: View {
     }
 
     private var title: String {
+        if let folder {
+            return String(localized: "Measuring \(folder.name)")
+        }
         switch phase {
         case .waiting:
             guard let runningStep, runningStep != .everythingElse else { return String(localized: "Starting…") }
@@ -1088,6 +1702,9 @@ private struct EverythingElseGlass: View {
     }
 
     private var subtitle: String {
+        if let folder {
+            return displayDirectoryPath(for: URL(fileURLWithPath: folder.path, isDirectory: true))
+        }
         switch phase {
         case .waiting:
             switch runningStep {
@@ -1256,10 +1873,14 @@ private struct EverythingElseStatus: View {
 
 /// What a tile or the detail calls a row.
 private enum EverythingElseMapLabel {
-    static func title(_ item: EverythingElseItem) -> String {
+    /// `excludedFolders` is how many folders inside an opened folder were
+    /// excluded from scans: their space is in its loose files row.
+    static func title(_ item: EverythingElseItem, excludedFolders: Int = 0) -> String {
         switch item.kind {
         case .folder(let folder): return folder.displayName
-        case .smaller(let count, _): return EverythingElseStyle.smallerTitle(count: count)
+        case .smaller(let count, _):
+            if count == 0, excludedFolders > 0 { return String(localized: "Loose files and excluded folders") }
+            return EverythingElseStyle.smallerTitle(count: count)
         case .locked, .system: return EverythingElseStyle.name(item.group)
         }
     }
@@ -1274,13 +1895,18 @@ private struct EverythingElseDetail: View {
     let breakdown: EverythingElseBreakdown
     let group: EverythingElseGroup
     let item: EverythingElseItem?
+    /// The tile is inside an opened folder (#437), so its loose files are that
+    /// one folder's.
+    var isInsideFolder = false
+    /// Folders inside the open folder excluded from scans, in its loose files.
+    var excludedInside = 0
 
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var trashStore: TrashStore
     @State private var isShowingWhy = false
 
     private var title: String {
-        item.map(EverythingElseMapLabel.title) ?? EverythingElseStyle.name(group)
+        item.map { EverythingElseMapLabel.title($0, excludedFolders: excludedInside) } ?? EverythingElseStyle.name(group)
     }
 
     private var bytes: Int64 {
@@ -1336,7 +1962,12 @@ private struct EverythingElseDetail: View {
             return path
         case .smaller(let count, let biggest):
             if count == 0 {
-                return String(localized: "Files that sit directly in these folders rather than in a folder of their own.")
+                guard isInsideFolder else {
+                    return String(localized: "Files that sit directly in these folders rather than in a folder of their own.")
+                }
+                return excludedInside > 0
+                    ? String(localized: "Files that sit directly in this folder, and the folders inside it you excluded from scans.")
+                    : String(localized: "Files that sit directly in this folder rather than in a folder inside it.")
             }
             return biggest.isEmpty
                 ? String(localized: "Each is too small to show on the map by itself.")
@@ -1384,8 +2015,17 @@ private struct EverythingElseDetail: View {
                     Button("Show in Finder") { FinderReveal.show(folder.url) }
                         .buttonStyle(.purge(.secondary, size: .small))
                         .fixedSize()
-                    if let action = store.everythingElseFolderHint(for: folder)?.action {
-                        Button(EverythingElseStyle.actionTitle(action)) { store.performEverythingElseHint(action) }
+                    let hint = store.everythingElseFolderHint(for: folder)?.action
+                    // Look Inside is the way further into the map (#437). An
+                    // app's own action, when there is one, stays the main button.
+                    if store.everythingElseCanOpen(folder) {
+                        Button("Look Inside") { store.openEverythingElseFolder(folder) }
+                            .buttonStyle(.purge(hint == nil ? .primary : .secondary, size: .small))
+                            .fixedSize()
+                            .help("Show the folders inside, by size")
+                    }
+                    if let hint {
+                        Button(EverythingElseStyle.actionTitle(hint)) { store.performEverythingElseHint(hint) }
                             .buttonStyle(.purge(.primary, size: .small))
                             .fixedSize()
                     }
@@ -1478,7 +2118,9 @@ struct EverythingElseHeaderBar: View {
             // A light fill without an outline: lighter than Measure again, with an
             // edge that lines up with the heading below it.
             .buttonStyle(.purge(.soft))
-            .keyboardShortcut("[", modifiers: [.command])
+            // Inside a folder, Command–[ goes back up a step instead: the
+            // breadcrumb's step above the open folder takes it.
+            .keyboardShortcut(store.everythingElseOpenFolders.isEmpty ? KeyboardShortcut("[", modifiers: [.command]) : nil)
             .help("Back to the Overview")
 
             Spacer(minLength: AppStyle.Spacing.medium)

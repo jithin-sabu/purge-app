@@ -24,6 +24,13 @@ final class FakeScans {
     /// What the Command-line tools scan returns (#225).
     var commandLineTools = CommandLineToolScanResult()
     private(set) var everythingElseAccesses: [ScanAccess] = []
+    /// What opening a folder on the Everything else map finds (#437), by
+    /// normalized path. A path with no entry can't be read.
+    var everythingElseFolders: [String: EverythingElseFolderContents] = [:]
+    /// Holds each folder sizing open until `finishHeldEverythingElseFolders`.
+    var holdsEverythingElseFolders = false
+    /// Every folder sizing asked for, in order, with the access it was given.
+    private(set) var everythingElseFolderRequests: [(path: String, access: ScanAccess)] = []
     /// Yielded by an App Caches scan as soon as it starts. A held scan then stays
     /// open until it is let go.
     var generalEvents: [CacheScanEvent] = []
@@ -69,6 +76,7 @@ final class FakeScans {
     private var heldGitStatus: [CheckedContinuation<Void, Never>] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
     private var heldEverythingElse: [AsyncStream<EverythingElseMeasureEvent>.Continuation] = []
+    private var heldEverythingElseFolders: [CheckedContinuation<Void, Never>] = []
     private let suite = ThrowawayDefaults()
 
     /// `gitChecker` is the one a clean asks before it moves anything. `fileDeleter`
@@ -150,6 +158,13 @@ final class FakeScans {
         held.forEach { $0.finish() }
     }
 
+    /// Lets every held folder sizing return, with `everythingElseFolders` as it is now.
+    func finishHeldEverythingElseFolders() {
+        let held = heldEverythingElseFolders
+        heldEverythingElseFolders = []
+        held.forEach { $0.resume() }
+    }
+
     /// Lets every held git status check return, with `gitAnswers` as they are now.
     func finishHeldGitStatus() {
         let held = heldGitStatus
@@ -167,7 +182,9 @@ final class FakeScans {
         holdsGitStatus = false
         holdsFullAccessSteps = false
         holdsEverythingElse = false
+        holdsEverythingElseFolders = false
         finishHeldEverythingElse()
+        finishHeldEverythingElseFolders()
         finishHeldGeneral()
         heldDeveloper.forEach { $0.finish() }
         finishHeldProjects()
@@ -251,6 +268,15 @@ final class FakeScans {
                     continuation.finish()
                 }
                 return stream
+            },
+            everythingElseFolder: { url, _, access, progress in
+                let path = OverviewSizedItem.normalized(url.standardizedFileURL.path)
+                self.everythingElseFolderRequests.append((path, access))
+                if self.holdsEverythingElseFolders {
+                    progress(0.5)
+                    await withCheckedContinuation { self.heldEverythingElseFolders.append($0) }
+                }
+                return self.everythingElseFolders[path]
             },
             commandLineTools: {
                 self.events.append("commandLineTools")
