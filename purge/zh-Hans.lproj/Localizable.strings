@@ -1565,3 +1565,19 @@
 "Reached the scan limit of %lld folder levels." = "已达到 %lld 层文件夹的扫描深度限制。";
 
 "Skipped subfolders because this folder has more than %lld entries." = "此文件夹包含超过 %lld 个项目，已跳过其子文件夹。";
+
+"Look Inside" = "查看内部";
+
+"Show the folders inside, by size" = "按大小显示其中的文件夹";
+
+"Back to the whole map" = "返回完整地图";
+
+"Back to %@" = "返回“%@”";
+
+"Goes back up to here" = "返回到这一层";
+
+"Files that sit directly in this folder rather than in a folder inside it." = "直接放在此文件夹中、而不在其子文件夹里的文件。";
+
+"1 folder inside needs Full Disk Access to measure" = "其中 1 个文件夹需要完全磁盘访问权限才能测量";
+
+"%lld folders inside need Full Disk Access to measure" = "其中 %lld 个文件夹需要完全磁盘访问权限才能测量";

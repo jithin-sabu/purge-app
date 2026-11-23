@@ -1565,3 +1565,19 @@
 "Reached the scan limit of %lld folder levels." = "%lld klasör düzeyi olan tarama sınırına ulaşıldı.";
 
 "Skipped subfolders because this folder has more than %lld entries." = "Bu klasörde %lld öğeden fazla olduğu için alt klasörler atlandı.";
+
+"Look Inside" = "İçine Bak";
+
+"Show the folders inside, by size" = "İçindeki klasörleri boyuta göre göster";
+
+"Back to the whole map" = "Haritanın tamamına dön";
+
+"Back to %@" = "%@ klasörüne dön";
+
+"Goes back up to here" = "Bu düzeye geri döner";
+
+"Files that sit directly in this folder rather than in a folder inside it." = "İçindeki bir klasörde değil, doğrudan bu klasörde duran dosyalar.";
+
+"1 folder inside needs Full Disk Access to measure" = "İçerideki 1 klasörü ölçmek için Tam Disk Erişimi gerekiyor";
+
+"%lld folders inside need Full Disk Access to measure" = "İçerideki %lld klasörü ölçmek için Tam Disk Erişimi gerekiyor";

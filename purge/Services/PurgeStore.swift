@@ -617,6 +617,19 @@ final class PurgeStore: ObservableObject {
     @Published var overviewPage: OverviewPage = .summary
     var everythingElseMeasureGeneration = 0
     var everythingElseBreakdownCache: (key: EverythingElseBreakdownKey, breakdown: EverythingElseBreakdown)?
+    /// The folders opened on the Everything else map, outermost first (#437).
+    /// Empty shows the whole map. Read only, like the rest of the page, and
+    /// written only in `PurgeStore+EverythingElse.swift`.
+    @Published var everythingElseOpenFolders: [EverythingElseFolder] = []
+    /// What each opened folder holds, by normalized path, for the current walk.
+    /// A new walk clears it, since the figures it is claimed against change.
+    @Published var everythingElseFolderContents: [String: EverythingElseFolderContents] = [:]
+    /// The folder being sized now, and how far along.
+    @Published var everythingElseFolderSizing: EverythingElseFolderSizing?
+    var everythingElseFolderContentsRevision = 0
+    var everythingElseFolderGeneration = 0
+    var everythingElseFolderTask: Task<Void, Never>?
+    var everythingElseLevelCache: (key: EverythingElseLevelKey, level: EverythingElseFolderLevel?)?
     /// The last Overview breakdown and what it was computed from. Scan flushes re-render
     /// every observer several times a second, and the breakdown walks every path found.
     var overviewBreakdownCache: (key: OverviewBreakdownKey, breakdown: OverviewBreakdown)?

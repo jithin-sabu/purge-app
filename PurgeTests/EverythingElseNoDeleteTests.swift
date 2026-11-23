@@ -23,6 +23,8 @@ struct EverythingElseNoDeleteTests {
         "purge/Models/EverythingElseMeasurement.swift",
         "purge/Models/EverythingElseSections.swift",
         "purge/Models/EverythingElseFolderHint.swift",
+        "purge/Models/EverythingElseFolderContents.swift",
+        "purge/Services/EverythingElseFolderSizer.swift",
         "purge/Models/TreemapLayout.swift"
     ]
 
@@ -114,6 +116,12 @@ struct EverythingElseNoDeleteTests {
             "everythingElseOwningApp",
             "everythingElseFolderHint",
             "performEverythingElseHint",
+            "everythingElseCanOpen",
+            "openEverythingElseFolder",
+            "closeEverythingElseFolders",
+            "everythingElseOpenLevel",
+            "sizeEverythingElseFolder",
+            "cancelEverythingElseFolderSizing",
             "droppingFolders"
         ])
         // The views add nothing to the store of their own.
@@ -172,6 +180,17 @@ struct EverythingElseNoDeleteTests {
         store.performEverythingElseHint(.showInLargeFiles)
         _ = store.everythingElseFolderHint(for: folder)
         _ = store.everythingElseOwningApp(for: folder)
+        // Opening a folder sizes it and nothing else (#437).
+        fake.everythingElseFolders[OverviewSizedItem.normalized(big.path)] = EverythingElseFolderContents(
+            path: big.path,
+            folders: [],
+            openablePaths: [],
+            looseFileBytes: 10
+        )
+        #expect(store.everythingElseCanOpen(folder))
+        store.openEverythingElseFolder(folder)
+        #expect(await eventually { store.everythingElseOpenLevel() != nil })
+        store.closeEverythingElseFolders(keeping: 0)
         store.hideFromEverythingElse(folder)
         store.showOverviewSummary()
         store.measureEverythingElseAgain()
