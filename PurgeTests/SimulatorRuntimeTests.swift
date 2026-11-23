@@ -258,7 +258,7 @@ struct SimulatorRuntimeTests {
         #expect(!list.isEmpty)
         #expect(list.allSatisfy { $0.safetyInfo.level == .medium })
         #expect(list.allSatisfy {
-            $0.safetyInfo.explanation.hasPrefix("Could not check whether Xcode uses it for new simulators.")
+            $0.safetyInfo.explanation.hasPrefix("Could not check if Xcode uses it for new simulators.")
         })
     }
 

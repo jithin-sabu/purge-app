@@ -134,4 +134,65 @@ struct ExplanationFitTests {
             #expect(Self.lineCount(text, width: width) == 1, "\(text)")
         }
     }
+
+    /// The test host runs in English, so the code above only ever builds English.
+    /// This builds the same Dev Tools sentences from each language's own tables,
+    /// plural rules included, the way `String(localized:)` does in that language:
+    /// every runtime usage sentence with and without each reach prefix, Metal
+    /// Toolchain, and the one-line simulator device sentences.
+    @Test(arguments: languages)
+    func devToolsExplanationsFitTheirRowsInEveryLanguage(language: String) throws {
+        let bundle = try Self.bundle(for: language)
+        let locale = Locale(identifier: language)
+        func text(_ key: String, _ arguments: CVarArg...) -> String {
+            String(format: bundle.localizedString(forKey: key, value: key, table: nil), locale: locale, arguments: arguments)
+        }
+        let width = Self.columnWidth(.medium, in: bundle)
+        let lists = ListFormatter()
+        lists.locale = locale
+        let devices = lists.string(from: ["iPhone", "iPad", "Apple Vision"]) ?? ""
+        let cost = text("Xcode downloads it again (%@) if a simulator needs it.", "8.12 GB")
+        // Proves the language's own table is read, not the English key.
+        if language != "en" {
+            #expect(cost != "Xcode downloads it again (8.12 GB) if a simulator needs it.")
+        }
+        let bases = [
+            text("Xcode can no longer use this runtime. %@", cost),
+            text("Xcode lists it as %@. %@", "unmounting", cost),
+            text("Could not check if Xcode uses it for new simulators. %@", cost),
+            text("Xcode creates new simulators on this runtime. %@", cost),
+            text("Could not check which simulators use it. %@", cost),
+            text("1 simulator uses it. %@", cost),
+            text("%lld simulators use it. %@", 11, cost),
+            text("No simulator uses it. Last use unknown. %@", cost),
+            text("No simulator uses it, but it was used in the last month. %@", cost),
+            text("No simulator uses it. Last used over a month ago. %@", cost),
+            text("No simulator uses it. Last used 1 month ago. %@", cost),
+            text("No simulator uses it. Last used %lld months ago. %@", 11, cost),
+        ]
+        var twoLines = [text(
+            "Xcode's shader compiler for every account on this Mac. Xcode downloads it again (%@) if needed, or run %@.",
+            "1023.9 MB", "xcodebuild -downloadComponent MetalToolchain"
+        )]
+        for base in bases {
+            twoLines += [
+                base,
+                text("Only runs %@ simulators. %@", devices, base),
+                text("The only %@ runtime here that runs most devices. %@", "visionOS", base),
+            ]
+        }
+        let deletes = text("Deletes its apps and data.")
+        let oneLine = [
+            text("Running now, so it can't be removed. Shut it down in Simulator, then scan again."),
+            text("Busy right now, so it can't be removed. Scan again in a moment."),
+            text("Xcode can no longer run this device. %@", deletes),
+            text("Used in the last month. %@", deletes),
+            text("Last used 1 month ago. %@", deletes),
+            text("Last used %lld months ago. %@", 11, deletes),
+            text("Last use unknown. %@", deletes),
+        ]
+        let tooLong = twoLines.filter { Self.lineCount($0, width: width) > 2 }
+            + oneLine.filter { Self.lineCount($0, width: width) > 1 }
+        #expect(tooLong.isEmpty, "\(language): \(tooLong.joined(separator: "\n"))")
+    }
 }

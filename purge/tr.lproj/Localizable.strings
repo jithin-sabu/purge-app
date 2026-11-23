@@ -862,7 +862,7 @@
 "Choose an app to uninstall" = "Kaldırılacak bir uygulama seçin";
 "Choose one app" = "Bir uygulama seçin";
 "Clean items marked Not Sure?" = "Emin Değil olarak işaretli öğeler temizlensin mi?";
-"Could not check whether Xcode uses it for new simulators. %@" = "Yeni simülatörler için Xcode kullanımı denetlenemedi. %@";
+"Could not check if Xcode uses it for new simulators. %@" = "Yeni simülatörler için Xcode kullanımı denetlenemedi. %@";
 "Could not check which simulators use it. %@" = "Hangi simülatörlerin bunu kullandığı denetlenemedi. %@";
 "Download and install updates automatically" = "Güncellemeleri otomatik indir ve yükle";
 "Find" = "Bul";

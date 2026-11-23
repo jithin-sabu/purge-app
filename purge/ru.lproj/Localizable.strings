@@ -345,7 +345,7 @@
 "Copy Path" = "Скопировать путь";
 "Copy Paths" = "Копировать пути";
 "Core Apple Intelligence models" = "Основные модели Apple Intelligence";
-"Could not check whether Xcode uses it for new simulators. %@" = "Неизвестно, берёт ли его Xcode для новых симуляторов. %@";
+"Could not check if Xcode uses it for new simulators. %@" = "Неизвестно, берёт ли его Xcode для новых симуляторов. %@";
 "Could not check which simulators use it. %@" = "Неизвестно, какие симуляторы его используют. %@";
 "Couldn't check right now" = "Сейчас не удалось проверить";
 "Couldn't check what was removed. Try again in a moment." = "Не удалось проверить, что было удалено. Повторите через минуту.";
@@ -698,11 +698,11 @@
 "No installed app matches \"%@\"." = "Нет установленного приложения, соответствующего «%@».";
 "No items match this filter." = "Нет элементов, подходящих под этот фильтр.";
 "No junk to clean right now." = "Сейчас нет мусора для очистки.";
-"No simulator uses it, but it was used in the last month. %@" = "Симуляторов нет, использовался в последний месяц. %@";
-"No simulator uses it. Last use unknown. %@" = "Симуляторов нет, когда использовался, неизвестно. %@";
-"No simulator uses it. Last used %lld months ago. %@" = "Симуляторов нет, использовался %lld мес. назад. %@";
-"No simulator uses it. Last used 1 month ago. %@" = "Симуляторов нет, использовался месяц назад. %@";
-"No simulator uses it. Last used over a month ago. %@" = "Симуляторов нет, использовался больше месяца назад. %@";
+"No simulator uses it, but it was used in the last month. %@" = "Симуляторы его не используют, но использовался за месяц. %@";
+"No simulator uses it. Last use unknown. %@" = "Симуляторы его не используют; когда использовался, неизвестно. %@";
+"No simulator uses it. Last used %lld months ago. %@" = "Симуляторы его не используют; использовался %lld мес. назад. %@";
+"No simulator uses it. Last used 1 month ago. %@" = "Симуляторы его не используют; использовался месяц назад. %@";
+"No simulator uses it. Last used over a month ago. %@" = "Симуляторы его не используют; не использовался уже месяц. %@";
 "Node %@" = "Node %@";
 "None" = "Нет";
 "None of these go to the Trash. Once they're deleted, you can't put them back." = "Ничто из этого не попадает в Корзину. После удаления вернуть это нельзя.";

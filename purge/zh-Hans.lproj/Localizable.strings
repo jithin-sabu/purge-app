@@ -862,7 +862,7 @@
 "Choose an app to uninstall" = "请选择要卸载的应用";
 "Choose one app" = "请只选择一个应用";
 "Clean items marked Not Sure?" = "要清理标记为“无法确定”的项目吗？";
-"Could not check whether Xcode uses it for new simulators. %@" = "无法确认 Xcode 是否用它创建新模拟器。%@";
+"Could not check if Xcode uses it for new simulators. %@" = "无法确认 Xcode 是否用它创建新模拟器。%@";
 "Could not check which simulators use it. %@" = "无法确认哪些模拟器在使用它。%@";
 "Download and install updates automatically" = "自动下载并安装更新";
 "Find" = "查找";
