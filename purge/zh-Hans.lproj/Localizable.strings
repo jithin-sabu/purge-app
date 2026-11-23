@@ -137,6 +137,7 @@
 "Scroll down to Allow in the Background." = "向下滚动到“允许在后台”。";
 "Scroll down to Background App Activity." = "向下滚动到“后台 App 活动”。";
 "Switch Purge on." = "开启 Purge。";
+"The restart didn't work." = "重新启动没有成功。";
 "The watcher didn't start" = "监测服务未能启动";
 "The watcher stopped" = "监测服务已停止";
 "macOS frees this by itself when it needs room" = "macOS 会在需要空间时自动释放";

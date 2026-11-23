@@ -306,9 +306,16 @@ final class RemovedAppMonitor: ObservableObject {
         }
     }
 
+    /// How long the Login Items guide waits for the user, as long as the profile
+    /// guide waits (`AppleIntelligenceModelStore.settingsWait`). After that the
+    /// guide closes; the sidebar row is still there to start again.
+    static let approvalWait: TimeInterval = 10 * 60
+
     /// Opens Login Items with a guide beside it that says which switch to turn on,
     /// then checks once a second until macOS allows the watcher. The guide closes
-    /// itself then, or when the problem changes, or when the user cancels it.
+    /// itself then, when the problem changes, when the user cancels it, or after
+    /// `approvalWait`. Each check reads only the Login Items status; the agent is
+    /// probed once, after macOS allows it.
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
         guard watcherHealth == .needsApproval else { return }
@@ -316,11 +323,19 @@ final class RemovedAppMonitor: ObservableObject {
             self?.stopWaitingForApproval(hideGuide: false)
         }
         approvalTimer?.invalidate()
+        let deadline = Date().addingTimeInterval(Self.approvalWait)
         approvalTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                guard self.isEnabled, self.managesLiveAgent, self.watcherHealth == .needsApproval,
+                      Date() < deadline
+                else {
+                    self.stopWaitingForApproval(hideGuide: true)
+                    return
+                }
+                guard self.agentService.status != .requiresApproval else { return }
+                self.stopWaitingForApproval(hideGuide: true)
                 self.refreshAgentStatus()
-                if self.watcherHealth != .needsApproval { self.stopWaitingForApproval(hideGuide: true) }
             }
         }
     }

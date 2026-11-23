@@ -12,8 +12,10 @@ struct DeletedAppsWatcherNotice: View {
     var body: some View {
         // The presenter is created and destroyed with the problem, so its sheet
         // state never outlives it: a fixed watcher closes an open sheet, and the
-        // next problem starts with the sheet closed.
-        if monitor.watcherHealth.needsAttention {
+        // next problem starts with the sheet closed. A restart passes through
+        // `.checking`, which needs no attention, so the presenter also stays while
+        // one runs: the sheet shows its progress and whether it worked.
+        if monitor.watcherHealth.needsAttention || monitor.isRestartingWatcher {
             DeletedAppsWatcherNoticePresenter(monitor: monitor)
         }
     }
@@ -22,16 +24,33 @@ struct DeletedAppsWatcherNotice: View {
 private struct DeletedAppsWatcherNoticePresenter: View {
     @ObservedObject var monitor: RemovedAppMonitor
     @State private var isSheetPresented = false
+    /// The last problem seen. It stays on the row and in the sheet while a
+    /// restart runs, when the health itself reads `.checking`.
+    @State private var problem: WatcherHealth
+    /// A restart ended and the watcher still needs attention.
+    @State private var restartFailed = false
+
+    init(monitor: RemovedAppMonitor) {
+        self.monitor = monitor
+        _problem = State(initialValue: monitor.watcherHealth)
+    }
 
     var body: some View {
         DeletedAppsWatcherNoticeRow(
-            health: monitor.watcherHealth,
+            health: problem,
             onOpen: { isSheetPresented = true }
         )
+        .onChange(of: monitor.watcherHealth) { health in
+            if health.needsAttention { problem = health }
+        }
+        .onChange(of: monitor.isRestartingWatcher) { isRestarting in
+            restartFailed = !isRestarting && monitor.watcherHealth.needsAttention
+        }
         .sheet(isPresented: $isSheetPresented) {
             DeletedAppsWatcherSheet(
-                health: monitor.watcherHealth,
+                health: problem,
                 isRestarting: monitor.isRestartingWatcher,
+                restartFailed: restartFailed,
                 onFix: {
                     monitor.fixWatcher()
                     // System Settings takes over from here. A restart keeps the
@@ -70,6 +89,7 @@ struct DeletedAppsWatcherNoticeRow: View {
 struct DeletedAppsWatcherSheet: View {
     let health: WatcherHealth
     let isRestarting: Bool
+    var restartFailed = false
     let onFix: () -> Void
     let onTurnOff: () -> Void
     let onClose: () -> Void
@@ -88,6 +108,12 @@ struct DeletedAppsWatcherSheet: View {
                         .font(AppStyle.Typography.callout)
                         .foregroundStyle(AppColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if restartFailed, !isRestarting {
+                    Text("The restart didn't work.")
+                        .font(AppStyle.Typography.callout.weight(.medium))
+                        .foregroundStyle(AppColors.statusDangerText)
                 }
             }
 

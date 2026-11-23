@@ -137,6 +137,7 @@
 "Scroll down to Allow in the Background." = "Arka Planda İzin Ver bölümüne kaydırın.";
 "Scroll down to Background App Activity." = "Arka Plan Uygulama Etkinliği bölümüne kaydırın.";
 "Switch Purge on." = "Purge'ü açın.";
+"The restart didn't work." = "Yeniden başlatma işe yaramadı.";
 "The watcher didn't start" = "İzleyici başlamadı";
 "The watcher stopped" = "İzleyici durdu";
 "macOS frees this by itself when it needs room" = "macOS, yere ihtiyaç duyduğunda bunu kendisi boşaltır";

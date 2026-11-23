@@ -20,7 +20,7 @@ final class SettingsGuidePanel {
     }
 
     private var panel: NSPanel?
-    private var shown: Guide?
+    private(set) var shown: Guide?
     private var timer: Timer?
     private var onCancel: (() -> Void)?
 
@@ -28,7 +28,15 @@ final class SettingsGuidePanel {
     private static let gap: CGFloat = AppStyle.Spacing.medium
     private static let systemSettingsBundleID = "com.apple.systempreferences"
 
+    /// Shows `guide`. One System Settings pane is on screen at a time, so a guide
+    /// for another flow is replaced, and that flow is told its guide was
+    /// cancelled, so it stops waiting instead of waiting with no guide.
     func show(_ guide: Guide, onCancel: @escaping () -> Void) {
+        if let previous = shown, previous != guide, let replaced = self.onCancel {
+            self.onCancel = nil
+            shown = nil
+            replaced()
+        }
         self.onCancel = onCancel
         shown = guide
         let content = SettingsGuideView(guide: guide) { [weak self] in self?.cancel() }
