@@ -372,18 +372,46 @@ struct StartupPreferenceStoreTests {
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         defaults.set(true, forKey: "startup.hideDockIcon")
         let launchedAt = Date(timeIntervalSinceReferenceDate: 0)
+        var appliedPolicies: [Bool] = []
 
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: FakeLoginItem(),
-            applyDockPolicy: { _ in },
+            applyDockPolicy: { appliedPolicies.append($0) },
             launchedAt: launchedAt
         )
         store.statusItemWasRemoved(at: launchedAt + 3)
 
         #expect(store.showsMenuBarIcon)
         #expect(store.statusItemIsHidden)
-        #expect(!store.hidesDockIcon)
+        #expect(appliedPolicies == [false])
+        // The Dock comes back for now, but the user's choice is kept.
+        #expect(store.hidesDockIcon)
+        #expect(StartupPreferenceStore.persistedHidesDockIcon(userDefaults: defaults))
+    }
+
+    @Test("Hide Dock icon applies again when the hidden icon is inserted again")
+    func reinsertionReappliesTheSavedDockChoice() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        defaults.set(true, forKey: "startup.hideDockIcon")
+        let launchedAt = Date(timeIntervalSinceReferenceDate: 0)
+        var appliedPolicies: [Bool] = []
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { appliedPolicies.append($0) },
+            launchedAt: launchedAt
+        )
+        store.statusItemWasRemoved(at: launchedAt + 3)
+        // A second echo while the item is already hidden changes nothing.
+        store.statusItemWasRemoved(at: launchedAt + 3.5)
+        store.statusItemWasInserted(at: launchedAt + 20)
+
+        #expect(!store.statusItemIsHidden)
+        #expect(store.hidesDockIcon)
+        #expect(appliedPolicies == [false, true])
     }
 
     @Test("A removal long after launch, with the mode saved from before, leaves the menu bar")
@@ -512,16 +540,17 @@ struct StartupPreferenceStoreTests {
         #expect(store.hidesDockIcon)
     }
 
-    @Test("An echo with the Dock icon hidden shows the Dock again")
+    @Test("An echo with the Dock icon hidden shows the Dock again but keeps the choice")
     func echoWithHiddenDockShowsTheDock() {
         let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         var clock = Date(timeIntervalSinceReferenceDate: 0)
+        var appliedPolicies: [Bool] = []
 
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: FakeLoginItem(),
-            applyDockPolicy: { _ in },
+            applyDockPolicy: { appliedPolicies.append($0) },
             now: { clock }
         )
         store.setShowsMenuBarIcon(false)
@@ -531,6 +560,29 @@ struct StartupPreferenceStoreTests {
         store.statusItemWasRemoved(at: clock)
 
         #expect(store.showsMenuBarIcon)
+        #expect(appliedPolicies.last == false)
+        #expect(store.hidesDockIcon)
+        #expect(StartupPreferenceStore.persistedHidesDockIcon(userDefaults: defaults))
+    }
+
+    @Test("Leaving the menu bar while the icon is hidden still clears Hide Dock icon")
+    func leavingWhileHiddenClearsTheDockChoice() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        defaults.set(true, forKey: "startup.hideDockIcon")
+        let launchedAt = Date(timeIntervalSinceReferenceDate: 0)
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: FakeLoginItem(),
+            applyDockPolicy: { _ in },
+            launchedAt: launchedAt
+        )
+        store.statusItemWasRemoved(at: launchedAt + 3)
+        store.setShowsMenuBarIcon(false)
+
+        #expect(!store.showsMenuBarIcon)
+        #expect(!store.statusItemIsHidden)
         #expect(!store.hidesDockIcon)
         #expect(!StartupPreferenceStore.persistedHidesDockIcon(userDefaults: defaults))
     }

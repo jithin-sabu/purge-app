@@ -163,6 +163,10 @@ final class StartupPreferenceStore: ObservableObject {
         settleInterval = Self.statusItemSettleInterval
         if statusItemIsHidden {
             statusItemIsHidden = false
+            // The icon is back, so a saved Hide Dock icon applies again.
+            if hidesDockIcon {
+                applyDockPolicy(true)
+            }
         }
     }
 
@@ -174,7 +178,9 @@ final class StartupPreferenceStore: ObservableObject {
     /// app launches with the mode saved, and when the item is inserted again.
     /// Leaving the mode then would turn it off without the user asking, so a
     /// removal that soon after the item joined is ignored. The mode stays, but
-    /// with no icon to click the Dock icon comes back.
+    /// with no icon to click the Dock icon comes back. It comes back without
+    /// saving: the user's Hide Dock icon choice stays, and applies again when
+    /// the item is inserted again or at the next launch.
     ///
     /// `removedAt` is when SwiftUI wrote `false`, not when this runs: the binding
     /// defers the call, and a busy main actor must not push an echo past the
@@ -185,9 +191,11 @@ final class StartupPreferenceStore: ObservableObject {
         if let joinedMenuBarAt {
             if removedAt < joinedMenuBarAt { return }
             if Self.isInsertionEcho(removedAt: removedAt, joinedMenuBarAt: joinedMenuBarAt, within: settleInterval) {
-                statusItemIsHidden = true
-                if hidesDockIcon {
-                    setHidesDockIcon(false)
+                if !statusItemIsHidden {
+                    statusItemIsHidden = true
+                    if hidesDockIcon {
+                        applyDockPolicy(false)
+                    }
                 }
                 return
             }
