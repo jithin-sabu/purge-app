@@ -33,6 +33,8 @@
 "%@ used" = "已用 %@";
 "%@ was removed, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已被移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
 "%lld selected · %@" = "已选 %lld 项 · %@";
+"Allow Purge in the background" = "允许 Purge 在后台运行";
+"Blocked in Login Items" = "已在登录项中被阻止";
 "Measuring space…" = "正在统计空间…";
 "%@, %@" = "%@，%@";
 "%@, %@ reclaimed" = "%@，已释放 %@";
@@ -90,6 +92,8 @@
 "Android NDK %@" = "Android NDK %@";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
+"Not Now" = "暂时不用";
+"Reviews paused" = "检查已暂停";
 "Rust %@ (rustup)" = "Rust %@ (rustup)";
 "Python %@ (uv)" = "Python %@ (uv)";
 "Python %@ (pyenv)" = "Python %@ (pyenv)";
@@ -130,6 +134,11 @@
 "Available after the scan finishes" = "扫描完成后可用";
 "Available for new files" = "可用于存放新文件";
 "Purgeable" = "可清除空间";
+"Scroll down to Allow in the Background." = "向下滚动到“允许在后台”。";
+"Scroll down to Background App Activity." = "向下滚动到“后台 App 活动”。";
+"Switch Purge on." = "开启 Purge。";
+"The watcher didn't start" = "监测服务未能启动";
+"The watcher stopped" = "监测服务已停止";
 "macOS frees this by itself when it needs room" = "macOS 会在需要空间时自动释放";
 "What is purgeable space?" = "什么是可清除空间？";
 "About purgeable space" = "关于可清除空间";
@@ -637,8 +646,6 @@
 "That's room for %@." = "足以容纳 %@。";
 "The application bundle. Moving it to the Trash removes the app itself." = "应用程序本体。移到废纸篓会移除应用本身。";
 "The application itself" = "应用程序本身";
-"The background watcher couldn't start, so deleted apps go unnoticed." = "后台监测服务无法启动，因此无法检测已删除的应用。";
-"The background watcher isn't running, so deleted apps go unnoticed." = "后台监测服务未运行，因此无法检测已删除的应用。";
 "The scan stopped before it finished, so nothing was cleaned." = "扫描在完成前已停止，因此未清理任何内容。";
 "The scan stopped before it finished." = "扫描在完成前已停止。";
 "The uninstaller needs full access" = "卸载功能需要完全访问权限";
@@ -779,7 +786,6 @@
 "low on space" = "空间不足";
 "mac is full" = "Mac 空间已满";
 "macOS calls this Full Disk Access. Turn it off anytime in System Settings." = "macOS 将此权限称为“完全磁盘访问权限”。可随时在系统设置中关闭。";
-"macOS is blocking Purge's background watcher, so deleted apps go unnoticed." = "macOS 阻止了 Purge 的后台监测服务，因此无法检测已删除的应用。";
 "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on." = "macOS 阻止了 Purge 在后台运行。请在系统设置中打开登录项，并开启 Purge。";
 "macOS needs your permission" = "macOS 需要你的许可";
 "macOS protects this one and won't let it be removed." = "此内容受到 macOS 保护，无法移除。";

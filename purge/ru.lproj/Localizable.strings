@@ -183,6 +183,7 @@
 "All %lld files sync with iCloud, so they also leave your other devices." = "Все %lld файлов синхронизируются с iCloud, поэтому они исчезнут и с других ваших устройств.";
 "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "Все обнаруженные проекты отображаются в «Проектах разработчика» независимо от того, когда их последний раз использовали, кроме тех, что используются сейчас. Проекты, с которыми работали последние 6 месяцев, помечаются «Сначала проверить», поэтому «Очистить безопасное» и плановые очистки их пропускают.";
 "All removed" = "Всё удалено";
+"Allow Purge in the background" = "Разрешите Purge работать в фоне";
 "Also in this cleanup" = "Также в этой очистке";
 "Also move settings and history to the Trash" = "Также переместить настройки и историю в Корзину";
 "Also select" = "Также выбрать";
@@ -194,8 +195,11 @@
 "An app manages this library and expects every file in it. Removing parts of it from outside the app can corrupt the library, so Purge only ever shows it." = "Этой библиотекой управляет приложение, и ему нужны все файлы в ней. Удаление части файлов извне может повредить библиотеку, поэтому Purge только показывает её.";
 "An unused leftover Chromium framework in %@. Relaunch the browser to clean versions still loaded; relaunching also removes old ones." = "Неиспользуемый фреймворк Chromium, оставшийся в %@. Перезапустите браузер, чтобы очистить ещё загруженные версии; перезапуск также удалит старые.";
 "Android NDK %@" = "Android NDK %@";
+"Blocked in Login Items" = "Заблокировано в объектах входа";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";
+"Not Now" = "Не сейчас";
+"Reviews paused" = "Проверки приостановлены";
 "Rust %@ (rustup)" = "Rust %@ (rustup)";
 "Python %@ (uv)" = "Python %@ (uv)";
 "Python %@ (pyenv)" = "Python %@ (pyenv)";
@@ -251,6 +255,11 @@
 "Available after the scan finishes" = "Доступно после завершения сканирования";
 "Available for new files" = "Доступно для новых файлов";
 "Purgeable" = "Очищаемое место";
+"Scroll down to Allow in the Background." = "Прокрутите вниз до раздела «Разрешить в фоновом режиме».";
+"Scroll down to Background App Activity." = "Прокрутите вниз до раздела «Фоновая активность приложений».";
+"Switch Purge on." = "Включите Purge.";
+"The watcher didn't start" = "Монитор не запустился";
+"The watcher stopped" = "Монитор остановлен";
 "macOS frees this by itself when it needs room" = "macOS освобождает его сама, когда нужно место";
 "What is purgeable space?" = "Что такое очищаемое место?";
 "About purgeable space" = "Об очищаемом месте";
@@ -1162,8 +1171,6 @@
 "The application bundle. Moving it to the Trash removes the app itself." = "Пакет приложения. Перемещение в Корзину удаляет само приложение.";
 "The application itself" = "Само приложение";
 "The asset service call stopped without an answer (status %lld)" = "Вызов службы ресурсов прервался без ответа (статус %lld)";
-"The background watcher couldn't start, so deleted apps go unnoticed." = "Фоновый монитор не запустился, поэтому удалённые приложения остаются незамеченными.";
-"The background watcher isn't running, so deleted apps go unnoticed." = "Фоновый наблюдатель не работает, поэтому удалённые приложения остаются незамеченными.";
 "The clean couldn't finish, so nothing was moved. Try again in a moment." = "Очистка не завершилась, поэтому ничего не перемещено. Повторите через минуту.";
 "The libraries Photos, Music, TV, iMovie and GarageBand keep." = "Библиотеки, которые хранят «Фото», «Музыка», TV, iMovie и GarageBand.";
 "The map is on its way." = "Карта скоро появится.";
@@ -1422,7 +1429,6 @@
 "macOS didn't accept the download request: %@" = "macOS не приняла запрос на загрузку: %@";
 "macOS didn’t let Purge move itself." = "macOS не дала Purge переместиться самостоятельно.";
 "macOS hasn't finished removing them" = "macOS ещё не завершила удаление";
-"macOS is blocking Purge's background watcher, so deleted apps go unnoticed." = "macOS блокирует фоновый монитор Purge, поэтому удалённые приложения остаются незамеченными.";
 "macOS is keeping this file on this Mac, for example because it's set to Keep Downloaded." = "macOS оставляет этот файл на этом Mac — например, потому что для него выбрано «Оставить в загрузках».";
 "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on." = "macOS не даёт Purge работать в фоне. Откройте в Системных настройках раздел «Объекты входа» и включите Purge.";
 "macOS kept the %@ download (%@), so that space is still in use." = "macOS сохранил загрузку %@ (%@), поэтому это место всё ещё занято.";
