@@ -99,6 +99,7 @@ extension PurgeStore {
         // Opened folders were claimed against the last walk's figures.
         closeEverythingElseFolders(keeping: 0)
         everythingElseFolderContents = [:]
+        everythingElsePassedThrough = []
         everythingElseFolderContentsRevision &+= 1
         let access: ScanAccess = hasFullDiskAccess ? .full : .limited
         var measurement = EverythingElseMeasurement(access: access)
@@ -229,12 +230,17 @@ extension PurgeStore {
     }
 
     /// Goes back up the path: `count` folders stay open, 0 shows the whole map.
-    /// An open still waiting to show is dropped, and a sizing for a folder
-    /// that closes stops.
+    /// A folder that was passed through closes too, since its level is one
+    /// tile filling the map, with nothing to zoom back out to. An open still
+    /// waiting to show is dropped, and a sizing for a folder that closes stops.
     func closeEverythingElseFolders(keeping count: Int) {
         everythingElseOpenGeneration += 1
         everythingElsePendingFolders = []
-        let kept = max(0, min(count, everythingElseOpenFolders.count))
+        var kept = max(0, min(count, everythingElseOpenFolders.count))
+        while kept > 0, kept < everythingElseOpenFolders.count,
+              everythingElsePassedThrough.contains(OverviewSizedItem.normalized(everythingElseOpenFolders[kept - 1].path)) {
+            kept -= 1
+        }
         if kept < everythingElseOpenFolders.count {
             everythingElseOpenFolders.removeSubrange(kept...)
         }
@@ -310,6 +316,7 @@ extension PurgeStore {
            case .folder(let only) = biggest.kind,
            level.openablePaths.contains(OverviewSizedItem.normalized(only.path)),
            Double(level.bytes - biggest.bytes) < Self.everythingElsePassThroughShare * Double(level.bytes) {
+            everythingElsePassedThrough.insert(OverviewSizedItem.normalized(folder.path))
             if everythingElsePendingFolders.isEmpty {
                 everythingElseOpenFolders.append(only)
             } else {

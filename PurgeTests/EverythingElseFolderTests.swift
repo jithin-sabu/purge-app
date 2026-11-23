@@ -323,8 +323,9 @@ struct EverythingElseFolderStoreTests {
     }
 
     /// A folder whose content is nearly all one folder that opens is passed
-    /// through, so `Metadata/CoreSpotlight` is one click, and the path keeps
-    /// both steps to go back up to.
+    /// through, so `Metadata/CoreSpotlight` is one click. Going back up never
+    /// stops at the folder passed through: its level is one tile filling the
+    /// map, with nothing to zoom back out to.
     @Test func aFolderHoldingOneFolderOpensThroughToIt() async throws {
         let fake = FakeScans()
         let store = await measuredStore(fake)
@@ -350,8 +351,20 @@ struct EverythingElseFolderStoreTests {
         #expect(store.everythingElseOpenLevel()?.items.count == 2)
         #expect(fake.everythingElseFolderRequests.map(\.path) == ["\(base)/Photos", "\(base)/Photos/Library"])
 
+        #expect(store.everythingElsePassedThrough == ["\(base)/Photos"])
+
         store.closeEverythingElseFolders(keeping: 1)
-        #expect(store.everythingElseOpenLevel()?.folder.path == "\(base)/Photos")
+        #expect(store.everythingElseOpenFolders.isEmpty)
+
+        // Opening it again passes through again, from what was sized.
+        store.openEverythingElseFolder(try tile(store, "Photos"))
+        #expect(await eventually { store.everythingElseOpenFolders.count == 2 })
+        #expect(fake.everythingElseFolderRequests.count == 2)
+
+        // A new walk forgets it with the sizes.
+        store.measureEverythingElseAgain()
+        #expect(await eventually { store.everythingElsePhase == .ready })
+        #expect(store.everythingElsePassedThrough.isEmpty)
         fake.cleanUp()
     }
 

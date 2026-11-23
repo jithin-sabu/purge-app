@@ -276,7 +276,7 @@ struct EverythingElseView: View {
                         Text(verbatim: " ")
                             .font(AppStyle.Typography.pageTitle)
                             .accessibilityHidden(true)
-                        EverythingElseBreadcrumb(openFolders: openFolders) { count in
+                        EverythingElseBreadcrumb(openFolders: openFolders, passedThrough: store.everythingElsePassedThrough) { count in
                             store.closeEverythingElseFolders(keeping: count)
                         }
                     }
@@ -402,11 +402,15 @@ struct EverythingElseView: View {
 
 /// The heading while a folder is open on the map (#437): the way back up, one
 /// step per folder. Each step above the open folder goes back to it; the open
-/// folder itself is the heading. The whole path shows while it fits; one too
-/// long for the row keeps the first step and the last two, with an ellipsis
-/// between. Command–Up Arrow goes up one folder, as in Finder.
+/// folder itself is the heading. A folder that was passed through shares a
+/// step with the folder it holds, as `Metadata / CoreSpotlight`: its own level
+/// would be one tile filling the map. The whole path shows while it fits; one
+/// too long for the row keeps the first step and the last two, with an
+/// ellipsis between. Command–Up Arrow goes up one step, as in Finder.
 private struct EverythingElseBreadcrumb: View {
     let openFolders: [EverythingElseFolder]
+    /// Normalized paths of the open folders that were passed through.
+    let passedThrough: Set<String>
     /// How many folders stay open: 0 is the whole map.
     let onClose: (Int) -> Void
 
@@ -416,36 +420,58 @@ private struct EverythingElseBreadcrumb: View {
     /// the heading, inside a folder the path is, and a path is longer.
     private static let font = AppStyle.Typography.sectionTitle
 
+    /// One step on the path: a folder, with any folders passed through to it.
+    private struct Step {
+        let folders: ArraySlice<EverythingElseFolder>
+        /// How many folders stay open when this step is clicked.
+        let keeping: Int
+
+        var id: String { folders.last?.path ?? "" }
+        var name: String { folders.map(\.displayName).joined(separator: " / ") }
+    }
+
+    private var steps: [Step] {
+        var steps: [Step] = []
+        var first = 0
+        for (index, folder) in openFolders.enumerated()
+        where index == openFolders.count - 1 || !passedThrough.contains(OverviewSizedItem.normalized(folder.path)) {
+            steps.append(Step(folders: openFolders[first...index], keeping: index + 1))
+            first = index + 1
+        }
+        return steps
+    }
+
     var body: some View {
+        let steps = steps
         ViewThatFits(in: .horizontal) {
-            path(hiding: 0)
-            path(hiding: max(0, openFolders.count - Self.trailingSteps))
+            path(steps, hiding: 0)
+            path(steps, hiding: max(0, steps.count - Self.trailingSteps))
         }
     }
 
-    /// The path with the first `hidden` folders under an ellipsis.
-    private func path(hiding hidden: Int) -> some View {
+    /// The path with the first `hidden` steps under an ellipsis.
+    private func path(_ steps: [Step], hiding hidden: Int) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
-            step(String(localized: "Everything else"), keeping: 0)
+            step(String(localized: "Everything else"), keeping: 0, isParent: steps.count == 1)
             if hidden > 0 {
                 separator
                 Text(verbatim: "…")
                     .font(Self.font)
                     .foregroundStyle(AppColors.textTertiary)
-                    .help(openFolders.prefix(hidden).map(\.displayName).joined(separator: " › "))
+                    .help(steps.prefix(hidden).map(\.name).joined(separator: " › "))
             }
-            ForEach(Array(openFolders.enumerated()).dropFirst(hidden), id: \.element.id) { index, folder in
+            ForEach(Array(steps.enumerated()).dropFirst(hidden), id: \.element.id) { index, item in
                 separator
-                if index == openFolders.count - 1 {
-                    Text(folder.displayName)
+                if index == steps.count - 1 {
+                    Text(item.name)
                         .font(Self.font)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .layoutPriority(1)
-                        .help(displayDirectoryPath(for: folder.url))
+                        .help(item.folders.last.map { displayDirectoryPath(for: $0.url) } ?? item.name)
                         .accessibilityAddTraits(.isHeader)
                 } else {
-                    step(folder.displayName, keeping: index + 1)
+                    step(item.name, keeping: item.keeping, isParent: index == steps.count - 2)
                 }
             }
         }
@@ -460,7 +486,7 @@ private struct EverythingElseBreadcrumb: View {
 
     /// A step above the open folder. The one just above it answers Command–Up Arrow.
     @ViewBuilder
-    private func step(_ title: String, keeping count: Int) -> some View {
+    private func step(_ title: String, keeping count: Int, isParent: Bool) -> some View {
         let button = Button {
             onClose(count)
         } label: {
@@ -474,7 +500,7 @@ private struct EverythingElseBreadcrumb: View {
         .buttonStyle(.plain)
         .help(count == 0 ? String(localized: "Back to the whole map") : String(localized: "Back to \(title)"))
         .accessibilityHint("Goes back up to here")
-        if count == openFolders.count - 1 {
+        if isParent {
             button.keyboardShortcut(.upArrow, modifiers: [.command])
         } else {
             button
