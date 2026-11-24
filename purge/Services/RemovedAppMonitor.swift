@@ -313,9 +313,10 @@ final class RemovedAppMonitor: ObservableObject {
 
     /// Opens Login Items with a guide beside it that says which switch to turn on,
     /// then checks once a second until macOS allows the watcher. The guide shows
-    /// its check then and closes; it also closes when the problem changes, when
-    /// the user cancels it, or after `approvalWait`. Each check reads only the Login Items status; the agent is
-    /// probed once, after macOS allows it.
+    /// its check then and closes; it also closes when macOS reports anything
+    /// else, when the watcher is switched off, when the user cancels it, or
+    /// after `approvalWait`. Each check reads only the Login Items status; the
+    /// agent is probed once, after macOS allows it.
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
         guard watcherHealth == .needsApproval else { return }
@@ -327,13 +328,19 @@ final class RemovedAppMonitor: ObservableObject {
         approvalTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                guard self.isEnabled, self.managesLiveAgent, self.watcherHealth == .needsApproval,
-                      Date() < deadline
-                else {
+                guard self.isEnabled, self.managesLiveAgent, Date() < deadline else {
                     self.stopWaitingForApproval(hideGuide: true)
                     return
                 }
-                guard self.agentService.status != .requiresApproval else { return }
+                // Decided by what macOS reports, not `watcherHealth`: the agent
+                // can answer a probe right after approval and read as running
+                // before this tick, and that is still the approval landing.
+                let status = self.agentService.status
+                guard status != .requiresApproval else { return }
+                guard status == .enabled else {
+                    self.stopWaitingForApproval(hideGuide: true)
+                    return
+                }
                 self.stopWaitingForApproval(hideGuide: false)
                 SettingsGuidePanel.shared.finish(.allowInBackground, owner: self)
                 self.refreshAgentStatus()

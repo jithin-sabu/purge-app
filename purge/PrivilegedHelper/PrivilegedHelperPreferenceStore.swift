@@ -73,11 +73,11 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                 switch manager.register() {
                 case .enabled:
                     approvalMonitorTask?.cancel()
-                    break
+                    SettingsGuidePanel.shared.finish(.allowInBackground, owner: self)
                 case .needsApproval:
                     guideApproval()
                 case .failed(let detail):
-                    approvalMonitorTask?.cancel()
+                    stopWaitingForApproval()
                     lastRegistrationFailed = true
                     NSLog("Purge: helper registration failed — %@", detail)
                 }

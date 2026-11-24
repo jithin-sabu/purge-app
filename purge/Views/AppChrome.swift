@@ -1048,13 +1048,10 @@ struct SafeCleanupCelebrationOverlay: View {
 
     /// Opens Full Disk Access with the guide beside it. The rows that failed for
     /// lack of access retry once the guide sees it land, so only after the user
-    /// clicked here (#450). With access already on, the click retries them at
-    /// once instead of opening System Settings for nothing.
+    /// clicked here (#450). The guide reads access live, so a stale
+    /// `hasFullDiskAccess` never skips System Settings, and access that is
+    /// already on retries the rows at the guide's first check.
     private func openFullDiskAccessForFailures() {
-        guard !store.hasFullDiskAccess else {
-            retryFullDiskAccessFailures()
-            return
-        }
         FullDiskAccessGuide.shared.open { [store] in
             store.applyFullDiskAccess(true)
             retryFullDiskAccessFailures()
