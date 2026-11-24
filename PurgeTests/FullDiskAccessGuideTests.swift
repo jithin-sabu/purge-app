@@ -79,8 +79,9 @@ struct FullDiskAccessGuideTests {
         let access = Access()
         let (guide, _) = makeGuide(panel: panel, access: access)
         var granted = 0
+        let other = NSObject()
         guide.open { granted += 1 }
-        panel.show(.removeProfile) {}
+        panel.show(.removeProfile, owner: other) {}
         #expect(!guide.isWaiting)
 
         access.granted = true
@@ -105,7 +106,8 @@ struct FullDiskAccessGuideTests {
         let panel = SettingsGuidePanel()
         defer { panel.hide() }
         let (guide, _) = makeGuide(panel: panel, access: Access())
-        panel.show(.allowInBackground) {}
+        let other = NSObject()
+        panel.show(.allowInBackground, owner: other) {}
         guide.cancel()
         #expect(panel.shown == .allowInBackground)
     }

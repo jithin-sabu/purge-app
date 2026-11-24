@@ -50,7 +50,7 @@ final class FullDiskAccessGuide {
     func open(onGranted: @escaping () -> Void = {}) {
         openPane()
         grantHandlers.append(onGranted)
-        panel.show(.fullDiskAccess) { [weak self] in self?.stopWaiting(hideGuide: false) }
+        panel.show(.fullDiskAccess, owner: self) { [weak self] in self?.stopWaiting(hideGuide: false) }
         guard task == nil else { return }
         task = Task { [weak self] in await self?.waitForGrant() }
     }
@@ -70,7 +70,7 @@ final class FullDiskAccessGuide {
                 let handlers = grantHandlers
                 grantHandlers = []
                 task = nil
-                panel.finish(.fullDiskAccess)
+                panel.finish(.fullDiskAccess, owner: self)
                 handlers.forEach { $0() }
                 return
             }
@@ -87,6 +87,6 @@ final class FullDiskAccessGuide {
         task?.cancel()
         task = nil
         grantHandlers = []
-        if hideGuide { panel.hide(.fullDiskAccess) }
+        if hideGuide { panel.hide(.fullDiskAccess, owner: self) }
     }
 }

@@ -114,20 +114,26 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                 guard desiredEnabled == true else { break }
                 apply(latest)
                 if isEnabled {
-                    SettingsGuidePanel.shared.finish(.allowInBackground)
+                    SettingsGuidePanel.shared.finish(.allowInBackground, owner: self)
                     return
                 }
                 if !needsApproval { break }
             }
             guard !Task.isCancelled else { return }
-            SettingsGuidePanel.shared.hide(.allowInBackground)
+            SettingsGuidePanel.shared.hide(.allowInBackground, owner: self)
         }
     }
 
-    /// Opens Login Items. While the helper still needs approval, the guide shows
-    /// beside it and Purge watches for the switch, so the uninstall carries on as
-    /// soon as it is on (#450).
+    /// Opens Login Items and nothing else. Uninstall Purge uses it to help the
+    /// user switch background parts off, so it never shows the guide that asks
+    /// to switch the helper on.
     func openLoginItemsSettings() {
+        manager.openLoginItemsSettings()
+    }
+
+    /// Settings' "Open System Settings" for a helper waiting for approval. The
+    /// guide shows beside Login Items and Purge watches for the switch (#450).
+    func openApprovalSettings() {
         if needsApproval {
             guideApproval()
         } else {
@@ -136,11 +142,16 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     }
 
     private func guideApproval() {
+        // The user asked for the helper off: never guide them to switch it on.
+        guard desiredEnabled != false else {
+            manager.openLoginItemsSettings()
+            return
+        }
         // Approval pending from an earlier launch: the switch already reads on,
         // so going to approve it is asking for it on.
         if desiredEnabled == nil { desiredEnabled = true }
         manager.openLoginItemsSettings()
-        SettingsGuidePanel.shared.show(.allowInBackground) { [weak self] in
+        SettingsGuidePanel.shared.show(.allowInBackground, owner: self) { [weak self] in
             self?.approvalMonitorTask?.cancel()
         }
         monitorPendingApproval()
@@ -148,6 +159,6 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
 
     private func stopWaitingForApproval() {
         approvalMonitorTask?.cancel()
-        SettingsGuidePanel.shared.hide(.allowInBackground)
+        SettingsGuidePanel.shared.hide(.allowInBackground, owner: self)
     }
 }

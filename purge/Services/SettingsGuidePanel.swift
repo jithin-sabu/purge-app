@@ -27,7 +27,7 @@ final class SettingsGuidePanel {
     }
 
     /// The panel's edge that faces System Settings, where its pointer goes.
-    enum PointerEdge: Equatable {
+    nonisolated enum PointerEdge: Equatable {
         case leading
         case trailing
         case top
@@ -48,7 +48,13 @@ final class SettingsGuidePanel {
     private var followTimer: Timer?
     private var activationObserver: NSObjectProtocol?
     private var closeTask: Task<Void, Never>?
-    private var onCancel: (() -> Void)?
+    /// The flows waiting on the guide shown now, held weakly and matched by
+    /// identity, so a flow that went away never holds the guide open.
+    private struct Owner {
+        weak var object: AnyObject?
+        var onCancel: () -> Void
+    }
+    private var owners: [Owner] = []
 
     private static let gap: CGFloat = AppStyle.Spacing.xSmall
     private static let systemSettingsBundleID = "com.apple.systempreferences"
@@ -61,19 +67,27 @@ final class SettingsGuidePanel {
     /// Whether the panel is on screen right now.
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    /// Shows `guide`. One System Settings pane is on screen at a time, so a guide
-    /// for another flow is replaced, and that flow is told its guide was
-    /// cancelled, so it stops waiting instead of waiting with no guide. The same
-    /// guide shown again keeps showing; the newest caller owns its Not Now.
-    func show(_ guide: Guide, onCancel: @escaping () -> Void) {
-        if let previous = shown, previous != guide, let replaced = self.onCancel {
-            self.onCancel = nil
+    /// Shows `guide` for `owner`, the flow waiting on it. One System Settings
+    /// pane is on screen at a time, so a guide for another flow is replaced, and
+    /// each of its owners is told it was cancelled, so it stops waiting instead
+    /// of waiting with no guide. The same guide shown by another flow adds that
+    /// flow as an owner: the helper and the deleted-apps watcher share Allow in
+    /// the Background. Not Now cancels every owner.
+    func show(_ guide: Guide, owner: AnyObject, onCancel: @escaping () -> Void) {
+        if let previous = shown, previous != guide {
+            let replaced = owners
+            owners = []
             shown = nil
-            replaced()
+            replaced.forEach { $0.onCancel() }
         }
         closeTask?.cancel()
         closeTask = nil
-        self.onCancel = onCancel
+        owners.removeAll { $0.object == nil }
+        if let index = owners.firstIndex(where: { $0.object === owner }) {
+            owners[index].onCancel = onCancel
+        } else {
+            owners.append(Owner(object: owner, onCancel: onCancel))
+        }
         shown = guide
         model.guide = guide
         model.isDone = false
@@ -85,6 +99,7 @@ final class SettingsGuidePanel {
         updateVisibility()
     }
 
+    /// Closes the panel and drops every owner without telling them.
     func hide() {
         closeTask?.cancel()
         closeTask = nil
@@ -93,25 +108,26 @@ final class SettingsGuidePanel {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
         }
         activationObserver = nil
-        onCancel = nil
+        owners = []
         shown = nil
         model.isDone = false
         panel?.orderOut(nil)
     }
 
-    /// Hides the panel only while it shows `guide`, so one flow never closes
-    /// another's guide.
-    func hide(_ guide: Guide) {
-        if shown == guide { hide() }
+    /// `owner` stops waiting on `guide`. The panel closes once no owner is left,
+    /// so one flow never closes another's guide.
+    func hide(_ guide: Guide, owner: AnyObject) {
+        guard shown == guide, removeOwner(owner) else { return }
+        if owners.isEmpty { hide() }
     }
 
-    /// The change `guide` asked for has landed. While the user is looking at the
-    /// panel it shows a check, then closes and brings Purge forward, where the
-    /// flow carries on. When it is not on screen it just closes. Does nothing
-    /// while another guide shows.
-    func finish(_ guide: Guide) {
-        guard shown == guide else { return }
-        onCancel = nil
+    /// The change `owner` asked for through `guide` has landed. Once it is the
+    /// last owner, the panel shows a check while the user is looking at it, then
+    /// closes and brings Purge forward, where the flow carries on. When it is not
+    /// on screen it just closes. While other owners still wait, the guide stays
+    /// as it is. Does nothing while another guide shows.
+    func finish(_ guide: Guide, owner: AnyObject) {
+        guard shown == guide, removeOwner(owner), owners.isEmpty else { return }
         shown = nil
         guard isVisible else {
             hide()
@@ -129,10 +145,20 @@ final class SettingsGuidePanel {
         }
     }
 
+    /// How many flows wait on the guide shown now.
+    var ownerCount: Int { owners.filter { $0.object != nil }.count }
+
+    private func removeOwner(_ owner: AnyObject) -> Bool {
+        guard let index = owners.firstIndex(where: { $0.object === owner }) else { return false }
+        owners.remove(at: index)
+        owners.removeAll { $0.object == nil }
+        return true
+    }
+
     private func cancel() {
-        let handler = onCancel
+        let cancelled = owners
         hide()
-        handler?()
+        cancelled.forEach { $0.onCancel() }
     }
 
     private func makePanel() -> NSPanel {
@@ -250,7 +276,8 @@ final class SettingsGuidePanel {
             origin = left
             pointer = .trailing
         } else {
-            origin = below
+            // A window wider than the screen, or partly off it, keeps the panel on.
+            origin = NSPoint(x: max(visible.minX, min(below.x, visible.maxX - size.width)), y: below.y)
             pointer = .top
         }
         origin.y = max(visible.minY, min(origin.y, visible.maxY - size.height))

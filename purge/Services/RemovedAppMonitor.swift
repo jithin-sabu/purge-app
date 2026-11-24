@@ -319,7 +319,7 @@ final class RemovedAppMonitor: ObservableObject {
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
         guard watcherHealth == .needsApproval else { return }
-        SettingsGuidePanel.shared.show(.allowInBackground) { [weak self] in
+        SettingsGuidePanel.shared.show(.allowInBackground, owner: self) { [weak self] in
             self?.stopWaitingForApproval(hideGuide: false)
         }
         approvalTimer?.invalidate()
@@ -335,7 +335,7 @@ final class RemovedAppMonitor: ObservableObject {
                 }
                 guard self.agentService.status != .requiresApproval else { return }
                 self.stopWaitingForApproval(hideGuide: false)
-                SettingsGuidePanel.shared.finish(.allowInBackground)
+                SettingsGuidePanel.shared.finish(.allowInBackground, owner: self)
                 self.refreshAgentStatus()
             }
         }
@@ -344,7 +344,7 @@ final class RemovedAppMonitor: ObservableObject {
     private func stopWaitingForApproval(hideGuide: Bool) {
         approvalTimer?.invalidate()
         approvalTimer = nil
-        if hideGuide { SettingsGuidePanel.shared.hide(.allowInBackground) }
+        if hideGuide { SettingsGuidePanel.shared.hide(.allowInBackground, owner: self) }
     }
 
     /// Called by Purge's uninstaller before it moves bundles, so the agent does not

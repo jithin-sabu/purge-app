@@ -437,8 +437,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     func cancelWaiting() {
         waitCancelled = true
-        SettingsGuidePanel.shared.hide(.installProfile)
-        SettingsGuidePanel.shared.hide(.removeProfile)
+        SettingsGuidePanel.shared.hide(.installProfile, owner: self)
+        SettingsGuidePanel.shared.hide(.removeProfile, owner: self)
     }
 
     /// Stops a removal before its next request to the service.
@@ -526,16 +526,16 @@ final class AppleIntelligenceModelStore: ObservableObject {
             phase = .waitingForProfileInstall
             try? await Task.sleep(for: .seconds(1))
             openProfilesPane()
-            SettingsGuidePanel.shared.show(.installProfile) { [weak self] in self?.cancelWaiting() }
+            SettingsGuidePanel.shared.show(.installProfile, owner: self) { [weak self] in self?.cancelWaiting() }
             let readBlocks = services.installedBlocks
             let installed = await waitUntil {
                 let now = readBlocks()
                 return blockTypes.allSatisfy { now.contains($0) }
             }
             if installed {
-                SettingsGuidePanel.shared.finish(.installProfile)
+                SettingsGuidePanel.shared.finish(.installProfile, owner: self)
             } else {
-                SettingsGuidePanel.shared.hide(.installProfile)
+                SettingsGuidePanel.shared.hide(.installProfile, owner: self)
             }
             // System Settings keeps its own copy once opened; the file would only
             // linger. Only Purge's own regular file goes, nothing that replaced it.
@@ -759,13 +759,13 @@ final class AppleIntelligenceModelStore: ObservableObject {
             waitCancelled = false
             phase = .waitingForProfileRemoval
             openProfilesPane()
-            SettingsGuidePanel.shared.show(.removeProfile) { [weak self] in self?.cancelWaiting() }
+            SettingsGuidePanel.shared.show(.removeProfile, owner: self) { [weak self] in self?.cancelWaiting() }
             let readBlocks = services.installedBlocks
             let removed = await waitUntil { readBlocks().isEmpty }
             if removed {
-                SettingsGuidePanel.shared.finish(.removeProfile)
+                SettingsGuidePanel.shared.finish(.removeProfile, owner: self)
             } else {
-                SettingsGuidePanel.shared.hide(.removeProfile)
+                SettingsGuidePanel.shared.hide(.removeProfile, owner: self)
             }
             installedBlocks = services.installedBlocks()
             guard removed else {

@@ -658,11 +658,6 @@ struct SafeCleanupCelebrationOverlay: View {
             guard isEnabled else { return }
             retryAdministratorFailures()
         }
-        // The same for Full Disk Access: the rows that needed it go again.
-        .onChange(of: store.hasFullDiskAccess) { granted in
-            guard granted else { return }
-            retryFullDiskAccessFailures()
-        }
         .onChange(of: session.phase) { phase in
             guard phase == .complete else { return }
             beginCompletionSequence()
@@ -1052,14 +1047,22 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 
     /// Opens Full Disk Access with the guide beside it. The rows that failed for
-    /// lack of access retry once it lands, from `onChange(of: hasFullDiskAccess)`,
-    /// which also covers access granted some other way (#450).
+    /// lack of access retry once the guide sees it land, so only after the user
+    /// clicked here (#450). With access already on, the click retries them at
+    /// once instead of opening System Settings for nothing.
     private func openFullDiskAccessForFailures() {
-        FullDiskAccessGuide.shared.open { [store] in store.applyFullDiskAccess(true) }
+        guard !store.hasFullDiskAccess else {
+            retryFullDiskAccessFailures()
+            return
+        }
+        FullDiskAccessGuide.shared.open { [store] in
+            store.applyFullDiskAccess(true)
+            retryFullDiskAccessFailures()
+        }
     }
 
     private func retryFullDiskAccessFailures() {
-        for item in otherFailures where item.reason == .needsFullDiskAccess {
+        for item in PurgeStore.fullDiskAccessRetryTargets(in: session.failedItems) {
             retryFailure(item)
         }
     }

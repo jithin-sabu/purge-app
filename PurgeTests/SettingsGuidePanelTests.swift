@@ -18,8 +18,9 @@ struct SettingsGuidePanelTests {
     @Test func aReplacedProfileGuideStopsTheProfileWait() async {
         let panel = SettingsGuidePanel()
         let store = AppleIntelligenceModelStore(defaults: defaults.defaults)
-        panel.show(.removeProfile) { store.cancelWaiting() }
-        panel.show(.allowInBackground) {}
+        let watcher = NSObject()
+        panel.show(.removeProfile, owner: store) { store.cancelWaiting() }
+        panel.show(.allowInBackground, owner: watcher) {}
         defer { panel.hide() }
 
         #expect(panel.shown == .allowInBackground)
@@ -32,25 +33,28 @@ struct SettingsGuidePanelTests {
     /// Showing the same guide again is not a replacement: its owner keeps waiting.
     @Test func showingTheSameGuideAgainCancelsNothing() {
         let panel = SettingsGuidePanel()
+        let owner = NSObject()
         var cancels = 0
-        panel.show(.allowInBackground) { cancels += 1 }
-        panel.show(.allowInBackground) { cancels += 1 }
+        panel.show(.allowInBackground, owner: owner) { cancels += 1 }
+        panel.show(.allowInBackground, owner: owner) { cancels += 1 }
         defer { panel.hide() }
         #expect(cancels == 0)
         #expect(panel.shown == .allowInBackground)
+        #expect(panel.ownerCount == 1)
     }
 
     /// Each flow hides only its own guide.
     @Test func eachFlowHidesOnlyItsOwnGuide() {
         let panel = SettingsGuidePanel()
-        panel.show(.allowInBackground) {}
+        let owner = NSObject()
+        panel.show(.allowInBackground, owner: owner) {}
         defer { panel.hide() }
 
-        panel.hide(.installProfile)
-        panel.hide(.removeProfile)
+        panel.hide(.installProfile, owner: owner)
+        panel.hide(.removeProfile, owner: owner)
         #expect(panel.shown == .allowInBackground)
 
-        panel.hide(.allowInBackground)
+        panel.hide(.allowInBackground, owner: owner)
         #expect(panel.shown == nil)
     }
 
@@ -58,23 +62,103 @@ struct SettingsGuidePanelTests {
     /// and another flow's show both behave as if it were gone.
     @Test func finishingAGuideClearsIt() {
         let panel = SettingsGuidePanel()
+        let owner = NSObject()
         var cancels = 0
-        panel.show(.fullDiskAccess) { cancels += 1 }
+        panel.show(.fullDiskAccess, owner: owner) { cancels += 1 }
         defer { panel.hide() }
-        panel.finish(.fullDiskAccess)
+        panel.finish(.fullDiskAccess, owner: owner)
         #expect(panel.shown == nil)
-        panel.show(.installProfile) {}
+        panel.show(.installProfile, owner: NSObject()) {}
         #expect(cancels == 0)
     }
 
     /// One flow can't finish another's guide.
     @Test func finishingAnotherGuideDoesNothing() {
         let panel = SettingsGuidePanel()
-        panel.show(.allowInBackground) {}
+        let owner = NSObject()
+        panel.show(.allowInBackground, owner: owner) {}
         defer { panel.hide() }
-        panel.finish(.fullDiskAccess)
-        panel.finish(.removeProfile)
+        panel.finish(.fullDiskAccess, owner: owner)
+        panel.finish(.removeProfile, owner: owner)
         #expect(panel.shown == .allowInBackground)
+    }
+
+    // MARK: Two flows on one guide
+
+    /// The helper and the deleted-apps watcher both wait on Allow in the
+    /// Background. One giving up leaves the guide up for the other.
+    @Test func oneOwnerHidingKeepsTheGuideForTheOther() {
+        let panel = SettingsGuidePanel()
+        let helper = NSObject()
+        let watcher = NSObject()
+        var cancels = 0
+        panel.show(.allowInBackground, owner: watcher) { cancels += 1 }
+        panel.show(.allowInBackground, owner: helper) { cancels += 1 }
+        defer { panel.hide() }
+
+        panel.hide(.allowInBackground, owner: helper)
+        #expect(panel.shown == .allowInBackground)
+        #expect(panel.ownerCount == 1)
+        #expect(cancels == 0)
+
+        panel.hide(.allowInBackground, owner: helper)
+        #expect(panel.ownerCount == 1)
+
+        panel.hide(.allowInBackground, owner: watcher)
+        #expect(panel.shown == nil)
+    }
+
+    /// One owner's change landing does not finish the guide while the other
+    /// still waits; the last one does.
+    @Test func theGuideFinishesWithItsLastOwner() {
+        let panel = SettingsGuidePanel()
+        let helper = NSObject()
+        let watcher = NSObject()
+        panel.show(.allowInBackground, owner: watcher) {}
+        panel.show(.allowInBackground, owner: helper) {}
+        defer { panel.hide() }
+
+        panel.finish(.allowInBackground, owner: helper)
+        #expect(panel.shown == .allowInBackground)
+        #expect(panel.ownerCount == 1)
+
+        panel.finish(.allowInBackground, owner: watcher)
+        #expect(panel.shown == nil)
+    }
+
+    /// A flow that went away without hiding never holds the guide open for
+    /// the one still there.
+    @Test func aGoneOwnerDoesNotHoldTheGuide() {
+        let panel = SettingsGuidePanel()
+        let helper = NSObject()
+        do {
+            let watcher = NSObject()
+            panel.show(.allowInBackground, owner: watcher) {}
+        }
+        panel.show(.allowInBackground, owner: helper) {}
+        defer { panel.hide() }
+        #expect(panel.ownerCount == 1)
+
+        panel.hide(.allowInBackground, owner: helper)
+        #expect(panel.shown == nil)
+    }
+
+    /// Another guide replacing a shared one tells every owner, so neither keeps
+    /// waiting with no guide.
+    @Test func replacingASharedGuideCancelsEveryOwner() {
+        let panel = SettingsGuidePanel()
+        let watcher = NSObject()
+        let helper = NSObject()
+        let fullDiskAccess = NSObject()
+        var cancelled: [String] = []
+        panel.show(.allowInBackground, owner: watcher) { cancelled.append("watcher") }
+        panel.show(.allowInBackground, owner: helper) { cancelled.append("helper") }
+        defer { panel.hide() }
+
+        panel.show(.fullDiskAccess, owner: fullDiskAccess) {}
+        #expect(cancelled == ["watcher", "helper"])
+        #expect(panel.shown == .fullDiskAccess)
+        #expect(panel.ownerCount == 1)
     }
 }
 
@@ -110,6 +194,14 @@ struct SettingsGuidePlacementTests {
         let window = NSRect(x: 200, y: 0, width: 700, height: 150)
         let placement = SettingsGuidePanel.placement(panelSize: size, window: window, visible: visible, gap: 8)
         #expect(placement.origin.y == 0)
+    }
+
+    /// Below a window that runs off the left edge, the panel stays on screen.
+    @Test func belowKeptOnScreenSideways() {
+        let window = NSRect(x: -400, y: 400, width: 1900, height: 500)
+        let placement = SettingsGuidePanel.placement(panelSize: size, window: window, visible: visible, gap: 8)
+        #expect(placement.origin == NSPoint(x: 0, y: 192))
+        #expect(placement.pointer == .top)
     }
 
     @Test func topRightCornerWithNoWindow() {
