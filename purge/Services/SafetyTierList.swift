@@ -235,33 +235,69 @@ enum SafetyTierList {
     }
 
     /// Whether only the Chromium shape could have rated `url` Safe: a folder
-    /// directly in `<home>/Library/Caches` that the scan classifies by an entry
-    /// marked `needs_chromium_shape`, or that no entry and no other rule here
-    /// knows. Worked out from the folder's name, the bundled entries and the
-    /// disk, never from what a scan in this process rated, so a row cleaned
-    /// from a saved scan, an App Intent or another process is held to the
-    /// shape too (#452). A folder a rule here decides gets no tier, such as a
+    /// directly in `<home>/Library/Caches` whose own name has an entry marked
+    /// `needs_chromium_shape`, or that no entry and no other rule here knows.
+    /// Worked out from the folder's name, the bundled entries and the disk,
+    /// never from what a scan in this process rated, so a row cleaned from a
+    /// saved scan, an App Intent or another process is held to the shape too
+    /// (#452). A folder a rule here decides gets no tier, such as a
     /// `Service Worker` path, is held to it as well, which only ever refuses
     /// more.
+    ///
+    /// The scan rates a `<app>-updater` folder with a `pending` folder under the
+    /// Electron updater entry, whatever its own name. That rating counts here
+    /// only while the folder holds nothing but `pending` and loose files
+    /// (`holdsOnlyUpdaterDownloads`). A browser cache folder the shape rated
+    /// keeps its profile folders when it gains a `pending` folder, so it is
+    /// still held to the shape. An updater folder that lost `pending` before the
+    /// move, and whose own name nothing knows, is held to the shape too and
+    /// stays: nothing tells it apart from a folder the shape rated.
     nonisolated static func dependsOnChromiumShape(_ url: URL, home: String) -> Bool {
-        guard isInHomeCaches(url, home: home) else { return false }
-        // The name the scan classifies a folder here by (`CacheScanner.cacheItem`).
-        let name = CacheDiscoveryPaths.isElectronUpdaterCache(url)
-            ? CacheDiscoveryPaths.electronUpdaterKey
-            : url.lastPathComponent
-        if let record = ExplanationDatabase.matchBundledDatabase(folderName: name) {
-            return record.needsChromiumShape == true
+        guard isInHomeCaches(url, home: home), shapeCouldRate(url) else { return false }
+        if CacheDiscoveryPaths.isElectronUpdaterCache(url), holdsOnlyUpdaterDownloads(url) {
+            return false
         }
         // `GOMODCACHE` can name a folder here. Its row is rated by
         // `GoModuleCacheScanPolicy`, which reads the folder again before the move.
         if GoModuleCacheScanPolicy.isWholeCacheRoot(url) {
             return false
         }
+        return true
+    }
+
+    /// Whether the shape rule, or an entry that needs the shape, decides the
+    /// tier of a folder with this name in the home's Caches.
+    private nonisolated static func shapeCouldRate(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        if let record = ExplanationDatabase.matchBundledDatabase(folderName: name) {
+            return record.needsChromiumShape == true
+        }
         switch ruleRating(folderName: name, path: url) {
         case .decided(let level):
             return level == nil
         case .unrated:
             return true
+        }
+    }
+
+    /// Whether `folder` holds only what electron-updater writes there: a real
+    /// `pending` folder and regular files. Any other folder, a link or an entry
+    /// that can't be read fails.
+    private nonisolated static func holdsOnlyUpdaterDownloads(_ folder: URL) -> Bool {
+        guard let children = try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+            options: []
+        ) else { return false }
+        return children.allSatisfy { child in
+            guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey]) else {
+                return false
+            }
+            // `isDirectoryKey` and `isRegularFileKey` are false for a link.
+            if child.lastPathComponent == "pending" {
+                return values.isDirectory == true
+            }
+            return values.isRegularFile == true
         }
     }
 

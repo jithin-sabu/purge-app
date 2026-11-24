@@ -436,6 +436,66 @@ struct LibraryCachesBrowserShapeTests {
         #expect(SafetyTierList.passesChromiumShapeBoundary(unlisted, home: "/Users/someone-else"))
     }
 
+    /// A `-updater` folder the shape rated that gains a `pending` folder keeps
+    /// its profile folders, so the Electron updater entry doesn't let it skip
+    /// the shape. An updater folder with only `pending` and loose files moves
+    /// under that entry (#454 review).
+    @Test
+    func updaterEntryCoversOnlyAnUpdaterLayout() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let check = FileDeleter.defaultImmediateMoveCheck(home: home)
+
+        let browser = caches.appendingPathComponent("browser-updater", isDirectory: true)
+        try lay(browser, folders: Self.yabFolders)
+        #expect(tier(browser) == .safe)
+        #expect(check(browser))
+        try lay(browser, folders: ["pending"], files: ["pending/update.zip", "Chromium/Default/Local State"])
+        #expect(CacheDiscoveryPaths.isElectronUpdaterCache(browser))
+        #expect(SafetyTierList.dependsOnChromiumShape(browser, home: home))
+        #expect(!check(browser))
+
+        let updater = caches.appendingPathComponent("t3code-updater", isDirectory: true)
+        try lay(updater, folders: ["pending"], files: ["pending/update.zip", "pending/update-info.json", "current.blockmap"])
+        #expect(!SafetyTierList.dependsOnChromiumShape(updater, home: home))
+        #expect(check(updater))
+
+        // A link beside `pending`, or a `pending` that is a link, is not an updater layout.
+        let linked = caches.appendingPathComponent("linked-updater", isDirectory: true)
+        try lay(linked, folders: ["pending"])
+        try FileManager.default.createSymbolicLink(
+            at: linked.appendingPathComponent("update.zip"),
+            withDestinationURL: cleanup.appendingPathComponent("Documents/notes.txt")
+        )
+        let linkedPending = caches.appendingPathComponent("pending-link-updater", isDirectory: true)
+        try lay(linkedPending, folders: [])
+        try lay(cleanup, folders: ["Elsewhere/pending"])
+        try FileManager.default.createSymbolicLink(
+            at: linkedPending.appendingPathComponent("pending"),
+            withDestinationURL: cleanup.appendingPathComponent("Elsewhere/pending")
+        )
+        #expect(!check(linked))
+        #expect(!check(linkedPending))
+    }
+
+    /// An updater folder whose `pending` folder went before the move, and whose
+    /// own name no entry knows, can't be told apart from a folder the shape
+    /// rated. It stays, on purpose: the leftover is small, and the next scan no
+    /// longer lists it.
+    @Test
+    func updaterFolderThatLostPendingStays() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let updater = caches.appendingPathComponent("t3code-updater", isDirectory: true)
+        try lay(updater, folders: [], files: ["current.blockmap"])
+
+        #expect(!CacheDiscoveryPaths.isElectronUpdaterCache(updater))
+        #expect(tier(updater) == nil)
+        #expect(!FileDeleter.defaultImmediateMoveCheck(home: home)(updater))
+    }
+
     /// The disk ignores case, so a `service worker` folder is a Service Worker
     /// folder, as the tier list already reads it.
     @Test
