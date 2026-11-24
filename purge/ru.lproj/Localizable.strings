@@ -333,7 +333,6 @@
 "Clear history" = "Очистить историю";
 "Clear search" = "Очистить поиск";
 "Click Everything else in the crumb to go back" = "Нажмите «Всё остальное» в строке пути, чтобы вернуться";
-"Click Install…, then Install again when macOS asks." = "Нажмите «Установить…», а когда macOS спросит, нажмите «Установить» ещё раз.";
 "Clones and purgeable files can make a folder read larger than what removing it would free. Hard links are counted once within each folder." = "Из-за клонов и очищаемых файлов папка может выглядеть больше, чем освободится при её удалении. Жёсткие ссылки учитываются один раз в пределах каждой папки.";
 "Close" = "Закрыть";
 "Cloud" = "Облако";
@@ -1551,9 +1550,6 @@
 
 // Settings guide (#450)
 "Allow Full Disk Access" = "Разрешите полный доступ к диску";
-"Double-click it under Downloaded." = "Дважды нажмите на него в разделе «Загружено».";
-"Select it, then click the minus button below the list." = "Выберите его и нажмите кнопку «−» под списком.";
-"Click Remove." = "Нажмите «Удалить».";
 "Waiting for the switch" = "Ждём, пока вы включите";
 "Waiting for the install" = "Ждём установки";
 "Waiting for the removal" = "Ждём удаления";
@@ -1565,3 +1561,7 @@
 "Drag Purge into the Full Disk Access list" = "Перетащите Purge в список «Полный доступ к диску»";
 "Not in the list? Drag the Purge row above into it." = "Нет в списке? Перетащите туда строку Purge выше.";
 "If macOS offers to reopen Purge, go ahead." = "Если macOS предложит снова открыть Purge, согласитесь.";
+"Downloaded" = "Загружено";
+"Double-click it, then click Install." = "Дважды нажмите на него, затем нажмите «Установить».";
+"Confirm with Install, and your password if asked." = "Подтвердите кнопкой «Установить» и паролем, если его спросят.";
+"Select it, click the minus button, then Remove." = "Выберите его, нажмите кнопку «минус», затем «Удалить».";

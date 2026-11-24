@@ -322,11 +322,12 @@ struct SettingsGuideView: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// A copy of the row System Settings shows, so the user looks for a picture
+    /// A copy of what System Settings shows, so the user looks for a picture
     /// rather than reading where to click. Once done, the same spot says so.
+    @ViewBuilder
     private var targetRow: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            if model.isDone {
+        if model.isDone {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundStyle(AppColors.statusSafeText)
@@ -335,9 +336,12 @@ struct SettingsGuideView: View {
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                 Spacer(minLength: 0)
-            } else {
-                switch guide {
-                case .fullDiskAccess, .allowInBackground:
+            }
+            .modifier(GuideRowChrome(isDone: true))
+        } else {
+            switch guide {
+            case .fullDiskAccess, .allowInBackground:
+                HStack(spacing: AppStyle.Spacing.xSmall) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 18, height: 18)
@@ -347,29 +351,66 @@ struct SettingsGuideView: View {
                         .foregroundStyle(AppColors.textPrimary)
                     Spacer(minLength: AppStyle.Spacing.xSmall)
                     SwitchedOnMark()
-                case .installProfile, .removeProfile:
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.textSecondary)
-                        .frame(width: 18, height: 18)
-                        .accessibilityHidden(true)
-                    Text(AppleIntelligenceDownloadBlock.profileDisplayName)
-                        .font(AppStyle.Typography.rowTitle)
-                        .foregroundStyle(AppColors.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
                 }
+                .modifier(GuideRowChrome(isDone: false))
+                .modifier(DragsPurgeApp(isOn: guide == .fullDiskAccess))
+            case .installProfile:
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                    // System Settings lists a profile that is not installed yet
+                    // under this heading.
+                    Text("Downloaded")
+                        .font(AppStyle.Typography.metadataEmphasis)
+                        .foregroundStyle(AppColors.textTertiary)
+                    profileRow
+                        .modifier(GuideRowChrome(isDone: false))
+                }
+            case .removeProfile:
+                // The row with the list's own + and − buttons under it, − marked.
+                VStack(alignment: .leading, spacing: 0) {
+                    profileRow
+                    Rectangle()
+                        .fill(AppColors.borderSubtle)
+                        .frame(height: 1)
+                    HStack(spacing: AppStyle.Spacing.xSmall) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppColors.textTertiary)
+                        Image(systemName: "minus")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .frame(width: 18, height: 16)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                                    .strokeBorder(AppColors.systemControlAccent, lineWidth: 1.5)
+                            )
+                        Spacer(minLength: 0)
+                    }
+                    .accessibilityHidden(true)
+                    .padding(.horizontal, AppStyle.Spacing.small)
+                    .padding(.vertical, AppStyle.Spacing.xxSmall)
+                }
+                .modifier(GuideRowChrome(isDone: false, pads: false))
             }
         }
-        .frame(minHeight: 22)
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xSmall)
-        .background(AppColors.surfaceCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
-                .strokeBorder(model.isDone ? AppColors.statusSafeText : AppColors.borderSubtle)
-        )
-        .modifier(DragsPurgeApp(isOn: guide == .fullDiskAccess && !model.isDone))
+    }
+
+    /// The profile as System Settings lists it: a settings tile and its name.
+    private var profileRow: some View {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.textPrimary)
+                .frame(width: 20, height: 20)
+                .background(AppColors.borderStrong, in: RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous))
+                .accessibilityHidden(true)
+            Text(AppleIntelligenceDownloadBlock.profileDisplayName)
+                .font(AppStyle.Typography.rowTitle)
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, guide == .removeProfile ? AppStyle.Spacing.small : 0)
+        .padding(.vertical, guide == .removeProfile ? AppStyle.Spacing.xSmall : 0)
     }
 
     /// One line needs no number; several are numbered in the order the user
@@ -453,14 +494,12 @@ struct SettingsGuideView: View {
             ]
         case .installProfile:
             return [
-                String(localized: "Double-click it under Downloaded."),
-                String(localized: "Click Install…, then Install again when macOS asks."),
-                String(localized: "Enter your password if it asks for one."),
+                String(localized: "Double-click it, then click Install."),
+                String(localized: "Confirm with Install, and your password if asked."),
             ]
         case .removeProfile:
             return [
-                String(localized: "Select it, then click the minus button below the list."),
-                String(localized: "Click Remove."),
+                String(localized: "Select it, click the minus button, then Remove."),
                 String(localized: "Enter your password if it asks for one."),
             ]
         }
@@ -481,6 +520,25 @@ struct SettingsGuideView: View {
         case .installProfile: return String(localized: "Profile installed")
         case .removeProfile: return String(localized: "Profile removed")
         }
+    }
+}
+
+/// The card a guide row sits on; green once the change has landed. `pads`
+/// is false for a row that lays out its own insets.
+private struct GuideRowChrome: ViewModifier {
+    let isDone: Bool
+    var pads = true
+
+    func body(content: Content) -> some View {
+        content
+            .frame(minHeight: 22)
+            .padding(.horizontal, pads ? AppStyle.Spacing.small : 0)
+            .padding(.vertical, pads ? AppStyle.Spacing.xSmall : 0)
+            .background(AppColors.surfaceCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
+                    .strokeBorder(isDone ? AppColors.statusSafeText : AppColors.borderSubtle)
+            )
     }
 }
 

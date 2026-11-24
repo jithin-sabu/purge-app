@@ -978,7 +978,6 @@
 "Removed, %@ freed on the disk that macOS already counted as available" = "Kaldırıldı, diskte macOS'in zaten kullanılabilir saydığı %@ yer açıldı";
 "Install the Purge profile" = "Purge profilini yükle";
 "Remove the Purge profile" = "Purge profilini kaldır";
-"Click Install…, then Install again when macOS asks." = "Yükle…'ye tıklayın, macOS sorunca tekrar Yükle'ye tıklayın.";
 "Enter your password if it asks for one." = "Parola isterse girin.";
 "Too big to check for recent changes, so Purge won't clean it without asking." = "Son değişiklikleri denetlemek için çok büyük, bu yüzden Purge sormadan temizlemez.";
 "Total" = "Toplam";
@@ -1592,9 +1591,6 @@
 
 // Settings guide (#450)
 "Allow Full Disk Access" = "Tam Disk Erişimine izin verin";
-"Double-click it under Downloaded." = "İndirilenler altında ona çift tıklayın.";
-"Select it, then click the minus button below the list." = "Onu seçin, sonra listenin altındaki eksi düğmesine tıklayın.";
-"Click Remove." = "Kaldır'a tıklayın.";
 "Waiting for the switch" = "Anahtarın açılması bekleniyor";
 "Waiting for the install" = "Yükleme bekleniyor";
 "Waiting for the removal" = "Kaldırma bekleniyor";
@@ -1606,3 +1602,7 @@
 "Drag Purge into the Full Disk Access list" = "Purge'ü Tam Disk Erişimi listesine sürükleyin";
 "Not in the list? Drag the Purge row above into it." = "Listede yok mu? Yukarıdaki Purge satırını listeye sürükleyin.";
 "If macOS offers to reopen Purge, go ahead." = "macOS Purge'ü yeniden açmayı önerirse kabul edin.";
+"Downloaded" = "İndirilenler";
+"Double-click it, then click Install." = "Ona çift tıklayın, sonra Yükle'ye tıklayın.";
+"Confirm with Install, and your password if asked." = "Yükle ile ve istenirse parolanızla onaylayın.";
+"Select it, click the minus button, then Remove." = "Onu seçin, eksi düğmesine, sonra Kaldır'a tıklayın.";
