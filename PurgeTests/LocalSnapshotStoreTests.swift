@@ -84,6 +84,42 @@ struct LocalSnapshotStoreTests {
         #expect(!store.isRemoving)
     }
 
+    /// The confirmation lists the plan's snapshots and Remove deletes that same plan,
+    /// so what it names is exactly what goes: never the newest one or the one from
+    /// the last backup (#331).
+    @Test func theConfirmationListsExactlyWhatRemoveDeletes() async throws {
+        let mac = FakeTimeMachine([Self.oldest, Self.older, Self.fromBackup, Self.newest])
+        let store = mac.makeStore()
+        await store.refresh()
+
+        let plan = SnapshotRemovalPlan(snapshots: try #require(store.snapshots).removable)
+        let listed = Set(plan.snapshots.map(\.name))
+        #expect(listed == [Self.oldest, Self.older])
+        #expect(!listed.contains(Self.newest))
+        #expect(!listed.contains(Self.fromBackup))
+
+        let before = Set(try #require(store.snapshots).all.map(\.name))
+        await store.remove(plan.snapshots)
+        let after = Set(try #require(store.snapshots).all.map(\.name))
+
+        #expect(before.subtracting(after) == listed)
+        #expect(Set(mac.deleteCalls.flatMap { $0 }) == Set(plan.snapshots.map(\.stamp)))
+        #expect(after == [Self.fromBackup, Self.newest])
+    }
+
+    /// `tmutil` deletes by stamp, so a stamp that a snapshot the confirmation didn't
+    /// show also uses is left alone: deleting it would take that snapshot too (#331).
+    @Test func sparesAStampAnUnlistedSnapshotShares() async {
+        let sameStamp = "com.apple.TimeMachine.2026-11-01-080000.backup"
+        let mac = FakeTimeMachine([Self.oldest, sameStamp, Self.older, Self.fromBackup, Self.newest])
+        let store = mac.makeStore()
+
+        await store.remove(planned([Self.oldest, Self.older]))
+
+        #expect(mac.deleteCalls == [[stamp(Self.older)]])
+        #expect(store.snapshots?.all.map(\.name) == [sameStamp, Self.oldest, Self.fromBackup, Self.newest])
+    }
+
     /// The confirmation showed two, then Time Machine dropped the newer ones: the
     /// older of the two is now the newest and is kept.
     @Test func sparesOneThatBecameTheNewest() async {

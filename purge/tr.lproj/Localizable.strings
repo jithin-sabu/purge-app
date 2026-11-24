@@ -617,6 +617,7 @@
 "Protected" = "Korumalı";
 "Skipped for safety" = "Güvenlik için atlandı";
 "Smallest" = "En küçük";
+"Snapshots to remove" = "Kaldırılacak anlık görüntüler";
 "Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. Backups on your backup disk aren't touched." = "Anlık görüntüler, son yedeklemenizden beri değiştirdiğiniz veya sildiğiniz dosyaların tek kopyasını barındırıyor olabilir. Kaldırılan anlık görüntüler geri konamaz. Purge en yeni anlık görüntüyü ve son yedeklemenizden olanı saklar; Time Machine'in bunlara hâlâ ihtiyacı olabilir. Yedekleme diskinizdeki yedeklere dokunulmaz.";
 "Snooping around…" = "Etrafa göz atılıyor…";
 "Some apps are installed under an administrator and can't be moved to the Trash on their own, and neither can the files a finished macOS update leaves behind. Purge asks you to enable its secure removal helper only when something needs it. Items still go to the Trash, and you can turn it off here at any time." = "Bazı uygulamalar bir yönetici hesabı altında yüklüdür ve kendi başlarına Çöp Sepeti'ne taşınamaz; tamamlanmış bir macOS güncellemesinin geride bıraktığı dosyalar da öyle. Purge, güvenli kaldırma yardımcısını yalnızca bir şeyin buna ihtiyacı olduğunda etkinleştirmenizi ister. Öğeler yine Çöp Sepeti'ne gider ve bunu burada istediğiniz zaman kapatabilirsiniz.";

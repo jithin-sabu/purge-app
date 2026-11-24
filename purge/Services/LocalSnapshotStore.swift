@@ -89,7 +89,9 @@ final class LocalSnapshotStore: ObservableObject {
 
     /// Deletes the snapshots the confirmation showed. The list is read again first and
     /// anything it now says to keep is spared, so a snapshot that became the newest
-    /// while the dialog was open, or one that has already gone, is left alone.
+    /// while the dialog was open, or one that has already gone, is left alone. So is a
+    /// stamp that a snapshot the confirmation didn't show also uses: `tmutil` deletes
+    /// by stamp, and that snapshot would go too (#331).
     func remove(_ planned: [LocalSnapshot]) async {
         guard !isRemoving, !planned.isEmpty else { return }
         isRemoving = true
@@ -101,7 +103,11 @@ final class LocalSnapshotStore: ObservableObject {
         }
         let present = Set(fresh.all.map(\.name))
         let kept = fresh.keptStamps
-        let targeted = planned.filter { present.contains($0.name) && !kept.contains($0.stamp) }
+        let plannedNames = Set(planned.map(\.name))
+        let unlisted = Set(fresh.all.filter { !plannedNames.contains($0.name) }.map(\.stamp))
+        let targeted = planned.filter {
+            present.contains($0.name) && !kept.contains($0.stamp) && !unlisted.contains($0.stamp)
+        }
         guard !targeted.isEmpty else { return }
 
         let capacityBefore = readCapacity()

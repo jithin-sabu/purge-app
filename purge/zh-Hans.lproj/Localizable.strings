@@ -618,6 +618,7 @@
 "Protected" = "受保护";
 "Skipped for safety" = "出于安全考虑已跳过";
 "Smallest" = "最小优先";
+"Snapshots to remove" = "要移除的快照";
 "Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。备份磁盘上的备份不会受到影响。";
 "Snooping around…" = "正在四处打探…";
 "Some apps are installed under an administrator and can't be moved to the Trash on their own, and neither can the files a finished macOS update leaves behind. Purge asks you to enable its secure removal helper only when something needs it. Items still go to the Trash, and you can turn it off here at any time." = "部分应用由管理员安装，无法直接移到废纸篓，macOS 更新完成后留下的文件也是如此。只有在需要时，Purge 才会要求启用安全移除助手。项目仍会进入废纸篓，你可以随时在此停用助手。";

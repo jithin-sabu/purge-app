@@ -766,7 +766,7 @@ private struct OverviewSnapshotRow: View {
         .help("Remove the snapshots Time Machine no longer needs")
         .popover(item: $plan, arrowEdge: .bottom) { plan in
             OverviewSnapshotConfirmation(
-                count: plan.snapshots.count,
+                snapshots: plan.snapshots,
                 onCancel: { self.plan = nil },
                 onOpenDiskUtility: {
                     self.plan = nil
@@ -828,19 +828,22 @@ private struct OverviewSnapshotRow: View {
     }
 }
 
-/// What one open confirmation will delete.
-private struct SnapshotRemovalPlan: Identifiable {
+/// What one open confirmation lists and Remove deletes. The confirmation shows these
+/// snapshots and Remove is handed the same array, so the two can't differ (#331).
+struct SnapshotRemovalPlan: Identifiable {
     let id = UUID()
     let snapshots: [LocalSnapshot]
 }
 
-/// Snapshots can't be put back, so removing them asks first and says what they hold:
-/// most people have never heard of them.
+/// Snapshots can't be put back, so removing them asks first, says what they hold
+/// (most people have never heard of them), and lists each one that will go.
 private struct OverviewSnapshotConfirmation: View {
-    let count: Int
+    let snapshots: [LocalSnapshot]
     let onCancel: () -> Void
     let onOpenDiskUtility: () -> Void
     let onConfirm: () -> Void
+
+    private var count: Int { snapshots.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
@@ -853,6 +856,8 @@ private struct OverviewSnapshotConfirmation: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            snapshotList
 
             HStack(spacing: AppStyle.Spacing.xSmall) {
                 Button("Open Disk Utility", action: onOpenDiskUtility)
@@ -868,6 +873,28 @@ private struct OverviewSnapshotConfirmation: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(width: 460)
+    }
+
+    /// Each snapshot that will go, oldest first, by the date and time Time Machine
+    /// took it. Scrolls past about eight, since a day of hourly snapshots is 24.
+    private var snapshotList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                ForEach(snapshots, id: \.name) { snapshot in
+                    Text(verbatim: snapshot.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(AppStyle.Typography.callout)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.vertical, AppStyle.Spacing.xSmall)
+        }
+        .frame(maxHeight: 168)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(AppColors.fillSecondary, in: RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Snapshots to remove"))
     }
 }
 
