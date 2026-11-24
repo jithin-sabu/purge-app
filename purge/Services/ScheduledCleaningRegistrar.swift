@@ -335,10 +335,15 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         if let failedAt = lastFailedAttemptDate {
             due = max(due, failedAt.addingTimeInterval(Self.retryGapAfterFailure))
         }
-        // Clamped to `now`, so a stamp from a clock that was ahead can't hide the
-        // list for longer than the gap.
-        if !prefs.firstCleanApproved, let closedAt = previewClosedDate {
-            due = max(due, min(closedAt, now).addingTimeInterval(Self.previewGapAfterNotNow))
+        if !prefs.firstCleanApproved, var closedAt = previewClosedDate {
+            // A stamp from a clock that was ahead. Clamped on each read, the end of
+            // the gap would slide with `now` and the list would never come back.
+            // Re-stamped once, at `now`, so it waits one gap from here.
+            if closedAt > now {
+                ud.set(now, forKey: Self.previewClosedKey)
+                closedAt = now
+            }
+            due = max(due, closedAt.addingTimeInterval(Self.previewGapAfterNotNow))
         }
         return due
     }
@@ -490,7 +495,8 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// The user chose Clean in the first scheduled clean's list. Cleans only the
     /// paths that list showed, after the store checks each one again, and counts as
     /// this period's clean. The approval is recorded once the clean has run, so a
-    /// clean that never started (another one was running) asks again next time.
+    /// clean that never started asks again next time: another clean was running,
+    /// or every shown row had stopped being Safe and there was nothing to move.
     ///
     /// Returns nil when automatic cleaning was turned off while the list was open:
     /// the list belongs to the schedule, so nothing moves.
@@ -507,9 +513,13 @@ final class ScheduledCleaningRegistrar: ObservableObject {
 
         let result = await performApprovedClean(paths: paths)
         summary = result
-        if !result.skippedForAnotherClean {
+        if !result.skippedForAnotherClean, !result.hadNothingToMove {
             prefs.markFirstCleanApproved()
             ud.removeObject(forKey: Self.previewClosedKey)
+        }
+        if result.skippedForAnotherClean {
+            // Still due, and the reminder was taken back when the list opened.
+            await performRearm()
         }
         await finishSchedule(after: result, at: now)
         return result
@@ -518,8 +528,13 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// The user closed the first scheduled clean's list with Not Now. Nothing
     /// moved and nothing is recorded as cleaned; the list comes back once
     /// `previewGapAfterNotNow` has passed, at the next switch into Purge.
-    func closeFirstCleanPreview(at now: Date = Date()) {
+    ///
+    /// The reminder was taken back when the list opened, so it is armed again for
+    /// the end of the gap. A user who keeps Purge in the menu bar and never
+    /// switches into it still hears when the list is ready.
+    func closeFirstCleanPreview(at now: Date = Date()) async {
         ud.set(now, forKey: Self.previewClosedKey)
+        await performRearm()
     }
 
     /// Returns when the running sweep or Run now ends, with its summary.

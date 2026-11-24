@@ -149,8 +149,11 @@ struct ScheduledCleanPreviewTests {
         let h = makeHarness()
         await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: monthLater)
 
-        h.registrar.closeFirstCleanPreview(at: monthLater)
+        let rearmsBefore = h.fakes.rearms
+        await h.registrar.closeFirstCleanPreview(at: monthLater)
 
+        // The reminder taken back when the list opened is armed again.
+        #expect(h.fakes.rearms == rearmsBefore + 1)
         #expect(!h.prefs.firstCleanApproved)
         #expect(anchor(h) == nil)
         #expect(h.registrar.lastOutcome == nil)
@@ -166,14 +169,16 @@ struct ScheduledCleanPreviewTests {
     }
 
     @Test("A Not Now stamp from a clock that was ahead hides the list for one gap at most")
-    func futureNotNowStampIsClamped() {
+    func futureNotNowStampIsClamped() async {
         let h = makeHarness()
-        h.registrar.closeFirstCleanPreview(at: monthLater.addingTimeInterval(365 * 86_400))
+        await h.registrar.closeFirstCleanPreview(at: monthLater.addingTimeInterval(365 * 86_400))
+        let gapEnd = monthLater.addingTimeInterval(ScheduledCleaningRegistrar.previewGapAfterNotNow)
 
-        #expect(
-            h.registrar.dueDate(referenceDate: monthLater)
-                == monthLater.addingTimeInterval(ScheduledCleaningRegistrar.previewGapAfterNotNow)
-        )
+        #expect(h.registrar.dueDate(referenceDate: monthLater) == gapEnd)
+        // Re-stamped once, so the end of the gap stays put instead of sliding.
+        #expect(h.registrar.dueDate(referenceDate: gapEnd) == gapEnd)
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: gapEnd)
+        #expect(h.fakes.previewCount == 1)
     }
 
     // MARK: Approval
@@ -183,7 +188,7 @@ struct ScheduledCleanPreviewTests {
         let h = makeHarness()
         let paths: Set<String> = ["/tmp/purge-preview-a", "/tmp/purge-preview-b"]
         await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: monthLater)
-        h.registrar.closeFirstCleanPreview(at: monthLater)
+        await h.registrar.closeFirstCleanPreview(at: monthLater)
 
         let summary = await h.registrar.cleanApprovedPreview(paths: paths, referenceDate: monthLater)
 
@@ -224,6 +229,26 @@ struct ScheduledCleanPreviewTests {
         #expect(!h.prefs.firstCleanApproved)
         #expect(anchor(h) == nil)
         #expect(h.registrar.lastOutcome == nil)
+        // Still due, so the reminder taken back when the list opened is armed again.
+        #expect(h.fakes.rearms >= 1)
+    }
+
+    @Test("A clean with nothing left to move keeps asking")
+    func nothingLeftKeepsAsking() async {
+        let fakes = Fakes()
+        fakes.approvedSummary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0, bytesMovedToTrash: 0, hadNothingToMove: true
+        )
+        let h = makeHarness(fakes: fakes)
+
+        await h.registrar.cleanApprovedPreview(paths: ["/tmp/purge-preview-a"], referenceDate: monthLater)
+
+        #expect(!h.prefs.firstCleanApproved)
+        // The period counts as done, as a clean that found nothing does.
+        #expect(anchor(h) == monthLater)
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: monthLater.addingTimeInterval(31 * 86_400))
+        #expect(h.fakes.previewCount == 1)
+        #expect(h.fakes.clean.callCount == 0)
     }
 
     @Test("A failed approved clean keeps the approval and waits out the retry gap")
@@ -389,6 +414,37 @@ struct ScheduledCleanPreviewListTests {
         #expect(unique.count == 2)
         #expect(preview.totalBytes == 15)
         #expect(preview.sortedCandidates.map(\.sizeBytes) == [10, 5])
+    }
+
+    @Test("Move to Trash says why when nothing moved")
+    func approvedPreviewExplainsNothingMoved() {
+        #expect(PurgeStore.approvedPreviewMessage(for: nil) != nil)
+        #expect(PurgeStore.approvedPreviewMessage(
+            for: PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
+        ) != nil)
+        #expect(PurgeStore.approvedPreviewMessage(
+            for: PurgeStore.ScheduledCleaningSummary(deletedCount: 1, bytesMovedToTrash: 10)
+        ) == nil)
+    }
+
+    @Test("The list waits while another sheet or alert is open")
+    func listWaitsForOtherSheets() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let states: [(String, (Bool) -> Void)] = [
+            ("Look Deeper", { store.isLookDeeperPresented = $0 }),
+            ("error alert", { store.errorMessage = $0 ? "Test error" : nil }),
+            ("deletion sheet", { store.showDeletionSheet = $0 }),
+        ]
+
+        #expect(store.mayPresentScheduledCleanPreview)
+        for (name, setOpen) in states {
+            setOpen(true)
+            #expect(!store.mayPresentScheduledCleanPreview, "\(name) should hold the list")
+            setOpen(false)
+            #expect(store.mayPresentScheduledCleanPreview, "\(name) should release the list")
+        }
     }
 
     @Test("The list holds the schedule and counts as an open sheet")

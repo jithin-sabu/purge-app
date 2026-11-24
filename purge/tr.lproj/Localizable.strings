@@ -1601,3 +1601,4 @@
 "Your first scheduled clean" = "İlk zamanlanmış temizliğiniz";
 "Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge ilk kez zamanlamaya göre temizlik yapmak üzere. Bu güvenli öğeler Çöp Sepeti'ne taşınır ve oradan geri koyabilirsiniz. Çöp Sepeti'ne Taşı'yı seçene kadar hiçbir şey taşınmaz.";
 "After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "Bundan sonra zamanlanmış temizlikler güvenli öğeleri kendiliğinden Çöp Sepeti'ne taşır. Bunları Ayarlar'dan kapatabilirsiniz.";
+"Automatic cleaning was turned off, so nothing moved." = "Otomatik temizlik kapatıldı, bu yüzden hiçbir şey taşınmadı.";

@@ -238,6 +238,25 @@ struct UnattendedSafeCleanTests {
         #expect(entry.trigger == .scheduled)
     }
 
+    /// Every shown row stopped being Safe while the list was open. Nothing moves,
+    /// and the summary says no clean started, so the approval stays unused.
+    @Test func anApprovedListWithNothingLeftStartsNoClean() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        let shown = Self.row(.safe)
+        store.cacheItems = [shown]
+        let paths: Set<String> = [Self.path(shown)]
+
+        store.cacheItems = [Self.row(.medium, path: shown)]
+        let summary = await store.performApprovedScheduledClean(paths: paths)
+
+        #expect(summary.hadNothingToMove)
+        #expect(summary.deletedCount == 0)
+        #expect(trash.trashedPaths.isEmpty)
+    }
+
     /// Clean in the list is the user's own click: an open review does not stop
     /// it, but a clean already running does.
     @Test func anApprovedListWaitsOnlyForARunningClean() async {

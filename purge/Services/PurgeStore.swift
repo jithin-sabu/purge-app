@@ -5021,6 +5021,9 @@ final class PurgeStore: ObservableObject {
         /// cleaning (#331). Nothing moved, and the clean stays due until the user
         /// chooses.
         var awaitsApproval = false
+        /// True when no row was left to move, so no clean started. For the
+        /// approved first clean this keeps the approval unused (#331).
+        var hadNothingToMove = false
 
         var failedCount: Int { failedItems.count }
     }
@@ -5059,14 +5062,14 @@ final class PurgeStore: ObservableObject {
     /// Reads whether scheduled cleaning is on from `preferences`. Tests pass ones
     /// kept in throwaway defaults, never the user's own.
     func prepareScheduledCleanPreview(preferences: ScheduledCleaningPreferenceStore) async -> ScheduledCleanPreviewResult {
-        guard preferences.isEnabled, !isReviewingOrCleaning else { return .skipped }
+        guard preferences.isEnabled, mayPresentScheduledCleanPreview else { return .skipped }
         let candidates = ScheduledCleanPreview.uniqueByPath(await safeCleanupBatch(pinnedCandidates: nil))
         guard !candidates.isEmpty else {
             await ScheduledCleanupNotifier.notifyNothingEligible()
             return .nothingEligible
         }
-        // A review can open during the rescan, as in `performSafeCleanup`.
-        guard !isReviewingOrCleaning else { return .skipped }
+        // A review or sheet can open during the rescan, as in `performSafeCleanup`.
+        guard mayPresentScheduledCleanPreview else { return .skipped }
         scheduledCleanPreview = ScheduledCleanPreview(candidates: candidates)
         // The test host's window is no one's to bring forward.
         if !TestHost.isActive() {
@@ -5075,12 +5078,20 @@ final class PurgeStore: ObservableObject {
         return .presented
     }
 
+    /// Whether the list can open now. SwiftUI shows one sheet at a time, so a
+    /// list set under Look Deeper, Uninstall Purge, an alert or another review
+    /// would stay hidden and hold every later sweep. The clean stays due instead,
+    /// as the other prompts that open on their own do.
+    var mayPresentScheduledCleanPreview: Bool {
+        !isShowingReviewOrCleaning && !isAnotherSheetOpen
+    }
+
     /// Not Now in the list. Nothing moves and nothing counts as cleaned; the list
     /// comes back after `ScheduledCleaningRegistrar.previewGapAfterNotNow`.
     func closeScheduledCleanPreview() {
         guard scheduledCleanPreview != nil else { return }
         scheduledCleanPreview = nil
-        ScheduledCleaningRegistrar.shared.closeFirstCleanPreview()
+        Task { await ScheduledCleaningRegistrar.shared.closeFirstCleanPreview() }
     }
 
     /// Clean in the list. Shows the cleanup overlay like the Overview's Clean, and
@@ -5101,6 +5112,9 @@ final class PurgeStore: ObservableObject {
         )
         Task { @MainActor in
             let summary = await ScheduledCleaningRegistrar.shared.cleanApprovedPreview(paths: preview.paths)
+            if let message = Self.approvedPreviewMessage(for: summary) {
+                errorMessage = message
+            }
             guard showsOverlay else { return }
             if let summary, !summary.skippedForAnotherClean, errorMessage == nil {
                 completeInteractiveSafeCleanup(summary: summary)
@@ -5110,6 +5124,18 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Why Move to Trash in the list moved nothing, or nil when it ran. The list
+    /// has closed by then, so without this the overlay would flash and go (#331).
+    static func approvedPreviewMessage(for summary: ScheduledCleaningSummary?) -> String? {
+        guard let summary else {
+            return String(localized: "Automatic cleaning was turned off, so nothing moved.")
+        }
+        guard !summary.skippedForAnotherClean else {
+            return String(localized: "Purge is already cleaning. Wait for it to finish, then try again.")
+        }
+        return nil
+    }
+
     /// The approved clean. Only rows the list showed that are still Safe in the
     /// current scan go on, and each passes the clean's own checks again. A row
     /// that changed since the list was built stays where it is. Every path then
@@ -5117,7 +5143,7 @@ final class PurgeStore: ObservableObject {
     func performApprovedScheduledClean(paths: Set<String>) async -> ScheduledCleaningSummary {
         let candidates = ScheduledCleanPreview.approved(manualSafeCleanupCandidates(), paths: paths)
         guard !candidates.isEmpty else {
-            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, hadNothingToMove: true)
         }
         var onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
         if let buffer = interactiveSafeCleanupProgressBuffer {
@@ -5322,7 +5348,14 @@ final class PurgeStore: ObservableObject {
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
-        for candidate in await safeCleanupBatch(pinnedCandidates: pinnedCandidates) {
+        var batch = await safeCleanupBatch(pinnedCandidates: pinnedCandidates)
+        if approvedByUser {
+            // The list's rows were Safe when the clean began; a rescan during the
+            // git check can change that. Only rows still Safe now go (#331).
+            let stillSafe = Set(manualSafeCleanupCandidates().map { $0.path.standardizedFileURL.path })
+            batch = batch.filter { stillSafe.contains($0.path.standardizedFileURL.path) }
+        }
+        for candidate in batch {
             let std = candidate.path.standardizedFileURL
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title
@@ -5333,7 +5366,7 @@ final class PurgeStore: ObservableObject {
             if scheduledNotifications {
                 await ScheduledCleanupNotifier.notifyNothingEligible()
             }
-            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, hadNothingToMove: true)
         }
 
         // No await between this check and the claim, so nothing starts in between.

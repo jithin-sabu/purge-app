@@ -1601,3 +1601,4 @@
 "Your first scheduled clean" = "第一次定时清理";
 "Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge 即将第一次按计划清理。以下可放心清理的项目会移到废纸篓，之后仍可恢复。在你选择“移到废纸篓”之前，不会移动任何项目。";
 "After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "此后，定时清理会自动将可放心清理的项目移到废纸篓。你可以在设置中关闭。";
+"Automatic cleaning was turned off, so nothing moved." = "自动清理已关闭，因此没有移动任何项目。";
