@@ -227,7 +227,11 @@ struct LookDeeperView: View {
       didOpenSettings = true
     }
     onOpenSettings()
+    // A second click replaces this screen's request, the new one first so
+    // the wait never stops in between.
+    let previous = fullDiskAccessRequest
     fullDiskAccessRequest = FullDiskAccessGuide.shared.open { [store] in store.applyFullDiskAccess(true) }
+    if let previous { FullDiskAccessGuide.shared.cancel(previous) }
   }
 
   /// In onboarding, "Show me" lands on the tab that holds most of what was found.

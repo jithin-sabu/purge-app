@@ -112,6 +112,28 @@ struct FullDiskAccessGuideTests {
         #expect(panel.shown == .allowInBackground)
     }
 
+    /// A second click replaces the screen's request: opening the new one before
+    /// cancelling the old keeps the wait and the guide, and a grant runs only
+    /// the new follow-up.
+    @Test func replacingARequestKeepsTheWait() async {
+        let panel = SettingsGuidePanel()
+        defer { panel.hide() }
+        let access = Access()
+        let (guide, _) = makeGuide(panel: panel, access: access)
+        var first = 0
+        var second = 0
+        let old = guide.open { first += 1 }
+        guide.open { second += 1 }
+        guide.cancel(old)
+        #expect(guide.isWaiting)
+        #expect(panel.shown == .fullDiskAccess)
+
+        access.granted = true
+        await settle { !guide.isWaiting }
+        #expect(first == 0)
+        #expect(second == 1)
+    }
+
     /// The failure card closing ends only its own request. Look Deeper's wait
     /// goes on, and a grant runs Look Deeper's follow-up but not the card's.
     @Test func cancellingOneRequestKeepsTheOther() async {

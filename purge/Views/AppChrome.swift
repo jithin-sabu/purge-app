@@ -1055,10 +1055,14 @@ struct SafeCleanupCelebrationOverlay: View {
     /// `hasFullDiskAccess` never skips System Settings, and access that is
     /// already on retries the rows at the guide's first check.
     private func openFullDiskAccessForFailures() {
+        // A second click replaces this card's request. The new one is in
+        // before the old one goes, so the wait never stops in between.
+        let previous = fullDiskAccessRequest
         fullDiskAccessRequest = FullDiskAccessGuide.shared.open { [store] in
             store.applyFullDiskAccess(true)
             retryFullDiskAccessFailures()
         }
+        if let previous { FullDiskAccessGuide.shared.cancel(previous) }
     }
 
     private func retryFullDiskAccessFailures() {
