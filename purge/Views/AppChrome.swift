@@ -658,6 +658,11 @@ struct SafeCleanupCelebrationOverlay: View {
             guard isEnabled else { return }
             retryAdministratorFailures()
         }
+        // The same for Full Disk Access: the rows that needed it go again.
+        .onChange(of: store.hasFullDiskAccess) { granted in
+            guard granted else { return }
+            retryFullDiskAccessFailures()
+        }
         .onChange(of: session.phase) { phase in
             guard phase == .complete else { return }
             beginCompletionSequence()
@@ -672,7 +677,11 @@ struct SafeCleanupCelebrationOverlay: View {
             guard session.phase == .complete, footerVisible else { return }
             reconcileHeaderWithOutcome()
         }
-        .onDisappear { sequenceTask?.cancel() }
+        .onDisappear {
+            sequenceTask?.cancel()
+            // Done without access: the guide's wait has nothing left to retry.
+            if !store.hasFullDiskAccess { FullDiskAccessGuide.shared.cancel() }
+        }
     }
 
     /// What stands at the top of the sheet. The figure header serves the cleaning
@@ -903,7 +912,7 @@ struct SafeCleanupCelebrationOverlay: View {
                 showsHeader: headerKind == .figure || headerKind == .administrator,
                 retryingIDs: retryingFailureIDs,
                 retryFailedIDs: retryFailedIDs,
-                onOpenSettings: openFullDiskAccessSettings,
+                onOpenSettings: openFullDiskAccessForFailures,
                 onRetry: retryFailure,
                 onRetryAll: retryAllFailures,
                 onShowInFinder: showFailureInFinder
@@ -948,7 +957,7 @@ struct SafeCleanupCelebrationOverlay: View {
         switch footerAction {
         case .retry(let item): retryFailure(item)
         case .retryAll: retryAllFailures()
-        case .openSettings: openFullDiskAccessSettings()
+        case .openSettings: openFullDiskAccessForFailures()
         case .showInFinder(let item): showFailureInFinder(item)
         case nil: break
         }
@@ -1039,6 +1048,19 @@ struct SafeCleanupCelebrationOverlay: View {
                     displayedBytes += movedBytes
                 }
             }
+        }
+    }
+
+    /// Opens Full Disk Access with the guide beside it. The rows that failed for
+    /// lack of access retry once it lands, from `onChange(of: hasFullDiskAccess)`,
+    /// which also covers access granted some other way (#450).
+    private func openFullDiskAccessForFailures() {
+        FullDiskAccessGuide.shared.open { [store] in store.applyFullDiskAccess(true) }
+    }
+
+    private func retryFullDiskAccessFailures() {
+        for item in otherFailures where item.reason == .needsFullDiskAccess {
+            retryFailure(item)
         }
     }
 

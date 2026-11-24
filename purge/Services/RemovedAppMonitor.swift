@@ -312,9 +312,9 @@ final class RemovedAppMonitor: ObservableObject {
     static let approvalWait: TimeInterval = 10 * 60
 
     /// Opens Login Items with a guide beside it that says which switch to turn on,
-    /// then checks once a second until macOS allows the watcher. The guide closes
-    /// itself then, when the problem changes, when the user cancels it, or after
-    /// `approvalWait`. Each check reads only the Login Items status; the agent is
+    /// then checks once a second until macOS allows the watcher. The guide shows
+    /// its check then and closes; it also closes when the problem changes, when
+    /// the user cancels it, or after `approvalWait`. Each check reads only the Login Items status; the agent is
     /// probed once, after macOS allows it.
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
@@ -334,7 +334,8 @@ final class RemovedAppMonitor: ObservableObject {
                     return
                 }
                 guard self.agentService.status != .requiresApproval else { return }
-                self.stopWaitingForApproval(hideGuide: true)
+                self.stopWaitingForApproval(hideGuide: false)
+                SettingsGuidePanel.shared.finish(.allowInBackground)
                 self.refreshAgentStatus()
             }
         }

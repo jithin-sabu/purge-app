@@ -63,7 +63,7 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     func setEnabled(_ enabled: Bool) {
         desiredEnabled = enabled
         lastRegistrationFailed = false
-        if !enabled { approvalMonitorTask?.cancel() }
+        if !enabled { stopWaitingForApproval() }
         let previous = applyTask
         applyTask = Task { @MainActor in
             _ = await previous?.value
@@ -75,8 +75,7 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                     approvalMonitorTask?.cancel()
                     break
                 case .needsApproval:
-                    monitorPendingApproval()
-                    manager.openLoginItemsSettings()
+                    guideApproval()
                 case .failed(let detail):
                     approvalMonitorTask?.cancel()
                     lastRegistrationFailed = true
@@ -109,16 +108,46 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                 } catch {
                     return
                 }
-                guard desiredEnabled == true else { return }
+                guard desiredEnabled == true else { break }
                 let latest = await manager.statusOffMain()
-                guard desiredEnabled == true, !Task.isCancelled else { return }
+                guard !Task.isCancelled else { return }
+                guard desiredEnabled == true else { break }
                 apply(latest)
-                if isEnabled || !needsApproval { return }
+                if isEnabled {
+                    SettingsGuidePanel.shared.finish(.allowInBackground)
+                    return
+                }
+                if !needsApproval { break }
             }
+            guard !Task.isCancelled else { return }
+            SettingsGuidePanel.shared.hide(.allowInBackground)
         }
     }
 
+    /// Opens Login Items. While the helper still needs approval, the guide shows
+    /// beside it and Purge watches for the switch, so the uninstall carries on as
+    /// soon as it is on (#450).
     func openLoginItemsSettings() {
+        if needsApproval {
+            guideApproval()
+        } else {
+            manager.openLoginItemsSettings()
+        }
+    }
+
+    private func guideApproval() {
+        // Approval pending from an earlier launch: the switch already reads on,
+        // so going to approve it is asking for it on.
+        if desiredEnabled == nil { desiredEnabled = true }
         manager.openLoginItemsSettings()
+        SettingsGuidePanel.shared.show(.allowInBackground) { [weak self] in
+            self?.approvalMonitorTask?.cancel()
+        }
+        monitorPendingApproval()
+    }
+
+    private func stopWaitingForApproval() {
+        approvalMonitorTask?.cancel()
+        SettingsGuidePanel.shared.hide(.allowInBackground)
     }
 }

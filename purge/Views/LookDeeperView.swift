@@ -57,6 +57,11 @@ struct LookDeeperView: View {
     .frame(maxWidth: Self.contentWidth)
     .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: phaseKey)
     .task { await pollUntilGranted() }
+    // Leaving without access ends the guide's wait too. With access, the guide
+    // is about to show its check, so it is left to finish.
+    .onDisappear {
+      if !store.hasFullDiskAccess { FullDiskAccessGuide.shared.cancel() }
+    }
   }
 
   /// `Phase` carries findings that are not `Equatable`; the animation only needs
@@ -218,7 +223,7 @@ struct LookDeeperView: View {
       didOpenSettings = true
     }
     onOpenSettings()
-    openFullDiskAccessSettings()
+    FullDiskAccessGuide.shared.open { [store] in store.applyFullDiskAccess(true) }
   }
 
   /// In onboarding, "Show me" lands on the tab that holds most of what was found.
