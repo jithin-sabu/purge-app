@@ -18,7 +18,7 @@ import Testing
 struct ExplanationFitTests {
     static let sharedWidth: CGFloat = 550
     static let margin: CGFloat = 6
-    static let languages = ["en", "zh-Hans", "ru", "tr"]
+    static let languages = ["en", "zh-Hans", "ru", "tr", "ar"]
 
     private struct Entry: Decodable {
         let key: String

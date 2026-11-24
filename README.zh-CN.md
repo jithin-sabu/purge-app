@@ -1,4 +1,4 @@
-[English](README.md) | 简体中文 | [Русский](README.ru.md) | [Українська](README.uk.md)
+[English](README.md) | 简体中文 | [Русский](README.ru.md) | [Українська](README.uk.md) | [العربية](README.ar.md)
 
 <div align="center">
 
