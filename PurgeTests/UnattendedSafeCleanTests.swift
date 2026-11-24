@@ -17,7 +17,9 @@ struct UnattendedSafeCleanTests {
     /// `path` gives the new row the folder of an earlier one, as a rescan that
     /// finds the same folder at another level would.
     private static func row(_ level: SafetyLevel, path existing: CacheItem? = nil) -> CacheItem {
-        let folder = existing?.path.lastPathComponent ?? "com.purge.test.unattended-\(UUID().uuidString)"
+        // Named so the tier list rates it (`.ShipIt`): before a move, a folder in
+        // `~/Library/Caches` no rule knows must have a browser cache's shape (#452).
+        let folder = existing?.path.lastPathComponent ?? "com.purge.test.unattended-\(UUID().uuidString).ShipIt"
         return CacheItem(
             definitionKey: folder,
             location: CacheLocation(

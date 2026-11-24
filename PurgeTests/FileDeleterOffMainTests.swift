@@ -39,8 +39,10 @@ struct FileDeleterOffMainTests {
         // The cache allowlist only offers paths under the real home, so the folder
         // is named there. It is never made, and the fake Trash moves nothing, so
         // nothing on disk is written or moved (#171).
+        // Named so the tier list rates it (`.ShipIt`): before a move, a folder in
+        // `~/Library/Caches` no rule knows must have a browser cache's shape (#452).
         let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Caches/PurgeOffMainTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Library/Caches/PurgeOffMainTests-\(UUID().uuidString).ShipIt", isDirectory: true)
         try #require(!FileManager.default.fileExists(atPath: dir.path))
 
         let flag = MainThreadFlag()

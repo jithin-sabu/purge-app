@@ -347,7 +347,7 @@ struct PyenvPythonVersionShapeTests {
             )
         }
         #expect(check(PY.context())(path("\(PY.root)/\(PY.old)")))
-        #expect(check(PY.context())(path("Library/Caches/something")))
+        #expect(check(PY.context())(path("Library/Caches/Homebrew")))
         #expect(!check(PY.context(environment: ["3.11.9"]))(path("\(PY.root)/\(PY.old)")), "pyenv's part runs")
         #expect(!check(PY.context(lsof: nil))(path("\(PY.root)/\(PY.old)")))
     }

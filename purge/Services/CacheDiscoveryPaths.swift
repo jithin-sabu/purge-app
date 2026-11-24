@@ -237,7 +237,10 @@ enum CacheDiscoveryPaths {
                             foundHTTPCache = true
                         }
                     } else {
-                        guard name != "Service Worker", depth < cachesFolderChromiumMaxDepth else { return false }
+                        // Without case, as the tier list compares it: the disk
+                        // ignores case, so `service worker` is the same folder.
+                        guard name.lowercased() != "service worker",
+                              depth < cachesFolderChromiumMaxDepth else { return false }
                         next.append(child)
                     }
                 }

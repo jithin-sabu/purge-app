@@ -77,12 +77,14 @@ struct KeyboardDeletionStoreTests {
     /// Only the one row reaches the Trash, and the user's other ticks stay;
     /// Clean Selected would have cleared them all. The gate reads the real home,
     /// so both rows are folders under `~/Library/Caches` that are never made, as
-    /// in `FileDeleterCacheRouteTests`, and the fake Trash moves nothing.
+    /// in `FileDeleterCacheRouteTests`, and the fake Trash moves nothing. Their
+    /// `.ShipIt` names are ones the tier list rates, so the move check lets them
+    /// go without a browser cache's shape (#452).
     @Test func aOneRowCleanKeepsTheOtherTicks() async throws {
         let caches = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
             .appendingPathComponent("Library/Caches", isDirectory: true)
-        let picked = cacheRow(caches.appendingPathComponent("com.purge.test.picked-\(UUID().uuidString)", isDirectory: true))
-        let ticked = cacheRow(caches.appendingPathComponent("com.purge.test.ticked-\(UUID().uuidString)", isDirectory: true))
+        let picked = cacheRow(caches.appendingPathComponent("com.purge.test.picked-\(UUID().uuidString).ShipIt", isDirectory: true))
+        let ticked = cacheRow(caches.appendingPathComponent("com.purge.test.ticked-\(UUID().uuidString).ShipIt", isDirectory: true))
         let scans = FakeScans()
         scans.hasAccess = true
         defer { scans.cleanUp() }
@@ -107,8 +109,8 @@ struct KeyboardDeletionStoreTests {
     @Test func aSecondConfirmAddsNothing() async throws {
         let caches = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
             .appendingPathComponent("Library/Caches", isDirectory: true)
-        let picked = cacheRow(caches.appendingPathComponent("com.purge.test.picked-\(UUID().uuidString)", isDirectory: true))
-        let ticked = cacheRow(caches.appendingPathComponent("com.purge.test.ticked-\(UUID().uuidString)", isDirectory: true))
+        let picked = cacheRow(caches.appendingPathComponent("com.purge.test.picked-\(UUID().uuidString).ShipIt", isDirectory: true))
+        let ticked = cacheRow(caches.appendingPathComponent("com.purge.test.ticked-\(UUID().uuidString).ShipIt", isDirectory: true))
         let scans = FakeScans()
         scans.hasAccess = true
         defer { scans.cleanUp() }

@@ -23,11 +23,15 @@ enum ExplanationResolver {
         home: String = DeletionSafetyPolicy.cachedHomePath
     ) -> SafetyInfo {
         // An entry marked `needs_chromium_shape` names the browser and explains
-        // it, but its tier holds only while the folder has the shape. Without
-        // it the folder falls through to the tier list, as if it had no entry.
+        // it, but its tier holds only while the folder, directly in the home's
+        // `Library/Caches`, has the shape. A Safe tier from any other rule does
+        // not count, and a rule that keeps the folder from Safe still does.
+        // Without the shape the folder falls through to the tier list, as if
+        // it had no entry.
         if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName),
            record.needsChromiumShape != true
-            || SafetyTierList.evaluate(folderName: folderName, path: path, home: home) == .safe {
+            || (path.map({ SafetyTierList.holdsChromiumShapeInHomeCaches($0, home: home) }) == true
+                && SafetyTierList.evaluate(folderName: folderName, path: path, home: home) == .safe) {
             return ExplanationDatabase.safetyInfo(from: record)
         }
         if let tierLevel = SafetyTierList.evaluate(folderName: folderName, path: path, home: home) {

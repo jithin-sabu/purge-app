@@ -351,9 +351,9 @@ struct LibraryCachesBrowserShapeTests {
         #expect(!check(worker))
     }
 
-    /// Only a folder rated Safe by its shape is read again. A folder rated by
-    /// its name or by another rule, and any path outside the home's Caches,
-    /// passes as before.
+    /// Only a folder that nothing but its shape could rate Safe is read again.
+    /// A folder rated by its name, a bundle ID or another rule, and any path
+    /// outside the home's Caches, passes as before.
     @Test
     func moveCheckLeavesOtherPathsAlone() throws {
         let (caches, cleanup) = try makeCaches()
@@ -363,16 +363,164 @@ struct LibraryCachesBrowserShapeTests {
         try lay(chrome, folders: ["Chrome/Default/Cache/Cache_Data"], files: ["Chrome/Default/Local State"])
         let support = cleanup.appendingPathComponent("Library/Application Support/NewBrowser/Cache", isDirectory: true)
         try lay(support, folders: [], files: ["file"])
+        let homebrew = caches.appendingPathComponent("Homebrew", isDirectory: true)
+        try lay(homebrew, folders: ["downloads"], files: ["downloads/wget.bottle.tar.gz"])
+        let slack = caches.appendingPathComponent("com.tinyspeck.slackmacgap", isDirectory: true)
+        try lay(slack, folders: [], files: ["Cache.db"])
+        let dropbox = caches.appendingPathComponent("com.dropbox.client2", isDirectory: true)
+        try lay(dropbox, folders: [], files: ["data.db"])
+        // An Electron updater cache, which the scan rates under its own entry.
+        let updater = caches.appendingPathComponent("example-updater", isDirectory: true)
+        try lay(updater, folders: ["pending"], files: ["pending/installer.zip"])
 
-        // A folder no rule rated by its shape, such as an Electron updater cache
-        // the scan rates under another name.
-        let unrated = caches.appendingPathComponent("com.example.app.updater", isDirectory: true)
-        try lay(unrated, folders: [], files: ["installer.zip"])
+        for url in [chrome, support, homebrew, slack, dropbox, updater] {
+            #expect(!SafetyTierList.dependsOnChromiumShape(url, home: home), "\(url.lastPathComponent)")
+            #expect(SafetyTierList.passesChromiumShapeBoundary(url, home: home), "\(url.lastPathComponent)")
+        }
+        #expect(FileDeleter.defaultImmediateMoveCheck(home: home)(updater))
+    }
 
-        #expect(SafetyTierList.passesChromiumShapeBoundary(chrome, home: home))
-        #expect(SafetyTierList.passesChromiumShapeBoundary(support, home: home))
-        #expect(SafetyTierList.passesChromiumShapeBoundary(unrated, home: home))
-        #expect(FileDeleter.defaultImmediateMoveCheck(home: home)(unrated))
+    /// The move check holds nothing in memory (#452). A scan in one session
+    /// rates the folder Safe. The clean runs in another, from a saved row, an
+    /// App Intent or another process, where nothing rated it. Here that is a
+    /// second home this test process never rated. The folder there gains
+    /// profile data before the move, and the move is refused.
+    @Test
+    func moveReadsTheShapeForAFolderAnotherSessionRated() throws {
+        let (sessionOneCaches, sessionOneCleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: sessionOneCleanup) }
+        let rated = sessionOneCaches.appendingPathComponent("NewBrowser", isDirectory: true)
+        try lay(rated, folders: Self.yabFolders)
+        #expect(tier(rated) == .safe)
+
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let check = FileDeleter.defaultImmediateMoveCheck(home: home)
+        let browser = caches.appendingPathComponent("NewBrowser", isDirectory: true)
+        try lay(browser, folders: Self.yabFolders)
+        #expect(SafetyTierList.dependsOnChromiumShape(browser, home: home))
+        #expect(check(browser))
+
+        try lay(browser, folders: [], files: ["Chromium/Default/Local State"])
+        #expect(!SafetyTierList.passesChromiumShapeBoundary(browser, home: home))
+        #expect(!check(browser))
+
+        // The folder session one rated is read again the same way.
+        try lay(rated, folders: ["Chromium/Default/Service Worker/CacheStorage"])
+        #expect(!SafetyTierList.passesChromiumShapeBoundary(rated, home: self.home(of: rated)))
+    }
+
+    /// A folder directly in the home's Caches that no entry or rule knows can
+    /// only have been rated Safe by its shape. Without the shape it never moves,
+    /// whatever row asked for it.
+    @Test
+    func moveRefusesAnUnlistedFolderWithoutTheShape() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let unlisted = caches.appendingPathComponent("com.example.app.updater", isDirectory: true)
+        try lay(unlisted, folders: [], files: ["installer.zip"])
+        let empty = caches.appendingPathComponent("SomethingNew", isDirectory: true)
+        try lay(empty, folders: [])
+
+        for url in [unlisted, empty] {
+            #expect(SafetyTierList.dependsOnChromiumShape(url, home: home), "\(url.lastPathComponent)")
+            #expect(!SafetyTierList.passesChromiumShapeBoundary(url, home: home), "\(url.lastPathComponent)")
+            #expect(!FileDeleter.defaultImmediateMoveCheck(home: home)(url), "\(url.lastPathComponent)")
+        }
+        // The same folder outside the home's Caches is not this check's to judge.
+        let nested = caches.appendingPathComponent("Vendor/SomethingNew", isDirectory: true)
+        try lay(nested, folders: [], files: ["data.db"])
+        #expect(SafetyTierList.passesChromiumShapeBoundary(nested, home: home))
+        #expect(SafetyTierList.passesChromiumShapeBoundary(unlisted, home: "/Users/someone-else"))
+    }
+
+    /// A `-updater` folder the shape rated that gains a `pending` folder keeps
+    /// its profile folders, so the Electron updater entry doesn't let it skip
+    /// the shape. An updater folder with only `pending` and loose files moves
+    /// under that entry (#454 review).
+    @Test
+    func updaterEntryCoversOnlyAnUpdaterLayout() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let check = FileDeleter.defaultImmediateMoveCheck(home: home)
+
+        let browser = caches.appendingPathComponent("browser-updater", isDirectory: true)
+        try lay(browser, folders: Self.yabFolders)
+        #expect(tier(browser) == .safe)
+        #expect(check(browser))
+        try lay(browser, folders: ["pending"], files: ["pending/update.zip", "Chromium/Default/Local State"])
+        #expect(CacheDiscoveryPaths.isElectronUpdaterCache(browser))
+        #expect(SafetyTierList.dependsOnChromiumShape(browser, home: home))
+        #expect(!check(browser))
+
+        let updater = caches.appendingPathComponent("t3code-updater", isDirectory: true)
+        try lay(updater, folders: ["pending"], files: ["pending/update.zip", "pending/update-info.json", "current.blockmap"])
+        #expect(!SafetyTierList.dependsOnChromiumShape(updater, home: home))
+        #expect(check(updater))
+
+        // A link beside `pending`, or a `pending` that is a link, is not an updater layout.
+        let linked = caches.appendingPathComponent("linked-updater", isDirectory: true)
+        try lay(linked, folders: ["pending"])
+        try FileManager.default.createSymbolicLink(
+            at: linked.appendingPathComponent("update.zip"),
+            withDestinationURL: cleanup.appendingPathComponent("Documents/notes.txt")
+        )
+        let linkedPending = caches.appendingPathComponent("pending-link-updater", isDirectory: true)
+        try lay(linkedPending, folders: [])
+        try lay(cleanup, folders: ["Elsewhere/pending"])
+        try FileManager.default.createSymbolicLink(
+            at: linkedPending.appendingPathComponent("pending"),
+            withDestinationURL: cleanup.appendingPathComponent("Elsewhere/pending")
+        )
+        #expect(!check(linked))
+        #expect(!check(linkedPending))
+
+        // `pending` read earlier but gone by the listing: loose files alone are
+        // not an updater layout, so the shape check stays.
+        let filesOnly = caches.appendingPathComponent("files-only-updater", isDirectory: true)
+        try lay(filesOnly, folders: [], files: ["update.zip", "current.blockmap"])
+        #expect(!SafetyTierList.holdsOnlyUpdaterDownloads(filesOnly))
+        #expect(SafetyTierList.holdsOnlyUpdaterDownloads(updater))
+        #expect(SafetyTierList.dependsOnChromiumShape(filesOnly, home: home))
+        #expect(!check(filesOnly))
+    }
+
+    /// An updater folder whose `pending` folder went before the move, and whose
+    /// own name no entry knows, can't be told apart from a folder the shape
+    /// rated. It stays, on purpose: the leftover is small, and the next scan no
+    /// longer lists it.
+    @Test
+    func updaterFolderThatLostPendingStays() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let updater = caches.appendingPathComponent("t3code-updater", isDirectory: true)
+        try lay(updater, folders: [], files: ["current.blockmap"])
+
+        #expect(!CacheDiscoveryPaths.isElectronUpdaterCache(updater))
+        #expect(tier(updater) == nil)
+        #expect(!FileDeleter.defaultImmediateMoveCheck(home: home)(updater))
+    }
+
+    /// The disk ignores case, so a `service worker` folder is a Service Worker
+    /// folder, as the tier list already reads it.
+    @Test
+    func serviceWorkerInAnyCaseKeepsItNotSure() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let lower = caches.appendingPathComponent("LowerWorker", isDirectory: true)
+        try lay(lower, folders: Self.yabFolders + ["Chromium/Default/service worker"])
+        let upper = caches.appendingPathComponent("UpperWorker", isDirectory: true)
+        try lay(upper, folders: Self.yabFolders + ["Chromium/Default/SERVICE WORKER"])
+
+        #expect(!CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(lower))
+        #expect(!CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(upper))
+        #expect(tier(lower) == nil)
+        #expect(tier(upper) == nil)
+        #expect(!SafetyTierList.passesChromiumShapeBoundary(lower, home: cleanup.path))
     }
 
     // MARK: - Yab's own entry
@@ -418,5 +566,42 @@ struct LibraryCachesBrowserShapeTests {
             folderName: "Yab", friendlyHeadline: "Yab", path: container, home: home
         )
         #expect(inContainer.level == .unknown)
+    }
+
+    /// Yab's entry is held to the shape before the move with no scan in this
+    /// process, as for a row read from `last-scan.json` (#452).
+    @Test
+    func yabEntryIsReadAgainWithoutAScan() throws {
+        let (caches, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let home = cleanup.path
+        let yab = caches.appendingPathComponent("Yab", isDirectory: true)
+        try lay(yab, folders: Self.yabFolders)
+
+        #expect(SafetyTierList.dependsOnChromiumShape(yab, home: home))
+        #expect(SafetyTierList.passesChromiumShapeBoundary(yab, home: home))
+        try lay(yab, folders: [], files: ["Chromium/Default/Cookies"])
+        #expect(!SafetyTierList.passesChromiumShapeBoundary(yab, home: home))
+        #expect(!FileDeleter.defaultImmediateMoveCheck(home: home)(yab))
+    }
+
+    /// Only the shape lets Yab's entry rate a folder. A folder named Yab that
+    /// another rule rates Safe, such as a `Crashpad/completed` path, gets that
+    /// rule's row, not Yab's entry.
+    @Test
+    func yabEntryNeedsTheShapeNotAnotherRule() throws {
+        let (_, cleanup) = try makeCaches()
+        defer { try? FileManager.default.removeItem(at: cleanup) }
+        let completed = cleanup.appendingPathComponent(
+            "Library/Application Support/Yab/Crashpad/completed", isDirectory: true
+        )
+        try lay(completed, folders: [])
+        #expect(SafetyTierList.evaluate(folderName: "Yab", path: completed, home: cleanup.path) == .safe)
+
+        let info = ExplanationResolver.initialSafetyForCacheFolder(
+            folderName: "Yab", friendlyHeadline: "Yab crash reports", path: completed, home: cleanup.path
+        )
+        #expect(info.level == .safe)
+        #expect(info.headline == "Yab crash reports")
     }
 }

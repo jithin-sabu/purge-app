@@ -211,7 +211,7 @@ struct VitePlusNodeVersionShapeTests {
         #expect(!check(path("\(VP.node(VP.new))/22.9.0")), "the newest of its major stays")
         #expect(check(path("\(NvmNodeVersionPolicy.versionsRoot)/v20.0.0")))
         #expect(!check(path("\(NvmNodeVersionPolicy.versionsRoot)/v20.9.0")), "nvm's half runs too")
-        #expect(check(path("Library/Caches/something")))
+        #expect(check(path("Library/Caches/Homebrew")))
         let busy = FileDeleter.defaultImmediateMoveCheck(home: home.path, nvm: nvm, vitePlus: VP.context(lsof: nil))
         #expect(!busy(path("\(VP.node(VP.new))/22.0.0")))
     }
