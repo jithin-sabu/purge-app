@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -49,17 +50,34 @@ final class StartupPreferenceStore: ObservableObject {
     /// For `@AppStorage` in the scene, which inserts the status item from it.
     static let showMenuBarIconKey = UDKeys.showMenuBarIcon
 
+    /// How long after joining the menu bar a removal of the status item is read
+    /// as macOS hiding the new item rather than the user dragging it out.
+    nonisolated static let statusItemSettleInterval: TimeInterval = 1
+
+    /// The same window for a mode saved from an earlier launch, counted from the
+    /// moment the process started, since the scene inserts the item only once
+    /// the app has finished launching.
+    nonisolated static let launchSettleInterval: TimeInterval = 10
+
     private let ud: UserDefaults
     private let loginItem: LoginItemControlling
     /// A closure rather than a protocol: one call, one argument, no state — a
     /// protocol plus a wrapper struct would be more names than behaviour.
     private let applyDockPolicy: @MainActor (Bool) -> Void
+    private let now: () -> Date
+    private var joinedMenuBarAt: Date?
+    private var settleInterval = statusItemSettleInterval
 
     @Published private(set) var hidesDockIcon: Bool
 
     /// Persisted. Written once at launch by `resolvePersistedModes` for any
     /// install that has not seen this setting, so it is never missing here.
     @Published private(set) var showsMenuBarIcon: Bool
+
+    /// Set when macOS keeps the status item hidden right after it is inserted.
+    /// The mode stays on, but there is no icon to click, so the Dock icon has
+    /// to stay too. Not persisted: the next insertion answers it again.
+    @Published private(set) var statusItemIsHidden = false
 
     /// Mirrors `SMAppService`, and is deliberately **not** persisted. The system
     /// owns this state — the user can turn Purge off in System Settings without
@@ -69,16 +87,23 @@ final class StartupPreferenceStore: ObservableObject {
     init(
         userDefaults: UserDefaults = .standard,
         loginItem: LoginItemControlling = SystemLoginItem(),
-        applyDockPolicy: @escaping @MainActor (Bool) -> Void = { DockIconPolicy.apply(hidesDockIcon: $0) }
+        applyDockPolicy: @escaping @MainActor (Bool) -> Void = { DockIconPolicy.apply(hidesDockIcon: $0) },
+        now: @escaping () -> Date = Date.init,
+        launchedAt: Date? = NSRunningApplication.current.launchDate
     ) {
         ud = userDefaults
         self.loginItem = loginItem
         self.applyDockPolicy = applyDockPolicy
+        self.now = now
 
         ud.register(defaults: [UDKeys.hideDockIcon: false])
         hidesDockIcon = ud.bool(forKey: UDKeys.hideDockIcon)
         showsMenuBarIcon = ud.bool(forKey: UDKeys.showMenuBarIcon)
         launchesAtLogin = loginItem.isRegistered
+        if showsMenuBarIcon {
+            joinedMenuBarAt = launchedAt
+            settleInterval = Self.launchSettleInterval
+        }
     }
 
     /// Re-reads the system's answer. Call when Settings appears and when the app
@@ -95,11 +120,8 @@ final class StartupPreferenceStore: ObservableObject {
 
     /// Switches between the two modes.
     ///
-    /// Also the landing point when the user ⌘-drags the icon out of the menu bar:
-    /// the status item's `isInserted` binding writes here, so that route gets the
-    /// same clean-up as the Settings switch. Leaving the menu bar turns off the
-    /// login item and brings the Dock icon back, since both only make sense with
-    /// an icon to click.
+    /// Leaving the menu bar turns off the login item and brings the Dock icon
+    /// back, since both only make sense with an icon to click.
     ///
     /// Returns whether the mode changed. Leaving the menu bar fails, and changes
     /// nothing, when the login item will not come off: on demand with a login item
@@ -122,12 +144,77 @@ final class StartupPreferenceStore: ObservableObject {
         }
         showsMenuBarIcon = shown
         ud.set(shown, forKey: UDKeys.showMenuBarIcon)
+        joinedMenuBarAt = shown ? now() : nil
+        settleInterval = Self.statusItemSettleInterval
+        statusItemIsHidden = false
         return true
+    }
+
+    /// The landing point when the status item's `isInserted` binding turns true.
+    ///
+    /// The item can be inserted again while the mode stays on, when macOS shows
+    /// it after hiding it, and it can be hidden again right after. So each
+    /// insertion restarts the window in which a removal counts as macOS hiding
+    /// the item. A `true` that arrives after the mode was turned off is stale
+    /// and changes nothing: only Settings turns the mode on.
+    func statusItemWasInserted(at insertedAt: Date) {
+        guard showsMenuBarIcon else { return }
+        joinedMenuBarAt = insertedAt
+        settleInterval = Self.statusItemSettleInterval
+        if statusItemIsHidden {
+            statusItemIsHidden = false
+            // The icon is back, so a saved Hide Dock icon applies again.
+            if hidesDockIcon {
+                applyDockPolicy(true)
+            }
+        }
+    }
+
+    /// The landing point when the status item's `isInserted` binding turns false,
+    /// so a ⌘-drag out of the menu bar gets the same clean-up as the Settings switch.
+    ///
+    /// macOS can also report the item as gone right as it is inserted, when it
+    /// keeps the item hidden. That happens when the mode is turned on, when the
+    /// app launches with the mode saved, and when the item is inserted again.
+    /// Leaving the mode then would turn it off without the user asking, so a
+    /// removal that soon after the item joined is ignored. The mode stays, but
+    /// with no icon to click the Dock icon comes back. It comes back without
+    /// saving: the user's Hide Dock icon choice stays, and applies again when
+    /// the item is inserted again or at the next launch.
+    ///
+    /// `removedAt` is when SwiftUI wrote `false`, not when this runs: the binding
+    /// defers the call, and a busy main actor must not push an echo past the
+    /// window. A removal reported before the item last joined belongs to an
+    /// earlier insertion and is dropped.
+    func statusItemWasRemoved(at removedAt: Date) {
+        guard showsMenuBarIcon else { return }
+        if let joinedMenuBarAt {
+            if removedAt < joinedMenuBarAt { return }
+            if Self.isInsertionEcho(removedAt: removedAt, joinedMenuBarAt: joinedMenuBarAt, within: settleInterval) {
+                if !statusItemIsHidden {
+                    statusItemIsHidden = true
+                    if hidesDockIcon {
+                        applyDockPolicy(false)
+                    }
+                }
+                return
+            }
+        }
+        setShowsMenuBarIcon(false)
+    }
+
+    static func isInsertionEcho(
+        removedAt: Date,
+        joinedMenuBarAt: Date,
+        within interval: TimeInterval = statusItemSettleInterval
+    ) -> Bool {
+        let elapsed = removedAt.timeIntervalSince(joinedMenuBarAt)
+        return elapsed >= 0 && elapsed < interval
     }
 
     func setHidesDockIcon(_ hidden: Bool) {
         // No menu bar icon and no Dock icon is an app nobody can reach.
-        guard !hidden || showsMenuBarIcon else { return }
+        guard !hidden || (showsMenuBarIcon && !statusItemIsHidden) else { return }
         hidesDockIcon = hidden
         ud.set(hidden, forKey: UDKeys.hideDockIcon)
         applyDockPolicy(hidden)

@@ -150,12 +150,23 @@ struct PurgeApp: App {
     /// mode. Writes go to the store, which is also where a ⌘-drag out of the menu
     /// bar lands: SwiftUI sets this binding to `false` when the user removes the
     /// icon, and that has to switch modes the same way the Settings switch does.
-    /// If the login item will not come off, the store keeps the menu bar mode and
-    /// the getter still reads `true`, so the icon stays.
+    /// SwiftUI can write it while it updates the scene, so the store hears about
+    /// it on the next turn of the main actor. If the login item will not come
+    /// off, the store keeps the menu bar mode and the getter still reads `true`,
+    /// so the icon stays.
     private var menuBarIconBinding: Binding<Bool> {
         Binding(
             get: { showsMenuBarIcon },
-            set: { StartupPreferenceStore.shared.setShowsMenuBarIcon($0) }
+            set: { inserted in
+                let reportedAt = Date()
+                Task { @MainActor in
+                    if inserted {
+                        StartupPreferenceStore.shared.statusItemWasInserted(at: reportedAt)
+                    } else {
+                        StartupPreferenceStore.shared.statusItemWasRemoved(at: reportedAt)
+                    }
+                }
+            }
         )
     }
 
