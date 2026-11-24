@@ -282,8 +282,9 @@ final class SettingsGuidePanel {
 }
 
 /// The panel never becomes key, so its first click would otherwise only bring
-/// it forward. Not Now and the Purge icon answer the first click.
-private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+/// it forward. Not Now and the Purge row answer the first click. Not generic:
+/// Xcode 26.6's optimizer crashed inlining a generic subclass's deinit.
+private final class FirstMouseHostingView: NSHostingView<SettingsGuideView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
