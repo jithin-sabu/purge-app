@@ -714,7 +714,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
 				ENABLE_APP_SANDBOX = NO;
@@ -736,7 +736,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.18.0;
+				MARKETING_VERSION = 1.18.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app;
 				PRODUCT_NAME = Purge;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -766,7 +766,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 48;
+				CURRENT_PROJECT_VERSION = 49;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
 				ENABLE_APP_SANDBOX = NO;
@@ -788,7 +788,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.18.0;
+				MARKETING_VERSION = 1.18.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app;
 				PRODUCT_NAME = Purge;
 				PROVISIONING_PROFILE_SPECIFIER = "";
