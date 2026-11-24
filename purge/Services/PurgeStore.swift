@@ -436,6 +436,9 @@ final class PurgeStore: ObservableObject {
     /// Leftovers of an app removed outside Purge, awaiting review (issue #65).
     /// Set by `RemovedAppMonitor`; drives its sheet in `ContentView`.
     @Published var removedAppLeftoverPlan: RemovedAppLeftoverPlan?
+    /// What the first scheduled clean would move, shown in its place until the
+    /// user chooses Clean or Not Now (#331). Drives a `.sheet(item:)`.
+    @Published var scheduledCleanPreview: ScheduledCleanPreview?
 
     // MARK: Command-line tools (#225)
 
@@ -1050,6 +1053,7 @@ final class PurgeStore: ObservableObject {
             || orphanCleanupPlan != nil
             || removedAppLeftoverPlan != nil
             || commandLineToolRemovalPlan != nil
+            || scheduledCleanPreview != nil
             || isBuildingUninstallPlan
             || showDeletionSheet
             || showLargeFileDeletionSheet
@@ -1077,6 +1081,7 @@ final class PurgeStore: ObservableObject {
             || orphanCleanupPlan != nil
             || commandLineToolRemovalPlan != nil
             || removedAppLeftoverPlan != nil
+            || scheduledCleanPreview != nil
     }
 
     /// Opens the Uninstall Purge sheet, unless another sheet is up.
@@ -5012,6 +5017,13 @@ final class PurgeStore: ObservableObject {
         /// failed. A scheduled clean then stays due instead of counting as done,
         /// and the next activation tries again (#173).
         var failed = false
+        /// True when the first scheduled clean showed its list instead of
+        /// cleaning (#331). Nothing moved, and the clean stays due until the user
+        /// chooses.
+        var awaitsApproval = false
+        /// True when no row was left to move, so no clean started. For the
+        /// approved first clean this keeps the approval unused (#331).
+        var hadNothingToMove = false
 
         var failedCount: Int { failedItems.count }
     }
@@ -5035,6 +5047,115 @@ final class PurgeStore: ObservableObject {
             historyTrigger: .scheduled,
             scheduledNotifications: true,
             clearSelectionsAfterCleanup: false
+        )
+    }
+
+    // MARK: First scheduled clean (#331)
+
+    /// Builds the first scheduled clean's list and shows it, bringing the window
+    /// forward if Purge has none on screen. It rescans and applies every check the
+    /// clean would, so the list is what the clean would move now. Moves nothing.
+    func prepareScheduledCleanPreview() async -> ScheduledCleanPreviewResult {
+        await prepareScheduledCleanPreview(preferences: .shared)
+    }
+
+    /// Reads whether scheduled cleaning is on from `preferences`. Tests pass ones
+    /// kept in throwaway defaults, never the user's own.
+    func prepareScheduledCleanPreview(preferences: ScheduledCleaningPreferenceStore) async -> ScheduledCleanPreviewResult {
+        guard preferences.isEnabled, mayPresentScheduledCleanPreview else { return .skipped }
+        let candidates = ScheduledCleanPreview.uniqueByPath(await safeCleanupBatch(pinnedCandidates: nil))
+        guard !candidates.isEmpty else {
+            await ScheduledCleanupNotifier.notifyNothingEligible()
+            return .nothingEligible
+        }
+        // A review or sheet can open during the rescan, as in `performSafeCleanup`.
+        guard mayPresentScheduledCleanPreview else { return .skipped }
+        scheduledCleanPreview = ScheduledCleanPreview(candidates: candidates)
+        // The test host's window is no one's to bring forward.
+        if !TestHost.isActive() {
+            AppWindowPresenter.reveal()
+        }
+        return .presented
+    }
+
+    /// Whether the list can open now. SwiftUI shows one sheet at a time, so a
+    /// list set under Look Deeper, Uninstall Purge, an alert or another review
+    /// would stay hidden and hold every later sweep. The clean stays due instead,
+    /// as the other prompts that open on their own do.
+    var mayPresentScheduledCleanPreview: Bool {
+        !isShowingReviewOrCleaning && !isAnotherSheetOpen
+    }
+
+    /// Not Now in the list. Nothing moves and nothing counts as cleaned; the list
+    /// comes back after `ScheduledCleaningRegistrar.previewGapAfterNotNow`.
+    func closeScheduledCleanPreview() {
+        guard scheduledCleanPreview != nil else { return }
+        scheduledCleanPreview = nil
+        Task { await ScheduledCleaningRegistrar.shared.closeFirstCleanPreview() }
+    }
+
+    /// Clean in the list. Shows the cleanup overlay like the Overview's Clean, and
+    /// hands the shown paths to the registrar, which counts the run as this
+    /// period's scheduled clean.
+    func confirmScheduledCleanPreview(reduceMotion: Bool) {
+        guard let preview = scheduledCleanPreview else { return }
+        scheduledCleanPreview = nil
+        // The list closes either way. Not stamped as Not Now, so it opens again at
+        // the next switch into Purge once this clean ends.
+        guard claimConfirmedCleanOrExplain() else { return }
+
+        let pendingCelebration = defaults.bool(forKey: Self.pendingOnboardingCelebrationKey)
+        let showsOverlay = beginInteractiveSafeCleanup(
+            candidates: preview.candidates,
+            reduceMotion: reduceMotion,
+            presentsLiveSession: !pendingCelebration
+        )
+        Task { @MainActor in
+            let summary = await ScheduledCleaningRegistrar.shared.cleanApprovedPreview(paths: preview.paths)
+            if let message = Self.approvedPreviewMessage(for: summary) {
+                errorMessage = message
+            }
+            guard showsOverlay else { return }
+            if let summary, !summary.skippedForAnotherClean, errorMessage == nil {
+                completeInteractiveSafeCleanup(summary: summary)
+            } else {
+                cancelInteractiveSafeCleanup()
+            }
+        }
+    }
+
+    /// Why Move to Trash in the list moved nothing, or nil when it ran. The list
+    /// has closed by then, so without this the overlay would flash and go (#331).
+    static func approvedPreviewMessage(for summary: ScheduledCleaningSummary?) -> String? {
+        guard let summary else {
+            return String(localized: "Automatic cleaning was turned off, so nothing moved.")
+        }
+        guard !summary.skippedForAnotherClean else {
+            return String(localized: "Purge is already cleaning. Wait for it to finish, then try again.")
+        }
+        return nil
+    }
+
+    /// The approved clean. Only rows the list showed that are still Safe in the
+    /// current scan go on, and each passes the clean's own checks again. A row
+    /// that changed since the list was built stays where it is. Every path then
+    /// goes through `DeletionSafetyPolicy.evaluate` in `FileDeleter` as usual.
+    func performApprovedScheduledClean(paths: Set<String>) async -> ScheduledCleaningSummary {
+        let candidates = ScheduledCleanPreview.approved(manualSafeCleanupCandidates(), paths: paths)
+        guard !candidates.isEmpty else {
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, hadNothingToMove: true)
+        }
+        var onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+        if let buffer = interactiveSafeCleanupProgressBuffer {
+            onProgress = { @Sendable event in buffer.ingest(event) }
+        }
+        return await performSafeCleanup(
+            historyTrigger: .scheduled,
+            scheduledNotifications: false,
+            clearSelectionsAfterCleanup: false,
+            pinnedCandidates: candidates,
+            approvedByUser: true,
+            onProgress: onProgress
         )
     }
 
@@ -5221,39 +5342,21 @@ final class PurgeStore: ObservableObject {
         scheduledNotifications: Bool,
         clearSelectionsAfterCleanup: Bool,
         pinnedCandidates: [DeletionCandidate]? = nil,
+        approvedByUser: Bool = false,
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async -> ScheduledCleaningSummary {
-        // Pinned candidates skip the rescan that would otherwise set this, and the
-        // checker must not keep `.full` from a scan made before access was revoked.
-        await gitChecker.setAccess(currentScanAccess())
-        var includesProjects = true
-        if pinnedCandidates == nil {
-            includesProjects = await rescanBeforeSafeCleanup()
-        }
-
-        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates(includingProjects: includesProjects)
-        let access = currentScanAccess()
-        await gitChecker.setAccess(access)
-
-        // Access can be turned off after a full scan. Moving something out of a
-        // protected folder without it would prompt, so it waits for access again.
-        // When cache rows are already listed this clean reuses them rather than
-        // rescanning, so a folder excluded since that scan is checked here.
-        let readable = syncCandidates.filter {
-            ProtectedLocations.isReadable($0.path, access: access) && !ExcludedPathsStore.isExcluded($0.path)
-        }
-        // One check for every candidate, so unrelated repositories overlap (#190).
-        let gitStatuses = await gitChecker.cleanupStatuses(for: readable.map(\.path))
-
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
-        let toolPaths = devTools.map(\.standardizedPaths)
-        for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses, keptTogether: toolPaths) {
+        var batch = await safeCleanupBatch(pinnedCandidates: pinnedCandidates)
+        if approvedByUser {
+            // The list's rows were Safe when the clean began; a rescan during the
+            // git check can change that. Only rows still Safe now go (#331).
+            let stillSafe = Set(manualSafeCleanupCandidates().map { $0.path.standardizedFileURL.path })
+            batch = batch.filter { stillSafe.contains($0.path.standardizedFileURL.path) }
+        }
+        for candidate in batch {
             let std = candidate.path.standardizedFileURL
-            // Asked again after the awaits above: a folder added in Settings
-            // meanwhile is never part of the clean (#318 review).
-            guard !ScanFolders.isInsideSavedFolder(std.path) else { continue }
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title
             pathToExpectedSizeBytes[std.path] = candidate.sizeBytes
@@ -5263,11 +5366,13 @@ final class PurgeStore: ObservableObject {
             if scheduledNotifications {
                 await ScheduledCleanupNotifier.notifyNothingEligible()
             }
-            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, hadNothingToMove: true)
         }
 
         // No await between this check and the claim, so nothing starts in between.
-        guard mayStartSafeClean(trigger: historyTrigger) else {
+        // A list the user approved is their own click, like a manual clean, and
+        // its cleanup overlay is already up.
+        guard mayStartSafeClean(trigger: approvedByUser ? .manual : historyTrigger) else {
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
         }
 
@@ -5319,6 +5424,41 @@ final class PurgeStore: ObservableObject {
                 errorMessage = String(localized: "Unable to clean safe items. Please try again.")
             }
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, failed: true)
+        }
+    }
+
+    /// What a safe clean would move right now, with every check it applies before
+    /// the move: rescanned unless `pinnedCandidates` is given, readable with the
+    /// access Purge has, not excluded, clean in git, and not inside a folder added
+    /// in Settings. The scheduled clean's list (#331) shows exactly this.
+    private func safeCleanupBatch(pinnedCandidates: [DeletionCandidate]?) async -> [DeletionCandidate] {
+        // Pinned candidates skip the rescan that would otherwise set this, and the
+        // checker must not keep `.full` from a scan made before access was revoked.
+        await gitChecker.setAccess(currentScanAccess())
+        var includesProjects = true
+        if pinnedCandidates == nil {
+            includesProjects = await rescanBeforeSafeCleanup()
+        }
+
+        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates(includingProjects: includesProjects)
+        let access = currentScanAccess()
+        await gitChecker.setAccess(access)
+
+        // Access can be turned off after a full scan. Moving something out of a
+        // protected folder without it would prompt, so it waits for access again.
+        // When cache rows are already listed this clean reuses them rather than
+        // rescanning, so a folder excluded since that scan is checked here.
+        let readable = syncCandidates.filter {
+            ProtectedLocations.isReadable($0.path, access: access) && !ExcludedPathsStore.isExcluded($0.path)
+        }
+        // One check for every candidate, so unrelated repositories overlap (#190).
+        let gitStatuses = await gitChecker.cleanupStatuses(for: readable.map(\.path))
+
+        let toolPaths = devTools.map(\.standardizedPaths)
+        return Self.gitCleanCandidates(readable, statuses: gitStatuses, keptTogether: toolPaths).filter {
+            // Asked again after the awaits above: a folder added in Settings
+            // meanwhile is never part of the clean (#318 review).
+            !ScanFolders.isInsideSavedFolder($0.path.standardizedFileURL.path)
         }
     }
 

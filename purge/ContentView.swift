@@ -143,6 +143,13 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmRemovedAppLeftovers(edited) } }
             )
         }
+        .sheet(item: $store.scheduledCleanPreview) { preview in
+            ScheduledCleanPreviewSheet(
+                preview: preview,
+                onNotNow: { store.closeScheduledCleanPreview() },
+                onClean: { store.confirmScheduledCleanPreview(reduceMotion: reduceMotion) }
+            )
+        }
         .sheet(item: $store.selfUninstall) { model in
             SelfUninstallSheet(store: store, model: model, hadFullDiskAccess: store.hasFullDiskAccess)
         }

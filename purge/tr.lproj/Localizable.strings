@@ -1593,3 +1593,12 @@
 "1 folder inside needs Full Disk Access to measure" = "İçerideki 1 klasörü ölçmek için Tam Disk Erişimi gerekiyor";
 
 "%lld folders inside need Full Disk Access to measure" = "İçerideki %lld klasörü ölçmek için Tam Disk Erişimi gerekiyor";
+
+/* First scheduled clean preview (#331) */
+"Open Purge to see what your first scheduled clean would move to the Trash. Nothing moves until you approve it." = "İlk zamanlanmış temizliğin Çöp Sepeti'ne neleri taşıyacağını görmek için Purge'ü açın. Siz onaylayana kadar hiçbir şey taşınmaz.";
+"Moves Safe items to the Trash on a schedule. The first time, Purge lists them and waits for you." = "Güvenli öğeleri zamanlamaya göre Çöp Sepeti'ne taşır. İlk seferde Purge bunları listeler ve sizi bekler.";
+"Moves Safe items to the Trash. Next: %@. The first time, Purge lists them and waits for you." = "Güvenli öğeleri Çöp Sepeti'ne taşır. Sonraki: %@. İlk seferde Purge bunları listeler ve sizi bekler.";
+"Your first scheduled clean" = "İlk zamanlanmış temizliğiniz";
+"Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge ilk kez zamanlamaya göre temizlik yapmak üzere. Bu güvenli öğeler Çöp Sepeti'ne taşınır ve oradan geri koyabilirsiniz. Çöp Sepeti'ne Taşı'yı seçene kadar hiçbir şey taşınmaz.";
+"After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "Bundan sonra zamanlanmış temizlikler güvenli öğeleri kendiliğinden Çöp Sepeti'ne taşır. Bunları Ayarlar'dan kapatabilirsiniz.";
+"Automatic cleaning was turned off, so nothing moved." = "Otomatik temizlik kapatıldı, bu yüzden hiçbir şey taşınmadı.";
