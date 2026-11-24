@@ -51,7 +51,9 @@ patient, but safety reports get priority over everything else.
   removed themselves.
 - **You choose what goes.** Purge shows what is reclaimable and you select
   what to clear. The only thing that runs on its own is scheduled cleaning,
-  which is off until you turn it on and only clears items marked Safe.
+  which is off until you turn it on and only clears items marked Safe. The
+  first scheduled clean lists what it would move and waits for you to approve
+  it.
 - **Open source.** The full deletion logic, including the allowlist, is in this
   repo for you to read or build from source yourself.
 

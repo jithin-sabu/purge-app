@@ -8,6 +8,7 @@ private enum UDKeys {
     static let scheduledFrequency = "scheduledClean.frequency"
     static let customIntervalAmount = "scheduledClean.customInterval.amount"
     static let customIntervalUnit = "scheduledClean.customInterval.unit"
+    static let firstCleanApproved = "scheduledClean.firstCleanApproved"
 }
 
 @MainActor
@@ -58,6 +59,13 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         }
     }
 
+    /// Whether the user has seen a scheduled clean's list and chosen to clean it
+    /// (#331). Until then a due clean shows what it would move and waits, and
+    /// nothing moves. A new install and an existing one both start without it, so
+    /// nobody is counted as having seen a list they never saw. Turning the
+    /// schedule off and on keeps it: the user already knows what it does.
+    @Published private(set) var firstCleanApproved: Bool
+
     static let customIntervalAmountLimit = 365
 
     init(userDefaults: UserDefaults = .standard) {
@@ -77,6 +85,15 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         let rawAmount = ud.integer(forKey: UDKeys.customIntervalAmount)
         customIntervalAmount = min(max(rawAmount, 1), Self.customIntervalAmountLimit)
         customIntervalUnit = CustomCleaningIntervalUnit(rawValue: ud.string(forKey: UDKeys.customIntervalUnit) ?? "") ?? .week
+        firstCleanApproved = ud.bool(forKey: UDKeys.firstCleanApproved)
+    }
+
+    /// Records that the user chose to clean a first scheduled clean's list. Only
+    /// `ScheduledCleaningRegistrar.cleanApprovedPreview` calls it, once the clean
+    /// has started; closing the list never does.
+    func markFirstCleanApproved() {
+        ud.set(true, forKey: UDKeys.firstCleanApproved)
+        firstCleanApproved = true
     }
 
     /// The interval the schedule actually runs on: the persisted custom interval

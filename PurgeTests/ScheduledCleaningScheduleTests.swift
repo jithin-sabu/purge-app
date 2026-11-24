@@ -27,6 +27,10 @@ struct ScheduledCleaningScheduleTests {
     private static let enabledAtKey = "scheduledClean.enabledAt"
     /// Raw defaults key the registrar stamps after each clean.
     private static let lastSweepKey = "ScheduledCleaningRegistrar.lastGraceSweep"
+    /// Raw defaults key for the first clean's approval (#331). These tests cover
+    /// the automatic clean, so they start past it; `ScheduledCleanPreviewTests`
+    /// covers the list shown before it.
+    private static let firstCleanApprovedKey = "scheduledClean.firstCleanApproved"
 
     private struct Harness {
         let registrar: ScheduledCleaningRegistrar
@@ -42,6 +46,7 @@ struct ScheduledCleaningScheduleTests {
     private func makeHarness(enabledAt: Date, enabled: Bool = true) -> Harness {
         let defaults = suite.defaults
         defaults.set(enabledAt, forKey: Self.enabledAtKey)
+        defaults.set(true, forKey: Self.firstCleanApprovedKey)
 
         let prefs = ScheduledCleaningPreferenceStore(userDefaults: defaults)
         prefs.isEnabled = enabled
@@ -780,6 +785,9 @@ struct ScheduledCleanReviewHoldTests {
             ("uninstall review", { store.uninstallPlan = $0 ? UninstallPlan(id: "test", apps: []) : nil }),
             ("uninstall plan being built", { store.isBuildingUninstallPlan = $0 }),
             ("orphan review", { store.orphanCleanupPlan = $0 ? OrphanCleanupPlan(items: []) : nil }),
+            ("first scheduled clean's list", {
+                store.scheduledCleanPreview = $0 ? ScheduledCleanPreview(candidates: [Self.candidate()]) : nil
+            }),
             ("removed-app review", {
                 store.removedAppLeftoverPlan = $0
                     ? RemovedAppLeftoverPlan(app: app, items: [], trashedBundleURL: nil)
