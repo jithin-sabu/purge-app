@@ -1105,6 +1105,7 @@
 "Skipped" = "Пропущено";
 "Skipped for safety" = "Пропущено из соображений безопасности";
 "Smallest" = "Наименьшие";
+"Snapshots to remove" = "Снимки для удаления";
 "Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. Backups on your backup disk aren't touched." = "Снимки могут быть единственной копией файлов, которые вы изменили или удалили после последней резервной копии. Удалённые снимки вернуть нельзя. Purge сохраняет самый новый снимок и снимок последней резервной копии — они могут понадобиться Time Machine. Резервные копии на вашем диске для копий не затрагиваются.";
 "Snapshots, virtual memory, logs and other space macOS manages itself, plus anything Purge couldn't read." = "Снимки, виртуальная память, логи и другое место, которым управляет сама macOS, а также всё, что Purge не удалось прочитать.";
 "Snooping around…" = "Осматриваемся…";
