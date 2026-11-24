@@ -8,8 +8,9 @@ import Foundation
 /// macOS grants access to a running process without telling it, so the only way
 /// to notice is to keep probing. The probe runs off the main actor, once a
 /// second, for at most `wait`. On a grant the guide shows its check and each
-/// caller's `onGranted` runs once. Not Now on the guide, or `cancel()`, ends the
-/// wait without running them.
+/// caller's `onGranted` runs once. Not Now on the guide ends the wait without
+/// running them. Each caller cancels only its own request: the wait and the
+/// guide end with the last one.
 @MainActor
 final class FullDiskAccessGuide {
     static let shared = FullDiskAccessGuide(
@@ -27,7 +28,12 @@ final class FullDiskAccessGuide {
     private let pollInterval: Duration
     private let limit: TimeInterval
     private var task: Task<Void, Never>?
-    private var grantHandlers: [() -> Void] = []
+    private var grantHandlers: [(request: Request, run: () -> Void)] = []
+
+    /// One caller's place in the wait, for `cancel(_:)`.
+    struct Request: Hashable {
+        let id = UUID()
+    }
 
     init(
         panel: SettingsGuidePanel,
@@ -47,18 +53,25 @@ final class FullDiskAccessGuide {
 
     /// Opens the pane and shows the guide. A second call while one wait runs adds
     /// its `onGranted` to the same wait.
-    func open(onGranted: @escaping () -> Void = {}) {
+    @discardableResult
+    func open(onGranted: @escaping () -> Void = {}) -> Request {
         openPane()
-        grantHandlers.append(onGranted)
+        let request = Request()
+        grantHandlers.append((request, onGranted))
         panel.show(.fullDiskAccess, owner: self) { [weak self] in self?.stopWaiting(hideGuide: false) }
-        guard task == nil else { return }
-        task = Task { [weak self] in await self?.waitForGrant() }
+        if task == nil {
+            task = Task { [weak self] in await self?.waitForGrant() }
+        }
+        return request
     }
 
-    /// The asking screen went away: stop waiting and close the guide.
-    func cancel() {
-        guard isWaiting else { return }
-        stopWaiting(hideGuide: true)
+    /// The screen that made `request` went away: its `onGranted` never runs.
+    /// When no other caller waits, the wait stops and the guide closes. A
+    /// request that already ran or ended does nothing.
+    func cancel(_ request: Request) {
+        guard let index = grantHandlers.firstIndex(where: { $0.request == request }) else { return }
+        grantHandlers.remove(at: index)
+        if grantHandlers.isEmpty { stopWaiting(hideGuide: true) }
     }
 
     private func waitForGrant() async {
@@ -71,7 +84,7 @@ final class FullDiskAccessGuide {
                 grantHandlers = []
                 task = nil
                 panel.finish(.fullDiskAccess, owner: self)
-                handlers.forEach { $0() }
+                handlers.forEach { $0.run() }
                 return
             }
             do {

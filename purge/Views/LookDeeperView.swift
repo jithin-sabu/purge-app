@@ -38,6 +38,8 @@ struct LookDeeperView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var phase: Phase = .asking
   @State private var didOpenSettings = false
+  /// This screen's place in the Full Disk Access wait.
+  @State private var fullDiskAccessRequest: FullDiskAccessGuide.Request?
 
   static let contentWidth: CGFloat = 620
   /// Long enough to read "Looking deeper" even when the scan is instant.
@@ -60,7 +62,9 @@ struct LookDeeperView: View {
     // Leaving without access ends the guide's wait too. With access, the guide
     // is about to show its check, so it is left to finish.
     .onDisappear {
-      if !store.hasFullDiskAccess { FullDiskAccessGuide.shared.cancel() }
+      if !store.hasFullDiskAccess, let fullDiskAccessRequest {
+        FullDiskAccessGuide.shared.cancel(fullDiskAccessRequest)
+      }
     }
   }
 
@@ -223,7 +227,7 @@ struct LookDeeperView: View {
       didOpenSettings = true
     }
     onOpenSettings()
-    FullDiskAccessGuide.shared.open { [store] in store.applyFullDiskAccess(true) }
+    fullDiskAccessRequest = FullDiskAccessGuide.shared.open { [store] in store.applyFullDiskAccess(true) }
   }
 
   /// In onboarding, "Show me" lands on the tab that holds most of what was found.

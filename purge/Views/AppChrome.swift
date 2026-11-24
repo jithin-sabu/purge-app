@@ -481,6 +481,8 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var appearedAt = Date()
     @State private var didBeginCompletion = false
     @State private var sequenceTask: Task<Void, Never>?
+    /// This card's place in the Full Disk Access wait, ended when it closes.
+    @State private var fullDiskAccessRequest: FullDiskAccessGuide.Request?
     @State private var retryingFailureIDs: Set<UUID> = []
     /// Rows whose last Retry came back with nothing to show for it. The row says
     /// so, rather than looking exactly as it did before the tap (#162).
@@ -674,8 +676,9 @@ struct SafeCleanupCelebrationOverlay: View {
         }
         .onDisappear {
             sequenceTask?.cancel()
-            // Done without access: the guide's wait has nothing left to retry.
-            if !store.hasFullDiskAccess { FullDiskAccessGuide.shared.cancel() }
+            // The card is gone, so its retry must never run. Only its own
+            // request ends: another screen's wait goes on.
+            if let fullDiskAccessRequest { FullDiskAccessGuide.shared.cancel(fullDiskAccessRequest) }
         }
     }
 
@@ -1052,7 +1055,7 @@ struct SafeCleanupCelebrationOverlay: View {
     /// `hasFullDiskAccess` never skips System Settings, and access that is
     /// already on retries the rows at the guide's first check.
     private func openFullDiskAccessForFailures() {
-        FullDiskAccessGuide.shared.open { [store] in
+        fullDiskAccessRequest = FullDiskAccessGuide.shared.open { [store] in
             store.applyFullDiskAccess(true)
             retryFullDiskAccessFailures()
         }

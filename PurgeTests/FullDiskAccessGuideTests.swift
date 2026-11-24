@@ -62,8 +62,8 @@ struct FullDiskAccessGuideTests {
         let access = Access()
         let (guide, _) = makeGuide(panel: panel, access: access)
         var granted = 0
-        guide.open { granted += 1 }
-        guide.cancel()
+        let request = guide.open { granted += 1 }
+        guide.cancel(request)
         #expect(!guide.isWaiting)
         #expect(panel.shown == nil)
 
@@ -108,7 +108,28 @@ struct FullDiskAccessGuideTests {
         let (guide, _) = makeGuide(panel: panel, access: Access())
         let other = NSObject()
         panel.show(.allowInBackground, owner: other) {}
-        guide.cancel()
+        guide.cancel(FullDiskAccessGuide.Request())
         #expect(panel.shown == .allowInBackground)
+    }
+
+    /// The failure card closing ends only its own request. Look Deeper's wait
+    /// goes on, and a grant runs Look Deeper's follow-up but not the card's.
+    @Test func cancellingOneRequestKeepsTheOther() async {
+        let panel = SettingsGuidePanel()
+        defer { panel.hide() }
+        let access = Access()
+        let (guide, _) = makeGuide(panel: panel, access: access)
+        var lookDeeper = 0
+        var card = 0
+        guide.open { lookDeeper += 1 }
+        let cardRequest = guide.open { card += 1 }
+        guide.cancel(cardRequest)
+        #expect(guide.isWaiting)
+        #expect(panel.shown == .fullDiskAccess)
+
+        access.granted = true
+        await settle { !guide.isWaiting }
+        #expect(lookDeeper == 1)
+        #expect(card == 0)
     }
 }
