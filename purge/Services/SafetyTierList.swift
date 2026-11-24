@@ -282,13 +282,15 @@ enum SafetyTierList {
 
     /// Whether `folder` holds only what electron-updater writes there: a real
     /// `pending` folder and regular files. Any other folder, a link or an entry
-    /// that can't be read fails.
-    private nonisolated static func holdsOnlyUpdaterDownloads(_ folder: URL) -> Bool {
+    /// that can't be read fails, and so does a folder with no `pending` in this
+    /// listing: the caller saw `pending` earlier, but it may be gone by now.
+    nonisolated static func holdsOnlyUpdaterDownloads(_ folder: URL) -> Bool {
         guard let children = try? FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
             options: []
         ) else { return false }
+        guard children.contains(where: { $0.lastPathComponent == "pending" }) else { return false }
         return children.allSatisfy { child in
             guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey]) else {
                 return false

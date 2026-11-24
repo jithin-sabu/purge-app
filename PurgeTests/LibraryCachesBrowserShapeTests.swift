@@ -477,6 +477,15 @@ struct LibraryCachesBrowserShapeTests {
         )
         #expect(!check(linked))
         #expect(!check(linkedPending))
+
+        // `pending` read earlier but gone by the listing: loose files alone are
+        // not an updater layout, so the shape check stays.
+        let filesOnly = caches.appendingPathComponent("files-only-updater", isDirectory: true)
+        try lay(filesOnly, folders: [], files: ["update.zip", "current.blockmap"])
+        #expect(!SafetyTierList.holdsOnlyUpdaterDownloads(filesOnly))
+        #expect(SafetyTierList.holdsOnlyUpdaterDownloads(updater))
+        #expect(SafetyTierList.dependsOnChromiumShape(filesOnly, home: home))
+        #expect(!check(filesOnly))
     }
 
     /// An updater folder whose `pending` folder went before the move, and whose
