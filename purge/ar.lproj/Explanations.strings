@@ -6,7 +6,7 @@
 "A Python environment with one project's packages. Recreate it by reinstalling from requirements.txt or pyproject.toml, which needs a connection." = "بيئة Python تضم حزم مشروع واحد. أعد إنشاءها بإعادة التثبيت من requirements.txt أو pyproject.toml، وهذا يتطلب اتصالًا.";
 "A full macOS installer, usually 12 to 15 GB. macOS does not need it after installing, and the App Store has it. Keep it to make a bootable USB installer." = "مثبّت macOS كامل، عادةً من 12 إلى 15 GB. لا يحتاجه macOS بعد التثبيت، ويتوفر في App Store. احتفظ به لإنشاء مثبّت USB قابل للإقلاع.";
 "A leftover Chromium framework no running process uses. Quit and relaunch the browser to clean a version it still runs from; relaunching also removes old ones." = "إطار Chromium متبقٍّ لا تستخدمه أي عملية قيد التشغيل. أنهِ المتصفح وأعد فتحه لتنظيف إصدار لا يزال يعمل منه؛ وإعادة الفتح تزيل الإصدارات القديمة أيضًا.";
-"A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle." = "حالة Gradle الخاصة بالمشروع، مثل بصمات الملفات وسجل البناء. يعيد البناء التالي إنشاءها؛ أما المكتبات المنزّلة فموجودة في ⁦~/.gradle⁩.";
+"A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle." = "حالة Gradle الخاصة بالمشروع، مثل بصمات الملفات وسجل البناء. يعيد البناء التالي إنشاءها؛ أما المكتبات المنزّلة فموجودة في ‎~/.gradle.";
 "A temporary folder used by the Dart and Flutter development tools. Safe to delete and will be recreated automatically the next time you run a Flutter project." = "مجلد مؤقت تستخدمه أدوات تطوير Dart وFlutter. حذفه آمن، ويُعاد إنشاؤه تلقائيًا عند تشغيل مشروع Flutter في المرة القادمة.";
 "Adobe Camera Raw Cache" = "ذاكرة Adobe Camera Raw المؤقتة";
 "Adobe Media Cache Database" = "قاعدة بيانات Adobe Media Cache";
@@ -19,7 +19,7 @@
 "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "كل الصور والحاويات ووحدات التخزين، وبعضها فيه قواعد بيانات. لإبقاء وحدات التخزين شغّل docker --context desktop-linux system prune وDocker يعمل، أو أنهِه.";
 "An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays." = "إصدار أقدم من Android NDK. ينزّله Gradle مجددًا حين يحتاجه مشروع. قد يفشل البناء بدون Gradle حتى تعيد تثبيته. يبقى الإصدار الأحدث.";
 "An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back." = "إصدار أقدم من Node.js عبر nvm. لا يستخدمه اسم مستعار أو ملف .nvmrc وجده Purge أو حزمة عامة أو إعداد npm. يبقى أحدث إصدار لكل رئيسي. يعيده nvm install.";
-"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "نتائج تحليل يحفظها خادم لغة Dart وFlutter في ⁦~/.dartServer⁩ لتُفتح المشاريع أسرع. حذفها آمن؛ يعيد المحلّل إنشاءها.";
+"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "نتائج تحليل يحفظها خادم لغة Dart وFlutter في ‎~/.dartServer لتُفتح المشاريع أسرع. حذفها آمن؛ يعيد المحلّل إنشاءها.";
 "Android Build Cache" = "ذاكرة بناء Android المؤقتة";
 "Android Build Output" = "مخرجات بناء Android";
 "Android NDK" = "Android NDK";
@@ -75,7 +75,7 @@
 "Browsers Playwright downloaded for automated website testing. Your tests fail until you run npx playwright install, which downloads them again." = "متصفحات نزّلها Playwright لاختبار المواقع آليًا. تفشل اختباراتك حتى تشغّل npx playwright install، الذي ينزّلها مجددًا.";
 "Browsers Puppeteer downloaded for automated tests. Scripts fail until it is installed again with npm install or npx puppeteer browsers install." = "متصفحات نزّلها Puppeteer للاختبارات الآلية. تفشل السكربتات حتى تُثبَّت مجددًا عبر npm install أو npx puppeteer browsers install.";
 "Build cache kept by the Angular CLI to make repeat builds faster. Safe to delete and rebuilt automatically." = "ذاكرة بناء مؤقتة تحفظها Angular CLI لتسريع عمليات البناء المتكررة. حذفها آمن ويُعاد إنشاؤها تلقائيًا.";
-"Build caches in ~/.android that the next build recreates. Emulators, the key your phones trust for debugging, and your debug signing key are left alone." = "ملفات بناء مؤقتة في ⁦~/.android⁩ يعيد البناء التالي إنشاءها. لا تُمسّ المحاكيات ولا المفتاح الذي تثق به هواتفك لتصحيح الأخطاء ولا مفتاح توقيع التصحيح.";
+"Build caches in ~/.android that the next build recreates. Emulators, the key your phones trust for debugging, and your debug signing key are left alone." = "ملفات بناء مؤقتة في ‎~/.android يعيد البناء التالي إنشاءها. لا تُمسّ المحاكيات ولا المفتاح الذي تثق به هواتفك لتصحيح الأخطاء ولا مفتاح توقيع التصحيح.";
 "Build outputs Bazel caches between builds. Safe to delete, though the next build starts from scratch and can be slow." = "مخرجات بناء يحفظها Bazel بين عمليات البناء. حذفها آمن، لكن البناء التالي يبدأ من الصفر وقد يكون بطيئًا.";
 "Bun Package Cache" = "ذاكرة حزم Bun المؤقتة";
 "Bundler Cache" = "ذاكرة Bundler المؤقتة";
@@ -178,7 +178,7 @@
 "Elixir Build Output" = "مخرجات بناء Elixir";
 "Elixir Dependencies" = "اعتماديات Elixir";
 "Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators." = "ملفات محاكيات نزّلتها Firebase CLI. حذفها آمن؛ تعيد Firebase CLI تنزيلها عند تشغيل المحاكيات في المرة القادمة.";
-"Emulator images no emulator in ~/.android/avd uses. Android Studio downloads one again when you need it. If you keep emulators elsewhere, check them first." = "صور محاكيات لا يستخدمها أي محاكٍ في ⁦~/.android/avd⁩. ينزّل Android Studio الصورة مجددًا حين تحتاجها. إن كنت تحفظ محاكيات في مكان آخر، فافحصها أولًا.";
+"Emulator images no emulator in ~/.android/avd uses. Android Studio downloads one again when you need it. If you keep emulators elsewhere, check them first." = "صور محاكيات لا يستخدمها أي محاكٍ في ‎~/.android/avd. ينزّل Android Studio الصورة مجددًا حين تحتاجها. إن كنت تحفظ محاكيات في مكان آخر، فافحصها أولًا.";
 "Expo Cache" = "ذاكرة Expo المؤقتة";
 "FaceTime & Video Calls" = "FaceTime ومكالمات الفيديو";
 "Family Sharing Service" = "خدمة المشاركة العائلية";
@@ -219,7 +219,7 @@
 "Granola AI Notes" = "ملاحظات Granola AI";
 "Haskell packages downloaded by Cabal. Nothing is lost, but your next build downloads and rebuilds them, which can take a long time." = "حزم Haskell التي نزّلها Cabal. لا يُفقد شيء، لكن البناء التالي يعيد تنزيلها وبناءها، وقد يستغرق ذلك وقتًا طويلًا.";
 "Hermes Agent Cache" = "ذاكرة Hermes Agent المؤقتة";
-"Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay." = "تنزيلات وكيل Hermes ومساحة العمل المؤقتة في ⁦~/.hermes/cache⁩. نظّفها وHermes خامل، فقد تستخدمها مهمة جارية. تبقى الإعدادات والمفاتيح والجلسات.";
+"Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay." = "تنزيلات وكيل Hermes ومساحة العمل المؤقتة في ‎~/.hermes/cache. نظّفها وHermes خامل، فقد تستخدمها مهمة جارية. تبقى الإعدادات والمفاتيح والجلسات.";
 "Hex Package Cache" = "ذاكرة حزم Hex المؤقتة";
 "Homebrew Package Cache" = "ذاكرة حزم Homebrew المؤقتة";
 "Husky Git Hooks" = "خطافات Git من Husky";
@@ -292,7 +292,7 @@
 "Packages and prebuilt libraries Stack shares between Haskell projects. Settings and installed compilers stay. The next build downloads and rebuilds a lot." = "حزم ومكتبات مبنية مسبقًا يشاركها Stack بين مشاريع Haskell. تبقى الإعدادات والمترجمات المثبّتة. البناء التالي يعيد تنزيل وبناء الكثير.";
 "Packages conda unpacked to build your environments, which link to these files and keep working. Deleting frees less than shown; conda clean --all is safer." = "حزم فكّها conda لبناء بيئاتك، وهي ترتبط بهذه الملفات وتظل تعمل. الحذف يحرّر أقل مما يظهر؛ conda clean --all أكثر أمانًا.";
 "Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install." = "حزم نزّلها Bun، وهو بيئة تشغيل JavaScript ومدير حزم. آمنة للحذف؛ تُنزَّل مجددًا عند تشغيل bun install في المرة القادمة.";
-"Page and script caches of the Codex app and command line tool, rebuilt as you use it. Your sessions and sign-in in ~/.codex are left alone." = "ذاكرة الصفحات والنصوص المؤقتة لتطبيق Codex وأداة سطر الأوامر، تُبنى مجددًا أثناء الاستخدام. تبقى جلساتك وتسجيل دخولك في ⁦~/.codex⁩ كما هي.";
+"Page and script caches of the Codex app and command line tool, rebuilt as you use it. Your sessions and sign-in in ~/.codex are left alone." = "ذاكرة الصفحات والنصوص المؤقتة لتطبيق Codex وأداة سطر الأوامر، تُبنى مجددًا أثناء الاستخدام. تبقى جلساتك وتسجيل دخولك في ‎~/.codex كما هي.";
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "ذاكرة الصفحات والنصوص المؤقتة لمتصفح Antigravity لمهام الويب، تمتلئ مجددًا مع تحميل الصفحات. تبقى عمليات تسجيل الدخول والسجل والإضافات.";
 "Parcel Build Cache" = "ذاكرة بناء Parcel المؤقتة";
 "Perplexity App Updater" = "أداة تحديث تطبيق Perplexity";

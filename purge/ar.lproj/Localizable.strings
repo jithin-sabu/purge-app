@@ -210,13 +210,13 @@
 "Any time" = "أي وقت";
 "App" = "التطبيق";
 "App Caches" = "الذاكرة المؤقتة";
-"App Caches and Dev Tools" = "ذاكرة التطبيقات المؤقتة وأدوات المطوّرين";
+"App Caches and Dev Tools" = "الذاكرة المؤقتة وأدوات المطوّرين";
 "App Data" = "بيانات التطبيقات";
 "App Store app caches" = "ذاكرة تطبيقات App Store المؤقتة";
 "App Uninstaller" = "إزالة التطبيقات";
 "App caches" = "ذاكرة التطبيقات المؤقتة";
 "App data" = "بيانات التطبيقات";
-"App data holds settings, documents, databases and offline downloads. Only the cache folders inside it are known to be safe, and App Caches already lists those." = "تحتوي بيانات التطبيقات على إعدادات ومستندات وقواعد بيانات وتنزيلات للاستخدام دون اتصال. مجلدات ذاكرة التخزين المؤقت داخلها هي وحدها المعروف أنها آمنة، وقسم ذاكرة التطبيقات المؤقتة يعرضها بالفعل.";
+"App data holds settings, documents, databases and offline downloads. Only the cache folders inside it are known to be safe, and App Caches already lists those." = "تحتوي بيانات التطبيقات على إعدادات ومستندات وقواعد بيانات وتنزيلات للاستخدام دون اتصال. مجلدات ذاكرة التخزين المؤقت داخلها هي وحدها المعروف أنها آمنة، وقسم الذاكرة المؤقتة يعرضها بالفعل.";
 "App view" = "عرض التطبيقات";
 "Appearance" = "المظهر";
 "Apple Intelligence models" = "نماذج Apple Intelligence";
@@ -281,7 +281,7 @@
 "Cache rebuilds on launch." = "يعاد إنشاء ذاكرة التخزين المؤقت عند التشغيل.";
 "Caches" = "ذاكرة التخزين المؤقت";
 "Caches Purge won't clean" = "ذاكرة تخزين مؤقت لن ينظّفها Purge";
-"Caches in ~/Library/Caches that aren't on Purge's list" = "ملفات ذاكرة التخزين المؤقت في ⁦~/Library/Caches⁩ غير الموجودة في قائمة Purge";
+"Caches in ~/Library/Caches that aren't on Purge's list" = "ملفات ذاكرة التخزين المؤقت في ‎~/Library/Caches غير الموجودة في قائمة Purge";
 "Calculating…" = "جارٍ الحساب…";
 "Can be rebuilt" = "يمكن إعادة إنشائه";
 "Cancel" = "إلغاء";
@@ -656,7 +656,7 @@
 "Move All to Trash" = "نقل الكل إلى سلة المهملات";
 "Move Purge to the Trash" = "نقل Purge إلى سلة المهملات";
 "Move Purge to the Trash yourself" = "انقل Purge إلى سلة المهملات بنفسك";
-"Move every Safe item in App Caches and Dev Tools to the Trash" = "نقل كل عنصر آمن في ذاكرة التطبيقات المؤقتة وأدوات المطوّرين إلى سلة المهملات";
+"Move every Safe item in App Caches and Dev Tools to the Trash" = "نقل كل عنصر آمن في الذاكرة المؤقتة وأدوات المطوّرين إلى سلة المهملات";
 "Move selected files to Trash?" = "هل تريد نقل الملفات المحددة إلى سلة المهملات؟";
 "Move selected items to Trash?" = "هل تريد نقل العناصر المحددة إلى سلة المهملات؟";
 "Move to Trash" = "نقل إلى سلة المهملات";
@@ -787,7 +787,7 @@
 "Open iMovie" = "فتح iMovie";
 "Open itch" = "فتح itch";
 "Opened %@" = "تم فتح %@";
-"Opens Purge on the Overview, scans for junk, and says how much is safe to clean in App Caches and Dev Tools. Nothing is cleaned until you confirm in Purge." = "يفتح Purge على نظرة عامة، ويفحص بحثًا عن الملفات غير الضرورية، ويوضح الحجم الآمن للتنظيف في ذاكرة التطبيقات المؤقتة وأدوات المطوّرين. لا يُنظَّف أي شيء حتى تؤكد في Purge.";
+"Opens Purge on the Overview, scans for junk, and says how much is safe to clean in App Caches and Dev Tools. Nothing is cleaned until you confirm in Purge." = "يفتح Purge على نظرة عامة، ويفحص بحثًا عن الملفات غير الضرورية، ويوضح الحجم الآمن للتنظيف في الذاكرة المؤقتة وأدوات المطوّرين. لا يُنظَّف أي شيء حتى تؤكد في Purge.";
 "Opens Purge's uninstall review for this app, listing the app and everything it leaves behind. Nothing is removed until you confirm in Purge." = "يفتح مراجعة إلغاء التثبيت في Purge لهذا التطبيق، مع قائمة بالتطبيق وكل ما يتركه خلفه. لا يُزال أي شيء حتى تؤكد في Purge.";
 "Opens what Everything else holds" = "يفتح محتويات كل ما عدا ذلك";
 "Other" = "أخرى";
@@ -932,7 +932,7 @@
 "Recreated automatically the next time you run mypy." = "يُعاد إنشاؤه تلقائيًا في المرة التالية التي تشغّل فيها mypy.";
 "Recreated automatically the next time you run ruff." = "يُعاد إنشاؤه تلقائيًا في المرة التالية التي تشغّل فيها ruff.";
 "Recreated automatically the next time you run your tests." = "يُعاد إنشاؤه تلقائيًا في المرة التالية التي تشغّل فيها اختباراتك.";
-"Regenerable cache folders under ~/Library/Caches and Application Support" = "مجلدات ذاكرة التخزين المؤقت القابلة لإعادة الإنشاء ضمن ⁦~/Library/Caches⁩ وApplication Support";
+"Regenerable cache folders under ~/Library/Caches and Application Support" = "مجلدات ذاكرة التخزين المؤقت القابلة لإعادة الإنشاء ضمن ‎~/Library/Caches وApplication Support";
 "Regenerated the next time you build the project in Unreal." = "يُعاد إنشاؤه في المرة التالية التي تبني فيها المشروع في Unreal.";
 "Reinstall %@ from its original source if you need it again." = "أعد تثبيت %@ من مصدره الأصلي إذا احتجت إليه مجددًا.";
 "Released" = "المُزالة";
@@ -1018,7 +1018,7 @@
 "Saved State" = "الحالة المحفوظة";
 "Saved, but Finder may keep showing the old state until you log out and back in." = "تم الحفظ، لكن قد يستمر Finder في عرض الحالة القديمة حتى تسجّل الخروج ثم الدخول مجددًا.";
 "Scan" = "فحص";
-"Scan App Caches, Dev Tools, Large Files and apps, one after another" = "فحص ذاكرة التطبيقات المؤقتة وأدوات المطوّرين والملفات الكبيرة والتطبيقات، واحدًا تلو الآخر";
+"Scan App Caches, Dev Tools, Large Files and apps, one after another" = "فحص الذاكرة المؤقتة وأدوات المطوّرين والملفات الكبيرة والتطبيقات، واحدًا تلو الآخر";
 "Scan Caches & Dev Tools" = "فحص ذاكرة التخزين المؤقت وأدوات المطوّرين";
 "Scan Everything" = "فحص كل شيء";
 "Scan Incomplete" = "الفحص غير مكتمل";
@@ -1032,7 +1032,7 @@
 "Scanning app caches" = "جارٍ فحص ذاكرة التطبيقات المؤقتة";
 "Scanning..." = "جارٍ الفحص...";
 "Scanning…" = "جارٍ الفحص…";
-"Scans for junk and moves the Safe items in App Caches and Dev Tools to the Trash, like Clean in Purge's menu bar. Check First items are left alone." = "يفحص بحثًا عن الملفات غير الضرورية وينقل العناصر الآمنة في ذاكرة التطبيقات المؤقتة وأدوات المطوّرين إلى سلة المهملات، مثل تنظيف في شريط القائمة الخاص بـ Purge. تُترك عناصر افحص أولًا دون تغيير.";
+"Scans for junk and moves the Safe items in App Caches and Dev Tools to the Trash, like Clean in Purge's menu bar. Check First items are left alone." = "يفحص بحثًا عن الملفات غير الضرورية وينقل العناصر الآمنة في الذاكرة المؤقتة وأدوات المطوّرين إلى سلة المهملات، مثل تنظيف في شريط القائمة الخاص بـ Purge. تُترك عناصر افحص أولًا دون تغيير.";
 "Scans run one at a time." = "تُجرى عمليات الفحص واحدة تلو الأخرى.";
 "Scans skip these files and folders and everything inside them. Add a folder here, or right-click any scan result and choose Exclude from scans." = "تتخطى عمليات الفحص هذه الملفات والمجلدات وكل ما بداخلها. أضف مجلدًا هنا، أو انقر بزر الماوس الأيمن على أي نتيجة فحص واختر استبعاد من الفحص.";
 "Scans skip these folders and everything inside them. You can also right-click a scan result and choose Exclude from scans." = "تتخطى عمليات الفحص هذه المجلدات وكل ما بداخلها. يمكنك أيضًا النقر بزر الماوس الأيمن على نتيجة فحص واختيار استبعاد من الفحص.";
@@ -1291,7 +1291,7 @@
 "Used" = "آخر استخدام";
 "Used in the last month. %@" = "استُخدم خلال الشهر الماضي. %@";
 "Used space the walk didn't reach" = "مساحة مستخدمة لم يصل إليها الفحص";
-"User logs and diagnostic reports under ~/Library/Logs, and files a finished macOS update left behind" = "سجلات المستخدم وتقارير التشخيص ضمن ⁦~/Library/Logs⁩، والملفات التي تركها تحديث macOS بعد اكتماله";
+"User logs and diagnostic reports under ~/Library/Logs, and files a finished macOS update left behind" = "سجلات المستخدم وتقارير التشخيص ضمن ‎~/Library/Logs، والملفات التي تركها تحديث macOS بعد اكتماله";
 "Version %@" = "الإصدار %@";
 "Version %@ · %@" = "الإصدار %@ · %@";
 "Videos" = "مقاطع الفيديو";
@@ -1306,7 +1306,7 @@
 "Visual Intelligence, Photos Clean Up and Spatial Photos" = "Visual Intelligence و Photos Clean Up و Spatial Photos";
 "Vite cache" = "ذاكرة التخزين المؤقت لـ Vite";
 "Waiting for %@" = "في انتظار %@";
-"Waiting for App Caches and Dev Tools to finish scanning" = "في انتظار انتهاء فحص ذاكرة التطبيقات المؤقتة وأدوات المطوّرين";
+"Waiting for App Caches and Dev Tools to finish scanning" = "في انتظار انتهاء فحص الذاكرة المؤقتة وأدوات المطوّرين";
 "Waiting for the clean" = "في انتظار التنظيف";
 "Waiting to find your apps" = "في انتظار العثور على تطبيقاتك";
 "Waiting to look for developer folders" = "في انتظار البحث عن مجلدات المطوّرين";
