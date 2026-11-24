@@ -351,12 +351,7 @@ struct SettingsGuideView: View {
                         .font(AppStyle.Typography.rowTitle)
                         .foregroundStyle(AppColors.textPrimary)
                     Spacer(minLength: AppStyle.Spacing.xSmall)
-                    Toggle("", isOn: .constant(true))
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .labelsHidden()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+                    SwitchedOnMark()
                 case .installProfile, .removeProfile:
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 13))
@@ -366,8 +361,7 @@ struct SettingsGuideView: View {
                     Text(AppleIntelligenceDownloadBlock.profileDisplayName)
                         .font(AppStyle.Typography.rowTitle)
                         .foregroundStyle(AppColors.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
             }
@@ -504,6 +498,23 @@ struct SettingsGuideView: View {
         case .installProfile: return String(localized: "Profile installed")
         case .removeProfile: return String(localized: "Profile removed")
         }
+    }
+}
+
+/// A switch drawn on, as System Settings draws it in the user's accent colour.
+/// A real `Toggle` would show dimmed, because the panel is never the key window.
+private struct SwitchedOnMark: View {
+    var body: some View {
+        Capsule(style: .continuous)
+            .fill(AppColors.systemControlAccent)
+            .frame(width: 26, height: 15)
+            .overlay(alignment: .trailing) {
+                Circle()
+                    .fill(AppColors.systemControlKnob)
+                    .frame(width: 13, height: 13)
+                    .padding(.trailing, AppStyle.Spacing.xxxSmall / 2)
+            }
+            .accessibilityHidden(true)
     }
 }
 
