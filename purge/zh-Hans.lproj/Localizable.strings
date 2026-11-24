@@ -1604,5 +1604,5 @@
 "Profile removed" = "描述文件已移除";
 "Back to Purge…" = "正在返回 Purge…";
 "Drag Purge into the Full Disk Access list" = "将 Purge 拖入完全磁盘访问权限列表";
-"Not in the list? Drag this icon into it." = "列表中没有？把这个图标拖进去。";
+"Not in the list? Drag the Purge row above into it." = "列表中没有？把上面的 Purge 一行拖进去。";
 "If macOS offers to reopen Purge, go ahead." = "若 macOS 提示重新打开 Purge，请允许。";

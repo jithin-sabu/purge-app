@@ -303,7 +303,7 @@ struct SettingsGuideView: View {
             targetRow
             if !model.isDone {
                 stepList
-                if guide == .fullDiskAccess { dragTile }
+                if guide == .fullDiskAccess { dragHint }
             }
             footer
         }
@@ -314,17 +314,12 @@ struct SettingsGuideView: View {
         .overlay(GuideCalloutShape(pointer: model.pointer).stroke(AppColors.borderSubtle, lineWidth: 1))
     }
 
+    /// Title only: the row below carries Purge's icon, once.
     private var header: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 20, height: 20)
-                .accessibilityHidden(true)
-            Text(title)
-                .font(AppStyle.Typography.headline)
-                .foregroundStyle(AppColors.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        Text(title)
+            .font(AppStyle.Typography.headline)
+            .foregroundStyle(AppColors.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// A copy of the row System Settings shows, so the user looks for a picture
@@ -374,6 +369,7 @@ struct SettingsGuideView: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                 .strokeBorder(model.isDone ? AppColors.statusSafeText : AppColors.borderSubtle)
         )
+        .modifier(DragsPurgeApp(isOn: guide == .fullDiskAccess && !model.isDone))
     }
 
     /// One line needs no number; several are numbered in the order the user
@@ -398,26 +394,13 @@ struct SettingsGuideView: View {
     }
 
     /// Purge is listed once it has asked for a protected folder, and a user can
-    /// take it off with the minus button. Dropping the app on the list adds it,
-    /// as dropping it from Finder does.
-    private var dragTile: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 24, height: 24)
-                .onDrag { NSItemProvider(object: Bundle.main.bundleURL as NSURL) }
-                .help(String(localized: "Drag Purge into the Full Disk Access list"))
-            Text("Not in the list? Drag this icon into it.")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(AppStyle.Spacing.xxSmall)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
-                .strokeBorder(AppColors.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-        )
+    /// take it off with the minus button. The row above can be dragged onto the
+    /// list, which adds the app as dropping it from Finder does.
+    private var dragHint: some View {
+        Text("Not in the list? Drag the Purge row above into it.")
+            .font(AppStyle.Typography.metadata)
+            .foregroundStyle(AppColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var footer: some View {
@@ -497,6 +480,23 @@ struct SettingsGuideView: View {
         case .allowInBackground: return String(localized: "Purge is allowed in the background")
         case .installProfile: return String(localized: "Profile installed")
         case .removeProfile: return String(localized: "Profile removed")
+        }
+    }
+}
+
+/// Lets the Full Disk Access row be dragged onto System Settings' list as the
+/// Purge app itself. The hint line under the steps says it can be.
+private struct DragsPurgeApp: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content
+                .contentShape(Rectangle())
+                .onDrag { NSItemProvider(object: Bundle.main.bundleURL as NSURL) }
+                .help(String(localized: "Drag Purge into the Full Disk Access list"))
+        } else {
+            content
         }
     }
 }

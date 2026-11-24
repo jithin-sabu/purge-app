@@ -1604,5 +1604,5 @@
 "Profile removed" = "Profil kaldırıldı";
 "Back to Purge…" = "Purge'e dönülüyor…";
 "Drag Purge into the Full Disk Access list" = "Purge'ü Tam Disk Erişimi listesine sürükleyin";
-"Not in the list? Drag this icon into it." = "Listede yok mu? Bu simgeyi listeye sürükleyin.";
+"Not in the list? Drag the Purge row above into it." = "Listede yok mu? Yukarıdaki Purge satırını listeye sürükleyin.";
 "If macOS offers to reopen Purge, go ahead." = "macOS Purge'ü yeniden açmayı önerirse kabul edin.";

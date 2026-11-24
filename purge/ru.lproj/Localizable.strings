@@ -1563,5 +1563,5 @@
 "Profile removed" = "Профиль удалён";
 "Back to Purge…" = "Возвращаемся в Purge…";
 "Drag Purge into the Full Disk Access list" = "Перетащите Purge в список «Полный доступ к диску»";
-"Not in the list? Drag this icon into it." = "Нет в списке? Перетащите туда этот значок.";
+"Not in the list? Drag the Purge row above into it." = "Нет в списке? Перетащите туда строку Purge выше.";
 "If macOS offers to reopen Purge, go ahead." = "Если macOS предложит снова открыть Purge, согласитесь.";
