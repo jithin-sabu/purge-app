@@ -14,8 +14,10 @@ import Testing
 struct UnattendedSafeCleanTests {
     private let suite = ThrowawayDefaults()
 
-    private static func row(_ level: SafetyLevel) -> CacheItem {
-        let folder = "com.purge.test.unattended-\(UUID().uuidString)"
+    /// `path` gives the new row the folder of an earlier one, as a rescan that
+    /// finds the same folder at another level would.
+    private static func row(_ level: SafetyLevel, path existing: CacheItem? = nil) -> CacheItem {
+        let folder = existing?.path.lastPathComponent ?? "com.purge.test.unattended-\(UUID().uuidString)"
         return CacheItem(
             definitionKey: folder,
             location: CacheLocation(
@@ -145,5 +147,136 @@ struct UnattendedSafeCleanTests {
             entry.deletedItems.contains { $0.path == Self.path(safe) }
         })
         #expect(entry.trigger == .scheduled)
+    }
+
+    // MARK: The first scheduled clean (#331)
+
+    @Test func theFirstScheduledCleansListMovesNothing() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        let safe = Self.row(.safe)
+        store.cacheItems = [safe, Self.row(.medium), Self.row(.unknown)]
+        let preferences = ScheduledCleaningPreferenceStore(userDefaults: suite.defaults)
+        preferences.isEnabled = true
+
+        let result = await store.prepareScheduledCleanPreview(preferences: preferences)
+
+        #expect(result == .presented)
+        #expect(trash.trashedPaths.isEmpty)
+        #expect(!store.isDeleting)
+        let preview = try #require(store.scheduledCleanPreview)
+        // Exactly what the clean would move: the Safe row, nothing else.
+        #expect(preview.paths == [Self.path(safe)])
+        #expect(!CleanupHistoryStore.shared.archive.entries.contains { entry in
+            entry.deletedItems.contains { $0.path == Self.path(safe) }
+        })
+        store.scheduledCleanPreview = nil
+    }
+
+    @Test func aListThatIsOffShowsNothing() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        store.cacheItems = [Self.row(.safe)]
+        let preferences = ScheduledCleaningPreferenceStore(userDefaults: suite.defaults)
+
+        let result = await store.prepareScheduledCleanPreview(preferences: preferences)
+
+        #expect(result == .skipped)
+        #expect(store.scheduledCleanPreview == nil)
+        #expect(scans.developerAccesses.isEmpty)
+    }
+
+    @Test func anEmptyListIsNotShown() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        store.cacheItems = [Self.row(.medium)]
+        let preferences = ScheduledCleaningPreferenceStore(userDefaults: suite.defaults)
+        preferences.isEnabled = true
+
+        let result = await store.prepareScheduledCleanPreview(preferences: preferences)
+
+        #expect(result == .nothingEligible)
+        #expect(store.scheduledCleanPreview == nil)
+    }
+
+    /// The safety fact of #331: an approved list moves only rows the user saw
+    /// that are still Safe. A Safe row that appeared after the list, and a shown
+    /// row that is Check First now, both stay.
+    @Test func anApprovedListMovesOnlyShownRowsThatAreStillSafe() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        let shown = Self.row(.safe)
+        let demoted = Self.row(.safe)
+        store.cacheItems = [shown, demoted]
+        let preferences = ScheduledCleaningPreferenceStore(userDefaults: suite.defaults)
+        preferences.isEnabled = true
+        _ = await store.prepareScheduledCleanPreview(preferences: preferences)
+        let preview = try #require(store.scheduledCleanPreview)
+        #expect(preview.paths == [Self.path(shown), Self.path(demoted)])
+        store.scheduledCleanPreview = nil
+
+        // While the list was open: one shown row turned Check First, and a new
+        // Safe row arrived.
+        let arrived = Self.row(.safe)
+        store.cacheItems = [shown, Self.row(.medium, path: demoted), arrived]
+        let summary = await store.performApprovedScheduledClean(paths: preview.paths)
+
+        #expect(trash.trashedPaths == [Self.path(shown)])
+        #expect(summary.deletedCount == 1)
+        #expect(!summary.skippedForAnotherClean)
+        let entry = try #require(CleanupHistoryStore.shared.archive.entries.first { entry in
+            entry.deletedItems.contains { $0.path == Self.path(shown) }
+        })
+        #expect(entry.trigger == .scheduled)
+    }
+
+    /// Every shown row stopped being Safe while the list was open. Nothing moves,
+    /// and the summary says no clean started, so the approval stays unused.
+    @Test func anApprovedListWithNothingLeftStartsNoClean() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        let shown = Self.row(.safe)
+        store.cacheItems = [shown]
+        let paths: Set<String> = [Self.path(shown)]
+
+        store.cacheItems = [Self.row(.medium, path: shown)]
+        let summary = await store.performApprovedScheduledClean(paths: paths)
+
+        #expect(summary.hadNothingToMove)
+        #expect(summary.deletedCount == 0)
+        #expect(trash.trashedPaths.isEmpty)
+    }
+
+    /// Clean in the list is the user's own click: an open review does not stop
+    /// it, but a clean already running does.
+    @Test func anApprovedListWaitsOnlyForARunningClean() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let store = makeStore(scans, trash: trash)
+        let safe = Self.row(.safe)
+        store.cacheItems = [safe]
+
+        store.isDeleting = true
+        let skipped = await store.performApprovedScheduledClean(paths: [Self.path(safe)])
+        #expect(skipped.skippedForAnotherClean)
+        #expect(trash.trashedPaths.isEmpty)
+        store.isDeleting = false
+
+        _ = store.beginInteractiveSafeCleanup(candidates: store.manualSafeCleanupCandidates(), reduceMotion: true)
+        let moved = await store.performApprovedScheduledClean(paths: [Self.path(safe)])
+        store.cancelInteractiveSafeCleanup()
+        #expect(moved.deletedCount == 1)
+        #expect(trash.trashedPaths == [Self.path(safe)])
     }
 }

@@ -42,6 +42,18 @@ struct LastScheduledCleanOutcome: Codable, Equatable {
     }
 }
 
+/// What asking for the first scheduled clean's list did (#331).
+enum ScheduledCleanPreviewResult: Equatable {
+    /// The list is on screen and waits for the user. Nothing moved, and the
+    /// clean stays due.
+    case presented
+    /// Nothing passed the safe-clean checks, so there was nothing to show. The
+    /// period counts as done, as a clean that found nothing does.
+    case nothingEligible
+    /// A review or a clean was open, or the schedule was off. The clean stays due.
+    case skipped
+}
+
 /// macOS scheduling: repeating local reminders plus a graceful sweep when the app becomes active.
 /// Background processing tasks (`BGTaskScheduler` / `BGProcessingTask`) are not available on macOS.
 @MainActor
@@ -54,12 +66,18 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     private static let lastGraceSweepKey = "ScheduledCleaningRegistrar.lastGraceSweep"
     private static let lastOutcomeKey = "ScheduledCleaningRegistrar.lastOutcome"
     private static let lastFailedAttemptKey = "ScheduledCleaningRegistrar.lastFailedAttempt"
+    private static let previewClosedKey = "ScheduledCleaningRegistrar.firstCleanPreviewClosed"
 
     /// How long a failed scheduled clean waits before an activation tries again.
     /// The anchor stays put after a failure, so without this gap a Safe item the
     /// Trash always refuses would run a rescan, a clean and a failure notification
     /// on every switch into Purge (#173).
     static let retryGapAfterFailure: TimeInterval = 60 * 60
+
+    /// How long the first scheduled clean's list stays away after the user closes
+    /// it with Not Now (#331). Without a gap it would open again on every switch
+    /// into Purge.
+    static let previewGapAfterNotNow: TimeInterval = 60 * 60
 
     @Published private(set) var lastOutcome: LastScheduledCleanOutcome?
 
@@ -88,6 +106,9 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     private let performCleanOverride: (() async -> PurgeStore.ScheduledCleaningSummary)?
     private let rearmOverride: (() async -> Void)?
     private let isReviewingOrCleaningOverride: (() -> Bool)?
+    private let preparePreviewOverride: (() async -> ScheduledCleanPreviewResult)?
+    private let performApprovedCleanOverride: ((Set<String>) async -> PurgeStore.ScheduledCleaningSummary)?
+    private let cancelReminderOverride: (() async -> Void)?
 
     /// The anchor timestamp of the last clean, read through the injected domain.
     private var currentLastGraceSweepDate: Date? {
@@ -99,18 +120,29 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         ud.object(forKey: Self.lastFailedAttemptKey) as? Date
     }
 
+    /// When the user last closed the first scheduled clean's list with Not Now.
+    private var previewClosedDate: Date? {
+        ud.object(forKey: Self.previewClosedKey) as? Date
+    }
+
     init(
         prefs: ScheduledCleaningPreferenceStore = .shared,
         userDefaults: UserDefaults = .standard,
         performClean: (() async -> PurgeStore.ScheduledCleaningSummary)? = nil,
         rearm: (() async -> Void)? = nil,
-        isReviewingOrCleaning: (() -> Bool)? = nil
+        isReviewingOrCleaning: (() -> Bool)? = nil,
+        preparePreview: (() async -> ScheduledCleanPreviewResult)? = nil,
+        performApprovedClean: ((Set<String>) async -> PurgeStore.ScheduledCleaningSummary)? = nil,
+        cancelReminder: (() async -> Void)? = nil
     ) {
         self.prefs = prefs
         self.ud = userDefaults
         self.performCleanOverride = performClean
         self.rearmOverride = rearm
         self.isReviewingOrCleaningOverride = isReviewingOrCleaning
+        self.preparePreviewOverride = preparePreview
+        self.performApprovedCleanOverride = performApprovedClean
+        self.cancelReminderOverride = cancelReminder
         if let data = ud.data(forKey: Self.lastOutcomeKey) {
             lastOutcome = try? JSONDecoder().decode(LastScheduledCleanOutcome.self, from: data)
         }
@@ -123,6 +155,38 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         }
         return await store?.performScheduledClean()
             ?? PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+    }
+
+    /// Builds and shows the first scheduled clean's list, through the injected
+    /// override when present.
+    private func preparePreview() async -> ScheduledCleanPreviewResult {
+        if let preparePreviewOverride {
+            return await preparePreviewOverride()
+        }
+        return await store?.prepareScheduledCleanPreview() ?? .skipped
+    }
+
+    /// Cleans what the user approved in the list, through the injected override
+    /// when present.
+    private func performApprovedClean(paths: Set<String>) async -> PurgeStore.ScheduledCleaningSummary {
+        if let performApprovedCleanOverride {
+            return await performApprovedCleanOverride(paths)
+        }
+        return await store?.performApprovedScheduledClean(paths: paths)
+            ?? PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
+    }
+
+    /// Takes back the pending reminder, through the injected override when
+    /// present. The test host shares the user's notification center, so it never
+    /// reaches the real one.
+    private func cancelReminder() async {
+        if let cancelReminderOverride {
+            await cancelReminderOverride()
+            return
+        }
+        guard !TestHost.isActive() else { return }
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [Self.repeatingReminderIdentifier])
     }
 
     /// Re-arms the pending reminder, through the injected override when present.
@@ -267,9 +331,21 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// end of the retry gap, if that comes later, so the sweep and Settings agree.
     func dueDate(referenceDate now: Date) -> Date {
         let interval = prefs.effectiveRepeatIntervalSeconds
-        let due = scheduleAnchor(referenceDate: now).addingTimeInterval(interval)
-        guard let failedAt = lastFailedAttemptDate else { return due }
-        return max(due, failedAt.addingTimeInterval(Self.retryGapAfterFailure))
+        var due = scheduleAnchor(referenceDate: now).addingTimeInterval(interval)
+        if let failedAt = lastFailedAttemptDate {
+            due = max(due, failedAt.addingTimeInterval(Self.retryGapAfterFailure))
+        }
+        if !prefs.firstCleanApproved, var closedAt = previewClosedDate {
+            // A stamp from a clock that was ahead. Clamped on each read, the end of
+            // the gap would slide with `now` and the list would never come back.
+            // Re-stamped once, at `now`, so it waits one gap from here.
+            if closedAt > now {
+                ud.set(now, forKey: Self.previewClosedKey)
+                closedAt = now
+            }
+            due = max(due, closedAt.addingTimeInterval(Self.previewGapAfterNotNow))
+        }
+        return due
     }
 
     /// Single source of truth for the next scheduled clean, clamped to `now` once
@@ -289,7 +365,9 @@ final class ScheduledCleaningRegistrar: ObservableObject {
 
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Scheduled cleanup due")
-        content.body = String(localized: "Open Purge when you’re ready — safe items clear automatically soon after launch.")
+        content.body = prefs.firstCleanApproved
+            ? String(localized: "Open Purge when you’re ready — safe items clear automatically soon after launch.")
+            : String(localized: "Open Purge to see what your first scheduled clean would move to the Trash. Nothing moves until you approve it.")
         content.sound = .default
 
         // One-shot reminder anchored to the canonical next-clean date. Re-armed by
@@ -335,6 +413,12 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         // The schedule's own due date, not the retry-adjusted one: a failure
         // inside an existing gap refreshes the gap instead of leaving its end in
         // place for the next activation to run the clean again.
+        guard prefs.firstCleanApproved else {
+            let result = await showFirstCleanPreview(at: now)
+            summary = result
+            return result
+        }
+
         let wasDue = now >= scheduleAnchor(referenceDate: now)
             .addingTimeInterval(prefs.effectiveRepeatIntervalSeconds)
         let result = await performClean()
@@ -376,9 +460,81 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         var summary: PurgeStore.ScheduledCleaningSummary?
         defer { finishSweep(with: summary) }
 
+        guard prefs.firstCleanApproved else {
+            summary = await showFirstCleanPreview(at: now)
+            return
+        }
+
         let result = await performClean()
         summary = result
         await finishSchedule(after: result, at: now)
+    }
+
+    // MARK: First scheduled clean (#331)
+
+    /// Shows what the first scheduled clean would move instead of moving it. The
+    /// list is on screen when this returns, and the clean stays due: nothing moved,
+    /// so the anchor, the last outcome and Cleanup History stay as they were.
+    /// When nothing is eligible there is no list, and the period counts as done
+    /// exactly as a clean that found nothing does. The approval is not used up.
+    private func showFirstCleanPreview(at now: Date) async -> PurgeStore.ScheduledCleaningSummary {
+        switch await preparePreview() {
+        case .presented:
+            // The reminder armed for the due date would arrive while the list is open.
+            await cancelReminder()
+            return PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, awaitsApproval: true)
+        case .nothingEligible:
+            let nothing = PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            await finishSchedule(after: nothing, at: now)
+            return nothing
+        case .skipped:
+            return PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
+        }
+    }
+
+    /// The user chose Clean in the first scheduled clean's list. Cleans only the
+    /// paths that list showed, after the store checks each one again, and counts as
+    /// this period's clean. The approval is recorded once the clean has run, so a
+    /// clean that never started asks again next time: another clean was running,
+    /// or every shown row had stopped being Safe and there was nothing to move.
+    ///
+    /// Returns nil when automatic cleaning was turned off while the list was open:
+    /// the list belongs to the schedule, so nothing moves.
+    @discardableResult
+    func cleanApprovedPreview(paths: Set<String>, referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
+        guard prefs.isEnabled else { return nil }
+        while isSweepRunning {
+            _ = await waitForRunningSweep()
+        }
+
+        isSweepRunning = true
+        var summary: PurgeStore.ScheduledCleaningSummary?
+        defer { finishSweep(with: summary) }
+
+        let result = await performApprovedClean(paths: paths)
+        summary = result
+        if !result.skippedForAnotherClean, !result.hadNothingToMove {
+            prefs.markFirstCleanApproved()
+            ud.removeObject(forKey: Self.previewClosedKey)
+        }
+        if result.skippedForAnotherClean {
+            // Still due, and the reminder was taken back when the list opened.
+            await performRearm()
+        }
+        await finishSchedule(after: result, at: now)
+        return result
+    }
+
+    /// The user closed the first scheduled clean's list with Not Now. Nothing
+    /// moved and nothing is recorded as cleaned; the list comes back once
+    /// `previewGapAfterNotNow` has passed, at the next switch into Purge.
+    ///
+    /// The reminder was taken back when the list opened, so it is armed again for
+    /// the end of the gap. A user who keeps Purge in the menu bar and never
+    /// switches into it still hears when the list is ready.
+    func closeFirstCleanPreview(at now: Date = Date()) async {
+        ud.set(now, forKey: Self.previewClosedKey)
+        await performRearm()
     }
 
     /// Returns when the running sweep or Run now ends, with its summary.

@@ -296,9 +296,15 @@ struct SettingsView: View {
     /// One line: what it does, and when it next runs.
     private func autoCleanCaption(referenceDate: Date) -> String {
         guard prefs.isEnabled else {
+            guard prefs.firstCleanApproved else {
+                return String(localized: "Moves Safe items to the Trash on a schedule. The first time, Purge lists them and waits for you.")
+            }
             return String(localized: "Moves Safe items to the Trash on a schedule.")
         }
         let next = nextCleanDisplay(referenceDate: referenceDate).primary
+        guard prefs.firstCleanApproved else {
+            return String(localized: "Moves Safe items to the Trash. Next: \(next). The first time, Purge lists them and waits for you.")
+        }
         return String(localized: "Moves Safe items to the Trash. Next: \(next).")
     }
 
@@ -528,6 +534,8 @@ struct SettingsView: View {
         Task {
             let summary = await ScheduledCleaningRegistrar.shared.runScheduledCleanNow()
             isRunningScheduledCleanNow = false
+            // The first clean's list is on screen and says what happens next.
+            guard summary?.awaitsApproval != true else { return }
             scheduledCleanNowMessage = Self.scheduledCleanNowMessage(for: summary)
         }
     }
