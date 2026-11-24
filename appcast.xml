@@ -3,6 +3,28 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.18.1</title>
+      <pubDate>Tue, 24 Nov 2026 00:55:54 +0000</pubDate>
+      <sparkle:version>49</sparkle:version>
+      <sparkle:shortVersionString>1.18.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Look inside a folder</strong>: On the Everything else map, open a folder tile to see the folders inside it by size.</li>
+          <li><strong>More browser caches</strong>: A browser cache in Library/Caches with no entry is now offered as Safe when it holds only browser cache folders. Yab is the first.</li>
+          <li><strong>Menu bar mode stays on</strong>: Keep Purge in the menu bar no longer switches itself off when macOS hides the new icon.</li>
+          <li><strong>Dock icon stays hidden</strong>: With Hide Dock icon on, Purge no longer comes back to the Dock after a deleted-app review.</li>
+          <li><strong>Paused reviews</strong>: Paused deleted-app reviews now show as a short sidebar row, with a guide to the right switch in Login Items.</li>
+          <li><strong>Row text and icons</strong>: Row explanations fit in two lines in every language, and more rows show their app's own icon.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.18.1/Purgev1.18.1.dmg"
+        sparkle:edSignature="xtnu7+KFBiAtvVhnIPU0mOMRT+sQDY/N6nVRsM5aDkDwBXZCXPrKMt3yYr9/TD/rfrLn1QHRIcEVNgH1kf4dBQ=="
+        length="13305095"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.18.0</title>
       <pubDate>Sun, 22 Nov 2026 01:27:35 +0000</pubDate>
       <sparkle:version>48</sparkle:version>
