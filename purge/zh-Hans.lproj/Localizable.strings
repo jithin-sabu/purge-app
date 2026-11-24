@@ -1589,6 +1589,15 @@
 
 "%lld folders inside need Full Disk Access to measure" = "其中 %lld 个文件夹需要完全磁盘访问权限才能测量";
 
+/* First scheduled clean preview (#331) */
+"Open Purge to see what your first scheduled clean would move to the Trash. Nothing moves until you approve it." = "打开 Purge，查看第一次定时清理会将哪些项目移到废纸篓。在你同意之前，不会移动任何项目。";
+"Moves Safe items to the Trash on a schedule. The first time, Purge lists them and waits for you." = "按计划将可放心清理的项目移到废纸篓。第一次会先列出这些项目，等你确认。";
+"Moves Safe items to the Trash. Next: %@. The first time, Purge lists them and waits for you." = "将可放心清理的项目移到废纸篓。下次：%@。第一次会先列出这些项目，等你确认。";
+"Your first scheduled clean" = "第一次定时清理";
+"Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge 即将第一次按计划清理。以下可放心清理的项目会移到废纸篓，之后仍可恢复。在你选择“移到废纸篓”之前，不会移动任何项目。";
+"After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "此后，定时清理会自动将可放心清理的项目移到废纸篓。你可以在设置中关闭。";
+"Automatic cleaning was turned off, so nothing moved." = "自动清理已关闭，因此没有移动任何项目。";
+
 // Settings guide (#450)
 "Allow Full Disk Access" = "允许完全磁盘访问权限";
 "Waiting for the switch" = "正在等待开关打开";

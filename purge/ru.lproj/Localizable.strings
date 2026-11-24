@@ -1548,6 +1548,15 @@
 
 "%lld folders inside need Full Disk Access to measure" = "Папок внутри, которым для измерения нужен полный доступ к диску: %lld";
 
+/* First scheduled clean preview (#331) */
+"Open Purge to see what your first scheduled clean would move to the Trash. Nothing moves until you approve it." = "Откройте Purge, чтобы увидеть, что первая очистка по расписанию переместит в Корзину. Ничего не переместится, пока вы не подтвердите.";
+"Moves Safe items to the Trash on a schedule. The first time, Purge lists them and waits for you." = "По расписанию перемещает безопасные элементы в Корзину. В первый раз Purge покажет их список и подождёт вашего решения.";
+"Moves Safe items to the Trash. Next: %@. The first time, Purge lists them and waits for you." = "Перемещает безопасные элементы в Корзину. Далее: %@. В первый раз Purge покажет их список и подождёт вашего решения.";
+"Your first scheduled clean" = "Первая очистка по расписанию";
+"Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge впервые выполняет очистку по расписанию. Эти безопасные элементы будут перемещены в Корзину, откуда их можно вернуть. Ничего не переместится, пока вы не нажмёте «Переместить в Корзину».";
+"After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "Дальше очистка по расписанию будет сама перемещать безопасные элементы в Корзину. Её можно выключить в Настройках.";
+"Automatic cleaning was turned off, so nothing moved." = "Автоматическая очистка выключена, поэтому ничего не перемещено.";
+
 // Settings guide (#450)
 "Allow Full Disk Access" = "Разрешите полный доступ к диску";
 "Waiting for the switch" = "Ждём, пока вы включите";
