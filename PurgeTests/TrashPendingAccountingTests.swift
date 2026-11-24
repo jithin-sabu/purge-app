@@ -69,8 +69,10 @@ struct TrashPendingAccountingTests {
     /// from one cache folder it moves and one runtime it removes outright. The folder
     /// is never made, and the fake Trash moves nothing.
     @Test func directRemovalsAreNotCountedAsPendingInTrash() async throws {
+        // Named so the tier list rates it (`.ShipIt`): before a move, a folder in
+        // `~/Library/Caches` no rule knows must have a browser cache's shape (#452).
         let cache = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Caches/PurgeTrashPendingTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Library/Caches/PurgeTrashPendingTests-\(UUID().uuidString).ShipIt", isDirectory: true)
         let runtime = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_TEST1", isDirectory: true)
         let cacheKey = cache.standardizedFileURL.path
         let runtimeKey = runtime.standardizedFileURL.path

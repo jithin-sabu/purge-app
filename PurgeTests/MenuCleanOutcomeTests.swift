@@ -13,7 +13,9 @@ import Testing
 @Suite("The menu's clean outcome")
 struct MenuCleanOutcomeTests {
     private static func row() -> CacheItem {
-        let folder = "com.purge.test.menu-clean-\(UUID().uuidString)"
+        // Named so the tier list rates it (`.ShipIt`): before a move, a folder in
+        // `~/Library/Caches` no rule knows must have a browser cache's shape (#452).
+        let folder = "com.purge.test.menu-clean-\(UUID().uuidString).ShipIt"
         return CacheItem(
             definitionKey: folder,
             location: CacheLocation(

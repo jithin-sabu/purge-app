@@ -366,7 +366,7 @@ struct RustupToolchainShapeTests {
         func path(_ relative: String) -> URL { home.appendingPathComponent(relative) }
         let check = FileDeleter.defaultImmediateMoveCheck(home: home.path, nvm: nvm, vitePlus: vitePlus, rustup: RT.context())
         #expect(check(path("\(RT.root)/\(RT.old)")))
-        #expect(check(path("Library/Caches/something")))
+        #expect(check(path("Library/Caches/Homebrew")))
         let pinned = FileDeleter.defaultImmediateMoveCheck(
             home: home.path, nvm: nvm, vitePlus: vitePlus, rustup: RT.context(environment: ["1.84.0"])
         )

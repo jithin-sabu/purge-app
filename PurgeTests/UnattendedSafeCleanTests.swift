@@ -15,7 +15,9 @@ struct UnattendedSafeCleanTests {
     private let suite = ThrowawayDefaults()
 
     private static func row(_ level: SafetyLevel) -> CacheItem {
-        let folder = "com.purge.test.unattended-\(UUID().uuidString)"
+        // Named so the tier list rates it (`.ShipIt`): before a move, a folder in
+        // `~/Library/Caches` no rule knows must have a browser cache's shape (#452).
+        let folder = "com.purge.test.unattended-\(UUID().uuidString).ShipIt"
         return CacheItem(
             definitionKey: folder,
             location: CacheLocation(

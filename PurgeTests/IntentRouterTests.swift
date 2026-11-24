@@ -137,7 +137,9 @@ struct IntentRouterTests {
     @Test("Safe rows the scan found are cleaned, and nothing else")
     func cleanMovesOnlySafeRows() async {
         func row(_ level: SafetyLevel) -> CacheItem {
-            let folder = "com.purge.test.intent-\(UUID().uuidString)"
+            // Named so the tier list rates it (`.ShipIt`): before a move, a folder in
+            // `~/Library/Caches` no rule knows must have a browser cache's shape (#452).
+            let folder = "com.purge.test.intent-\(UUID().uuidString).ShipIt"
             return CacheItem(
                 definitionKey: nil,
                 location: CacheLocation(

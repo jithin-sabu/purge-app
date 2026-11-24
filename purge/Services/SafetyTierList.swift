@@ -117,6 +117,33 @@ enum SafetyTierList {
         path: URL? = nil,
         home: String = DeletionSafetyPolicy.cachedHomePath
     ) -> SafetyLevel? {
+        switch ruleRating(folderName: folderName, path: path) {
+        case .decided(let level):
+            return level
+        case .unrated:
+            // A folder in `~/Library/Caches` that no name above knows, holding
+            // nothing but a browser's disk caches. The shape decides, as for the
+            // Application Support caches above, so a new Chromium browser needs
+            // no entry. Checked last, so it only ever lifts a folder that would
+            // be Not Sure. A move reads the shape again
+            // (`passesChromiumShapeBoundary`).
+            if let path, holdsChromiumShapeInHomeCaches(path, home: home) {
+                return .safe
+            }
+            // Unknown, let AI decide
+            return nil
+        }
+    }
+
+    /// What every rule but the Chromium shape rule says about a folder.
+    private enum RuleRating {
+        /// A rule gave this tier, or decided the folder gets none (`nil`).
+        case decided(SafetyLevel?)
+        /// No rule knows the folder, so only the shape rule can rate it.
+        case unrated
+    }
+
+    private nonisolated static func ruleRating(folderName: String, path: URL?) -> RuleRating {
         let lower = folderName.lowercased()
 
         if let path {
@@ -124,12 +151,12 @@ enum SafetyTierList {
             // Never a `Service Worker` cache: its loss removes sites' workers and
             // their web push subscriptions (`CacheDiscoveryPaths`).
             if pathLower.contains("/service worker/") {
-                return nil
+                return .decided(nil)
             }
             // Crash reports an app has not sent yet are Check First (#367), even in
             // a folder the Application Support shape below would call Safe.
             if pathLower.hasSuffix("/crashpad/pending") || pathLower.contains("/crashpad/pending/") {
-                return .medium
+                return .decided(.medium)
             }
             if pathLower.contains("/gpucache")
                 || pathLower.contains("/shadercache")
@@ -140,67 +167,56 @@ enum SafetyTierList {
                 || pathLower.contains("/linkthumbnail")
                 || pathLower.contains("/chatmedia")
                 || pathLower.contains("/appinstallationbinarydeltas") {
-                return .safe
+                return .decided(.safe)
             }
             // An Electron or Chromium app's cache under Application Support, in the
             // shape the scan lists and the deletion policy allows. The shape decides,
             // not the name: a folder merely named Cache could be anything.
             if isApplicationSupportChromiumCache(path) {
-                return .safe
+                return .decided(.safe)
             }
             // Spotlight index data regenerates on its own, but search is slow or
             // incomplete until it does — a visible inconvenience, so never part
             // of one-click cleanup.
             if pathLower.contains("/spotlight/") || pathLower.contains("com.apple.spotlight") {
-                return .medium
+                return .decided(.medium)
             }
             if pathLower.contains(".app/contents/frameworks/") && pathLower.contains("/versions/") {
-                return .medium
+                return .decided(.medium)
             }
             if pathLower.contains("/.cursor/projects/")
                 || AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(
                     path,
                     home: FileManager.default.homeDirectoryForCurrentUser
                 ) {
-                return .medium
+                return .decided(.medium)
             }
         }
 
         if lower == "stale-browser-framework" {
-            return .medium
+            return .decided(.medium)
         }
 
         if lower.hasSuffix(".shipit") {
-            return .safe
+            return .decided(.safe)
         }
 
         // Check definitely safe folder names
         if definitelySafe.contains(where: { lower == $0.lowercased() }) {
-            return .safe
+            return .decided(.safe)
         }
 
         // Check definitely safe bundle ID prefixes
         for prefix in definitelySafeBundlePrefixes where lower.hasPrefix(prefix.lowercased()) {
-            return .safe
+            return .decided(.safe)
         }
 
         // Check check first
         if checkFirst.contains(where: { lower == $0.lowercased() }) {
-            return .medium
+            return .decided(.medium)
         }
 
-        // A folder in `~/Library/Caches` that no name above knows, holding nothing
-        // but a browser's disk caches. The shape decides, as for the Application
-        // Support caches above, so a new Chromium browser needs no entry. Checked
-        // last, so it only ever lifts a folder that would be Not Sure. A move
-        // reads the shape again (`passesChromiumShapeBoundary`).
-        if let path, isInHomeCaches(path, home: home), CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(path) {
-            recordShapeRating(path)
-            return .safe
-        }
-
-        // Unknown, let AI decide
-        return nil
+        return .unrated
     }
 
     /// Whether `path` sits directly in `<home>/Library/Caches`. Not a sandboxed
@@ -210,39 +226,54 @@ enum SafetyTierList {
         path.standardizedFileURL.deletingLastPathComponent().path == home + "/Library/Caches"
     }
 
-    /// Folders this session rated Safe by their Chromium shape, standardized
-    /// paths. The rating is read at scan time, and the browser can write
-    /// something else there before the clean, so a move reads the shape again
-    /// for each of these. Only these: a folder rated by its name, or a row some
-    /// other rule offered, is never held to the shape. Kept for the life of the
-    /// app, so a later scan that rates the folder some other way still has it
-    /// checked, which only ever refuses more.
-    private nonisolated(unsafe) static var shapeRatedPaths = Set<String>()
-    private nonisolated static let shapeRatedLock = NSLock()
-
-    private nonisolated static func recordShapeRating(_ path: URL) {
-        let key = path.standardizedFileURL.path
-        shapeRatedLock.lock()
-        shapeRatedPaths.insert(key)
-        shapeRatedLock.unlock()
+    /// Whether `path` is a folder directly in `<home>/Library/Caches` that holds
+    /// nothing but Chromium disk caches, read from disk now. The shape rule and
+    /// entries marked `needs_chromium_shape` rate a folder Safe only while this
+    /// is true.
+    nonisolated static func holdsChromiumShapeInHomeCaches(_ path: URL, home: String) -> Bool {
+        isInHomeCaches(path, home: home) && CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(path)
     }
 
-    /// Whether this session rated `path` Safe by its Chromium shape.
-    nonisolated static func wasRatedByChromiumShape(_ path: URL) -> Bool {
-        let key = path.standardizedFileURL.path
-        shapeRatedLock.lock()
-        defer { shapeRatedLock.unlock() }
-        return shapeRatedPaths.contains(key)
+    /// Whether only the Chromium shape could have rated `url` Safe: a folder
+    /// directly in `<home>/Library/Caches` that the scan classifies by an entry
+    /// marked `needs_chromium_shape`, or that no entry and no other rule here
+    /// knows. Worked out from the folder's name, the bundled entries and the
+    /// disk, never from what a scan in this process rated, so a row cleaned
+    /// from a saved scan, an App Intent or another process is held to the
+    /// shape too (#452). A folder a rule here decides gets no tier, such as a
+    /// `Service Worker` path, is held to it as well, which only ever refuses
+    /// more.
+    nonisolated static func dependsOnChromiumShape(_ url: URL, home: String) -> Bool {
+        guard isInHomeCaches(url, home: home) else { return false }
+        // The name the scan classifies a folder here by (`CacheScanner.cacheItem`).
+        let name = CacheDiscoveryPaths.isElectronUpdaterCache(url)
+            ? CacheDiscoveryPaths.electronUpdaterKey
+            : url.lastPathComponent
+        if let record = ExplanationDatabase.matchBundledDatabase(folderName: name) {
+            return record.needsChromiumShape == true
+        }
+        // `GOMODCACHE` can name a folder here. Its row is rated by
+        // `GoModuleCacheScanPolicy`, which reads the folder again before the move.
+        if GoModuleCacheScanPolicy.isWholeCacheRoot(url) {
+            return false
+        }
+        switch ruleRating(folderName: name, path: url) {
+        case .decided(let level):
+            return level == nil
+        case .unrated:
+            return true
+        }
     }
 
-    /// Checked before each Trash move. A folder rated Safe by its shape, by the
-    /// rule above or through an entry marked `needs_chromium_shape`, moves only
-    /// while it still has that shape. Every other path passes.
+    /// Checked before each Trash move. A folder that only the Chromium shape
+    /// could have rated Safe (`dependsOnChromiumShape`) moves only while it
+    /// still has that shape, whoever rated it and whenever. Every other path
+    /// passes.
     nonisolated static func passesChromiumShapeBoundary(
         _ url: URL,
         home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
     ) -> Bool {
-        guard isInHomeCaches(url, home: home), wasRatedByChromiumShape(url) else { return true }
+        guard dependsOnChromiumShape(url, home: home) else { return true }
         return CacheDiscoveryPaths.holdsOnlyChromiumDiskCaches(url)
     }
 }

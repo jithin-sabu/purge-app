@@ -765,7 +765,7 @@ struct UvPythonVersionOutsideTests {
             #expect(UV.movable(home, path, UV.context(uvIsRunning: true)), "\(path)")
         }
         #expect(UvPythonVersionPolicy.passesImmediateTrashBoundary(
-            home.appendingPathComponent("Library/Caches/something"), home: home.path, context: UV.context(lsof: nil)
+            home.appendingPathComponent("Library/Caches/Homebrew"), home: home.path, context: UV.context(lsof: nil)
         ))
     }
 
@@ -782,7 +782,7 @@ struct UvPythonVersionOutsideTests {
             home: home.path, nvm: nvm, vitePlus: vitePlus, rustup: UV.inertRustup, uv: UV.context()
         )
         #expect(check(old))
-        #expect(check(home.appendingPathComponent("Library/Caches/something")))
+        #expect(check(home.appendingPathComponent("Library/Caches/Homebrew")))
         let busy = FileDeleter.defaultImmediateMoveCheck(
             home: home.path, nvm: nvm, vitePlus: vitePlus, rustup: UV.inertRustup, uv: UV.context(uvIsRunning: true)
         )
