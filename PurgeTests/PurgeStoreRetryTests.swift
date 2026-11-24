@@ -99,6 +99,35 @@ struct PurgeStoreRetryTests {
         #expect(session.movedToTrashCount == 0)
     }
 
+    /// Rows that failed for lack of Full Disk Access go again by themselves once
+    /// it lands (#450), with no click. They take the same retry, so the gate
+    /// judges them again at that moment: a cache-route row the allowlist refuses
+    /// stays on disk and becomes a safety skip.
+    @Test("A Full Disk Access row retried after a grant still meets the gate")
+    func fullDiskAccessRetryMeetsTheGate() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let trash = FakeTrash()
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore(fileDeleter: FileDeleter(home: home.url, trash: trash.trash))
+        let failure = CleanFailureItem(
+            path: home.payload.standardizedFileURL.path,
+            displayName: "payload.bin",
+            reason: .needsFullDiskAccess,
+            sizeBytes: 2048,
+            route: .cache
+        )
+        let session = Self.finishedRun(with: failure)
+
+        let moved = await store.retryCleanFailure(failure, session: session)
+
+        #expect(moved == nil)
+        #expect(trash.trashedPaths.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: home.payload.path))
+        #expect(session.failedItems.first?.reason == .safetySkipped)
+    }
+
     @Test("A row for a file that is already gone is dropped and credited nothing")
     func goneRowIsDropped() async throws {
         let home = try Home()
