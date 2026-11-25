@@ -63,7 +63,7 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     func setEnabled(_ enabled: Bool) {
         desiredEnabled = enabled
         lastRegistrationFailed = false
-        if !enabled { approvalMonitorTask?.cancel() }
+        if !enabled { stopWaitingForApproval() }
         let previous = applyTask
         applyTask = Task { @MainActor in
             _ = await previous?.value
@@ -73,12 +73,11 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                 switch manager.register() {
                 case .enabled:
                     approvalMonitorTask?.cancel()
-                    break
+                    SettingsGuidePanel.shared.finish(.allowInBackground, owner: self)
                 case .needsApproval:
-                    monitorPendingApproval()
-                    manager.openLoginItemsSettings()
+                    guideApproval()
                 case .failed(let detail):
-                    approvalMonitorTask?.cancel()
+                    stopWaitingForApproval()
                     lastRegistrationFailed = true
                     NSLog("Purge: helper registration failed — %@", detail)
                 }
@@ -109,16 +108,57 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                 } catch {
                     return
                 }
-                guard desiredEnabled == true else { return }
+                guard desiredEnabled == true else { break }
                 let latest = await manager.statusOffMain()
-                guard desiredEnabled == true, !Task.isCancelled else { return }
+                guard !Task.isCancelled else { return }
+                guard desiredEnabled == true else { break }
                 apply(latest)
-                if isEnabled || !needsApproval { return }
+                if isEnabled {
+                    SettingsGuidePanel.shared.finish(.allowInBackground, owner: self)
+                    return
+                }
+                if !needsApproval { break }
             }
+            guard !Task.isCancelled else { return }
+            SettingsGuidePanel.shared.hide(.allowInBackground, owner: self)
         }
     }
 
+    /// Opens Login Items and nothing else. Uninstall Purge uses it to help the
+    /// user switch background parts off, so it never shows the guide that asks
+    /// to switch the helper on.
     func openLoginItemsSettings() {
         manager.openLoginItemsSettings()
+    }
+
+    /// Settings' "Open System Settings" for a helper waiting for approval. The
+    /// guide shows beside Login Items and Purge watches for the switch (#450).
+    func openApprovalSettings() {
+        if needsApproval {
+            guideApproval()
+        } else {
+            manager.openLoginItemsSettings()
+        }
+    }
+
+    private func guideApproval() {
+        // The user asked for the helper off: never guide them to switch it on.
+        guard desiredEnabled != false else {
+            manager.openLoginItemsSettings()
+            return
+        }
+        // Approval pending from an earlier launch: the switch already reads on,
+        // so going to approve it is asking for it on.
+        if desiredEnabled == nil { desiredEnabled = true }
+        manager.openLoginItemsSettings()
+        SettingsGuidePanel.shared.show(.allowInBackground, owner: self) { [weak self] in
+            self?.approvalMonitorTask?.cancel()
+        }
+        monitorPendingApproval()
+    }
+
+    private func stopWaitingForApproval() {
+        approvalMonitorTask?.cancel()
+        SettingsGuidePanel.shared.hide(.allowInBackground, owner: self)
     }
 }

@@ -82,6 +82,12 @@ enum AppColors {
     /// the bolt still reads on the pale background.
     static let accentCelebrate = Color(light: 0xD18F00, dark: 0xFFC70D)
 
+    /// The user's macOS accent colour, only for copies of macOS's own controls,
+    /// such as the switched-on switch in the System Settings guide (#450).
+    static let systemControlAccent = Color(nsColor: .controlAccentColor)
+    /// The knob on `systemControlAccent`, white as macOS draws it.
+    static let systemControlKnob = Color.white
+
     // MARK: - Charts
 
     /// The Overview breakdown. The Okabe–Ito palette, made to stay distinct with

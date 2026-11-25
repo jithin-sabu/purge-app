@@ -333,8 +333,6 @@
 "Clear history" = "Очистить историю";
 "Clear search" = "Очистить поиск";
 "Click Everything else in the crumb to go back" = "Нажмите «Всё остальное» в строке пути, чтобы вернуться";
-"Click Install…, then Install again when macOS asks." = "Нажмите «Установить…», а когда macOS спросит, нажмите «Установить» ещё раз.";
-"Click the minus button below the list, then Remove." = "Нажмите кнопку «−» под списком, затем «Удалить».";
 "Clones and purgeable files can make a folder read larger than what removing it would free. Hard links are counted once within each folder." = "Из-за клонов и очищаемых файлов папка может выглядеть больше, чем освободится при её удалении. Жёсткие ссылки учитываются один раз в пределах каждой папки.";
 "Close" = "Закрыть";
 "Cloud" = "Облако";
@@ -514,8 +512,6 @@
 "In Disk Utility, choose View > Show APFS Snapshots to pick which ones to delete." = "В «Дисковой утилите» выберите «Вид» > «Показать снимки APFS», чтобы выбрать, какие удалить.";
 "In Large Files" = "В «Больших файлах»";
 "In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back." = "В «Системных настройках» ▸ «Объекты входа» включите Purge в разделе «Фоновая активность приложений», затем вернитесь.";
-"In System Settings, double-click \"%@\" under Downloaded." = "В Системных настройках дважды нажмите «%@» в разделе «Загружено».";
-"In System Settings, select \"%@\"." = "В Системных настройках выберите «%@».";
 "In iCloud Drive" = "В iCloud Drive";
 "In progress" = "Выполняется";
 "Install the Purge profile" = "Установить профиль Purge";
@@ -838,7 +834,6 @@
 "Purge cannot uninstall itself" = "Purge не может удалить себя";
 "Purge can’t add that folder" = "Purge не может добавить эту папку";
 "Purge can’t remove that folder" = "Purge не может удалить эту папку";
-"Purge carries on by itself once that's done." = "Как только это будет сделано, Purge продолжит сам.";
 "Purge checks once a day. When automatic installs are off, a new version opens the update window. Every download is signature-checked." = "Purge проверяет обновления раз в день. Если автоматическая установка выключена, при выходе новой версии открывается окно обновления. Каждая загрузка проверяется по подписи.";
 "Purge cleans a cache only when it is on the list of caches known to rebuild themselves. This folder isn't on that list, so it could hold things the app can't get back." = "Purge очищает кэш, только если он в списке кэшей, которые, как известно, создаются заново. Этой папки в списке нет, поэтому в ней может быть то, что приложение не сможет восстановить.";
 "Purge could not find %@ in its app list" = "Purge не нашёл %@ в списке приложений";
@@ -1562,3 +1557,21 @@
 "Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge впервые выполняет очистку по расписанию. Эти безопасные элементы будут перемещены в Корзину, откуда их можно вернуть. Ничего не переместится, пока вы не нажмёте «Переместить в Корзину».";
 "After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "Дальше очистка по расписанию будет сама перемещать безопасные элементы в Корзину. Её можно выключить в Настройках.";
 "Automatic cleaning was turned off, so nothing moved." = "Автоматическая очистка выключена, поэтому ничего не перемещено.";
+
+// Settings guide (#450)
+"Allow Full Disk Access" = "Разрешите полный доступ к диску";
+"Waiting for the switch" = "Ждём, пока вы включите";
+"Waiting for the install" = "Ждём установки";
+"Waiting for the removal" = "Ждём удаления";
+"Full Disk Access is on" = "Полный доступ к диску включён";
+"Purge is allowed in the background" = "Purge может работать в фоне";
+"Profile installed" = "Профиль установлен";
+"Profile removed" = "Профиль удалён";
+"Back to Purge…" = "Возвращаемся в Purge…";
+"Drag Purge into the Full Disk Access list" = "Перетащите Purge в список «Полный доступ к диску»";
+"Not in the list? Drag the Purge row above into it." = "Нет в списке? Перетащите туда строку Purge выше.";
+"If macOS offers to reopen Purge, go ahead." = "Если macOS предложит снова открыть Purge, согласитесь.";
+"Downloaded" = "Загружено";
+"Double-click it, then click Install." = "Дважды нажмите на него, затем нажмите «Установить».";
+"Confirm with Install, and your password if asked." = "Подтвердите кнопкой «Установить» и паролем, если его спросят.";
+"Select it, click the minus button, then Remove." = "Выберите его, нажмите кнопку «минус», затем «Удалить».";

@@ -481,6 +481,8 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var appearedAt = Date()
     @State private var didBeginCompletion = false
     @State private var sequenceTask: Task<Void, Never>?
+    /// This card's place in the Full Disk Access wait, ended when it closes.
+    @State private var fullDiskAccessRequest: FullDiskAccessGuide.Request?
     @State private var retryingFailureIDs: Set<UUID> = []
     /// Rows whose last Retry came back with nothing to show for it. The row says
     /// so, rather than looking exactly as it did before the tap (#162).
@@ -672,7 +674,12 @@ struct SafeCleanupCelebrationOverlay: View {
             guard session.phase == .complete, footerVisible else { return }
             reconcileHeaderWithOutcome()
         }
-        .onDisappear { sequenceTask?.cancel() }
+        .onDisappear {
+            sequenceTask?.cancel()
+            // The card is gone, so its retry must never run. Only its own
+            // request ends: another screen's wait goes on.
+            if let fullDiskAccessRequest { FullDiskAccessGuide.shared.cancel(fullDiskAccessRequest) }
+        }
     }
 
     /// What stands at the top of the sheet. The figure header serves the cleaning
@@ -903,7 +910,7 @@ struct SafeCleanupCelebrationOverlay: View {
                 showsHeader: headerKind == .figure || headerKind == .administrator,
                 retryingIDs: retryingFailureIDs,
                 retryFailedIDs: retryFailedIDs,
-                onOpenSettings: openFullDiskAccessSettings,
+                onOpenSettings: openFullDiskAccessForFailures,
                 onRetry: retryFailure,
                 onRetryAll: retryAllFailures,
                 onShowInFinder: showFailureInFinder
@@ -948,7 +955,7 @@ struct SafeCleanupCelebrationOverlay: View {
         switch footerAction {
         case .retry(let item): retryFailure(item)
         case .retryAll: retryAllFailures()
-        case .openSettings: openFullDiskAccessSettings()
+        case .openSettings: openFullDiskAccessForFailures()
         case .showInFinder(let item): showFailureInFinder(item)
         case nil: break
         }
@@ -1039,6 +1046,28 @@ struct SafeCleanupCelebrationOverlay: View {
                     displayedBytes += movedBytes
                 }
             }
+        }
+    }
+
+    /// Opens Full Disk Access with the guide beside it. The rows that failed for
+    /// lack of access retry once the guide sees it land, so only after the user
+    /// clicked here (#450). The guide reads access live, so a stale
+    /// `hasFullDiskAccess` never skips System Settings, and access that is
+    /// already on retries the rows at the guide's first check.
+    private func openFullDiskAccessForFailures() {
+        // A second click replaces this card's request. The new one is in
+        // before the old one goes, so the wait never stops in between.
+        let previous = fullDiskAccessRequest
+        fullDiskAccessRequest = FullDiskAccessGuide.shared.open { [store] in
+            store.applyFullDiskAccess(true)
+            retryFullDiskAccessFailures()
+        }
+        if let previous { FullDiskAccessGuide.shared.cancel(previous) }
+    }
+
+    private func retryFullDiskAccessFailures() {
+        for item in PurgeStore.fullDiskAccessRetryTargets(in: session.failedItems) {
+            retryFailure(item)
         }
     }
 

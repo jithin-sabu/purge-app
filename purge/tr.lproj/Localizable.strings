@@ -979,12 +979,7 @@
 "Removed, %@ freed on the disk that macOS already counted as available" = "Kaldırıldı, diskte macOS'in zaten kullanılabilir saydığı %@ yer açıldı";
 "Install the Purge profile" = "Purge profilini yükle";
 "Remove the Purge profile" = "Purge profilini kaldır";
-"In System Settings, double-click \"%@\" under Downloaded." = "Sistem Ayarları'nda, İndirilenler altındaki \"%@\" öğesine çift tıklayın.";
-"Click Install…, then Install again when macOS asks." = "Yükle…'ye tıklayın, macOS sorunca tekrar Yükle'ye tıklayın.";
 "Enter your password if it asks for one." = "Parola isterse girin.";
-"In System Settings, select \"%@\"." = "Sistem Ayarları'nda \"%@\" öğesini seçin.";
-"Click the minus button below the list, then Remove." = "Listenin altındaki eksi düğmesine, sonra Kaldır'a tıklayın.";
-"Purge carries on by itself once that's done." = "Bu bittiğinde Purge kendi kendine devam eder.";
 "Too big to check for recent changes, so Purge won't clean it without asking." = "Son değişiklikleri denetlemek için çok büyük, bu yüzden Purge sormadan temizlemez.";
 "Total" = "Toplam";
 
@@ -1603,3 +1598,21 @@
 "Purge is about to clean on a schedule for the first time. These Safe items would move to the Trash, where you can put them back. Nothing moves until you choose Move to Trash." = "Purge ilk kez zamanlamaya göre temizlik yapmak üzere. Bu güvenli öğeler Çöp Sepeti'ne taşınır ve oradan geri koyabilirsiniz. Çöp Sepeti'ne Taşı'yı seçene kadar hiçbir şey taşınmaz.";
 "After this, scheduled cleans move Safe items to the Trash on their own. You can turn them off in Settings." = "Bundan sonra zamanlanmış temizlikler güvenli öğeleri kendiliğinden Çöp Sepeti'ne taşır. Bunları Ayarlar'dan kapatabilirsiniz.";
 "Automatic cleaning was turned off, so nothing moved." = "Otomatik temizlik kapatıldı, bu yüzden hiçbir şey taşınmadı.";
+
+// Settings guide (#450)
+"Allow Full Disk Access" = "Tam Disk Erişimine izin verin";
+"Waiting for the switch" = "Anahtarın açılması bekleniyor";
+"Waiting for the install" = "Yükleme bekleniyor";
+"Waiting for the removal" = "Kaldırma bekleniyor";
+"Full Disk Access is on" = "Tam Disk Erişimi açık";
+"Purge is allowed in the background" = "Purge arka planda çalışabilir";
+"Profile installed" = "Profil yüklendi";
+"Profile removed" = "Profil kaldırıldı";
+"Back to Purge…" = "Purge'e dönülüyor…";
+"Drag Purge into the Full Disk Access list" = "Purge'ü Tam Disk Erişimi listesine sürükleyin";
+"Not in the list? Drag the Purge row above into it." = "Listede yok mu? Yukarıdaki Purge satırını listeye sürükleyin.";
+"If macOS offers to reopen Purge, go ahead." = "macOS Purge'ü yeniden açmayı önerirse kabul edin.";
+"Downloaded" = "İndirilenler";
+"Double-click it, then click Install." = "Ona çift tıklayın, sonra Yükle'ye tıklayın.";
+"Confirm with Install, and your password if asked." = "Yükle ile ve istenirse parolanızla onaylayın.";
+"Select it, click the minus button, then Remove." = "Onu seçin, eksi düğmesine, sonra Kaldır'a tıklayın.";

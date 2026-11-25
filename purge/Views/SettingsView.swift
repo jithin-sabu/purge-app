@@ -416,7 +416,7 @@ struct SettingsView: View {
                 text: helperStatusMessage,
                 tint: AppColors.statusCheckText,
                 actionTitle: String(localized: "Open System Settings"),
-                action: { helper.openLoginItemsSettings() }
+                action: { helper.openApprovalSettings() }
             )
         case .failed:
             return SettingsRowStatus(text: helperStatusMessage, tint: AppColors.statusCheckText)

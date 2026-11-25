@@ -1726,6 +1726,23 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// The rows a Full Disk Access grant retries by itself (#450): those that
+    /// failed only for lack of access, on a route that can't reach the root
+    /// helper. A leftover the helper may move, a held app and leftover macOS
+    /// update files keep their own Retry, since retrying them can hand them to
+    /// the helper or start its setup.
+    static func fullDiskAccessRetryTargets(in failures: [CleanFailureItem]) -> [CleanFailureItem] {
+        failures.filter { item in
+            guard item.reason == .needsFullDiskAccess, !item.isMacOSInstallLeftover else { return false }
+            switch item.route {
+            case .cache, .userSelected(isAIModel: _, privilegedEligible: false):
+                return true
+            case .userSelected(isAIModel: _, privilegedEligible: true), .lockedUninstall:
+                return false
+            }
+        }
+    }
+
     /// Retries leftover macOS update files in one helper request (#127). Retrying them
     /// one by one would fail after the first: every move changes the folder's date,
     /// and the helper refuses the rest of the folder after that. If the helper is not

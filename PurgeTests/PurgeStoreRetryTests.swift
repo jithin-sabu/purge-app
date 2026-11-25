@@ -99,6 +99,92 @@ struct PurgeStoreRetryTests {
         #expect(session.movedToTrashCount == 0)
     }
 
+    // MARK: Full Disk Access granted from the guide (#450)
+
+    /// After the user opens Full Disk Access from the completion screen and the
+    /// guide sees the grant, only rows that failed for lack of access go again,
+    /// and only on a route that can't reach the root helper or start its setup.
+    @Test("A Full Disk Access grant retries only plain access rows")
+    func fullDiskAccessRetryTargets() {
+        func row(_ path: String, _ reason: CleanFailureReason, _ route: DeletionRoute) -> CleanFailureItem {
+            CleanFailureItem(path: path, displayName: "", reason: reason, route: route)
+        }
+        let cache = row("/Users/x/Library/Caches/a", .needsFullDiskAccess, .cache)
+        let largeFile = row("/Users/x/Downloads/b", .needsFullDiskAccess, .userSelected(isAIModel: false, privilegedEligible: false))
+        let model = row("/Users/x/models/c", .needsFullDiskAccess, .userSelected(isAIModel: true, privilegedEligible: false))
+        let helperLeftover = row("/Library/Application Support/d", .needsFullDiskAccess, .userSelected(isAIModel: false, privilegedEligible: true))
+        let heldApp = row("/Applications/E.app", .needsFullDiskAccess, .lockedUninstall)
+        let installLeftover = row("/System/Volumes/Data/macOS Install Data/Cryptexes", .needsFullDiskAccess, .cache)
+        let inUse = row("/Users/x/Library/Caches/f", .inUse, .cache)
+        #expect(installLeftover.isMacOSInstallLeftover)
+
+        let targets = PurgeStore.fullDiskAccessRetryTargets(
+            in: [cache, largeFile, model, helperLeftover, heldApp, installLeftover, inUse]
+        )
+
+        #expect(targets.map(\.id) == [cache.id, largeFile.id, model.id])
+    }
+
+    /// A user-picked row retried after a grant meets its own gate again: one
+    /// `LargeFileScanPolicy` and `AppUninstallScanPolicy` both refuse stays on
+    /// disk and becomes a safety skip.
+    @Test("A user-picked Full Disk Access row retried after a grant still meets its gate")
+    func fullDiskAccessUserSelectedRetryMeetsTheGate() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let keychains = home.url.appendingPathComponent("Library/Keychains", isDirectory: true)
+        try FileManager.default.createDirectory(at: keychains, withIntermediateDirectories: true)
+        let keychain = keychains.appendingPathComponent("login.keychain-db")
+        try Data(repeating: 0xCD, count: 2048).write(to: keychain)
+        let trash = FakeTrash()
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore(fileDeleter: FileDeleter(home: home.url, trash: trash.trash))
+        let failure = CleanFailureItem(
+            path: keychain.standardizedFileURL.path,
+            displayName: "login.keychain-db",
+            reason: .needsFullDiskAccess,
+            sizeBytes: 2048,
+            route: .userSelected(isAIModel: false, privilegedEligible: false)
+        )
+        #expect(PurgeStore.fullDiskAccessRetryTargets(in: [failure]).count == 1)
+        let session = Self.finishedRun(with: failure)
+
+        let moved = await store.retryCleanFailure(failure, session: session)
+
+        #expect(moved == nil)
+        #expect(trash.trashedPaths.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: keychain.path))
+        #expect(session.failedItems.first?.reason == .safetySkipped)
+    }
+
+    /// The same for a cache-route row: the allowlist refuses a file in Downloads,
+    /// so it stays on disk and becomes a safety skip.
+    @Test("A Full Disk Access row retried after a grant still meets the gate")
+    func fullDiskAccessRetryMeetsTheGate() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let trash = FakeTrash()
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore(fileDeleter: FileDeleter(home: home.url, trash: trash.trash))
+        let failure = CleanFailureItem(
+            path: home.payload.standardizedFileURL.path,
+            displayName: "payload.bin",
+            reason: .needsFullDiskAccess,
+            sizeBytes: 2048,
+            route: .cache
+        )
+        let session = Self.finishedRun(with: failure)
+
+        let moved = await store.retryCleanFailure(failure, session: session)
+
+        #expect(moved == nil)
+        #expect(trash.trashedPaths.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: home.payload.path))
+        #expect(session.failedItems.first?.reason == .safetySkipped)
+    }
+
     @Test("A row for a file that is already gone is dropped and credited nothing")
     func goneRowIsDropped() async throws {
         let home = try Home()
