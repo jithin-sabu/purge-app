@@ -55,16 +55,33 @@ struct ScanContentCrossfade<Loading: View, Loaded: View>: View {
     @ViewBuilder var loaded: () -> Loaded
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// True from the moment loading ends until the placeholder has faded out.
-    @State private var isFadingOut = false
+    /// True while loading and until the placeholder has faded out. Only the
+    /// delayed task clears it. `onChange` runs after the body has already
+    /// updated for the new `isLoading`, so a flag set there would drop to false
+    /// for one update when loading ends, and the shimmer would restart its
+    /// sweep during the fade.
+    @State private var placeholderAnimates: Bool
     @State private var fadeOutGeneration = 0
+
+    init(
+        isLoading: Bool,
+        contentAlignment: Alignment = .center,
+        @ViewBuilder loading: @escaping () -> Loading,
+        @ViewBuilder loaded: @escaping () -> Loaded
+    ) {
+        self.isLoading = isLoading
+        self.contentAlignment = contentAlignment
+        self.loading = loading
+        self.loaded = loaded
+        _placeholderAnimates = State(initialValue: isLoading)
+    }
 
     var body: some View {
         ZStack(alignment: contentAlignment) {
             loaded()
                 .opacity(isLoading ? 0 : 1)
             loading()
-                .environment(\.loadingPlaceholderAnimates, isLoading || isFadingOut)
+                .environment(\.loadingPlaceholderAnimates, isLoading || placeholderAnimates)
                 .opacity(isLoading ? 1 : 0)
                 .allowsHitTesting(isLoading)
         }
@@ -72,15 +89,14 @@ struct ScanContentCrossfade<Loading: View, Loaded: View>: View {
         .onChange(of: isLoading) { loading in
             fadeOutGeneration += 1
             guard !loading else {
-                isFadingOut = false
+                placeholderAnimates = true
                 return
             }
-            isFadingOut = true
             let generation = fadeOutGeneration
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: ScanContentCrossfadeTiming.fadeOutHoldNanoseconds)
                 guard generation == fadeOutGeneration else { return }
-                isFadingOut = false
+                placeholderAnimates = false
             }
         }
     }
