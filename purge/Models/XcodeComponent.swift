@@ -52,7 +52,8 @@ nonisolated struct XcodeComponent: Identifiable, Hashable {
     let sizeBytes: Int64
     let safetyInfo: SafetyInfo
 
-    var id: String { assetURL.standardizedFileURL.path }
+    /// Worked out once in `init`: `standardizedFileURL` checks the disk (#457).
+    let id: String
     var formattedSize: String { formatBytes(sizeBytes) }
 
     /// `safetyInfo` is for tests that force a level; the app always takes the
@@ -61,6 +62,7 @@ nonisolated struct XcodeComponent: Identifiable, Hashable {
         self.kind = kind
         self.build = build
         self.assetURL = assetURL
+        self.id = assetURL.standardizedFileURL.path
         self.sizeBytes = sizeBytes
         self.safetyInfo = safetyInfo ?? Self.safetyInfo(kind: kind, sizeBytes: sizeBytes)
     }

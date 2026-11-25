@@ -70,7 +70,30 @@ nonisolated struct PackageManagerTool: Equatable, Sendable, Identifiable {
     let environment: [String: String]
     var sizeBytes: Int64 = 0
 
-    var id: String { manager.rawValue + ":" + (locations.first?.standardizedFileURL.path ?? name) }
+    /// Worked out once in `init`: `standardizedFileURL` checks the disk, and the
+    /// list reads ids per row on every render (#457).
+    let id: String
+
+    init(
+        manager: PackageManager,
+        name: String,
+        locations: [URL],
+        context: String?,
+        executable: URL?,
+        arguments: [String],
+        environment: [String: String],
+        sizeBytes: Int64 = 0
+    ) {
+        self.manager = manager
+        self.name = name
+        self.locations = locations
+        self.context = context
+        self.executable = executable
+        self.arguments = arguments
+        self.environment = environment
+        self.sizeBytes = sizeBytes
+        self.id = manager.rawValue + ":" + (locations.first?.standardizedFileURL.path ?? name)
+    }
 
     /// The command as people type it, for the confirm and for copying.
     var command: String { (manager.commandPrefix + [name]).joined(separator: " ") }

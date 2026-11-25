@@ -167,7 +167,9 @@ nonisolated enum MatchReason: Hashable {
 /// existing scan rows and deletion path expect, so `ScanResultRow` and the Trash
 /// engine accept it with no special casing.
 nonisolated struct UninstallItem: Identifiable, Hashable {
-    var id: String { path.standardizedFileURL.path }
+    /// The standardized path, worked out once in `init` because
+    /// `standardizedFileURL` checks the disk and views read ids per row (#457).
+    let id: String
     let path: URL
     var sizeBytes: Int64
     let category: UninstallCategory
@@ -210,6 +212,31 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     }
 
     var formattedSize: String { formatBytes(sizeBytes) }
+
+    init(
+        path: URL,
+        sizeBytes: Int64,
+        category: UninstallCategory,
+        safetyInfo: SafetyInfo,
+        matchReason: MatchReason,
+        isSelected: Bool,
+        keptForApp: String? = nil,
+        lastModified: Date = .distantPast,
+        ownerBundleIDs: [String] = [],
+        holdsAddedScripts: Bool = false
+    ) {
+        self.id = path.standardizedFileURL.path
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.category = category
+        self.safetyInfo = safetyInfo
+        self.matchReason = matchReason
+        self.isSelected = isSelected
+        self.keptForApp = keptForApp
+        self.lastModified = lastModified
+        self.ownerBundleIDs = ownerBundleIDs
+        self.holdsAddedScripts = holdsAddedScripts
+    }
 }
 
 /// The views inside the App Uninstaller tab. `leftovers` and `commandLineTools`
