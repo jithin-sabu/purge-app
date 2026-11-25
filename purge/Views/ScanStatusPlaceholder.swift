@@ -173,12 +173,15 @@ struct ScanStatusPlaceholder: View {
 private struct ScanningRing: View {
     let symbol: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// False once a crossfade has hidden the placeholder (#457). The arc's angle
+    /// comes from the clock, so it picks up in the same place when shown again.
+    @Environment(\.loadingPlaceholderAnimates) private var animates
 
     private static let period: TimeInterval = 1.1
     private static let lineWidth: CGFloat = 2.5
 
     var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { context in
+        TimelineView(.animation(paused: reduceMotion || !animates)) { context in
             ZStack {
                 Circle()
                     .stroke(AppColors.borderStrong, lineWidth: Self.lineWidth)

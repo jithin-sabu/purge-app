@@ -8,7 +8,9 @@ nonisolated struct InstalledApp: Identifiable, Hashable {
     /// two installs can share one (Xcode and Xcode-beta are both
     /// `com.apple.dt.Xcode`), and keying identity on that collapses them into a
     /// single grid cell. The bundle id is still the leftover match anchor below.
-    var id: String { bundleURL.standardizedFileURL.path }
+    /// Worked out once in `init`: `standardizedFileURL` checks the disk, and the
+    /// Uninstaller reads every app's id several times per render (#457).
+    let id: String
 
     /// Display name, e.g. "Rectangle".
     let name: String
@@ -39,6 +41,27 @@ nonisolated struct InstalledApp: Identifiable, Hashable {
     var matchName: String { name }
 
     var formattedSize: String { formatBytes(bundleSizeBytes) }
+
+    init(
+        name: String,
+        bundleURL: URL,
+        bundleID: String?,
+        bundleSizeBytes: Int64,
+        isRunning: Bool,
+        lastOpened: Date? = nil,
+        homebrewCask: HomebrewCask? = nil,
+        volumeName: String? = nil
+    ) {
+        self.id = bundleURL.standardizedFileURL.path
+        self.name = name
+        self.bundleURL = bundleURL
+        self.bundleID = bundleID
+        self.bundleSizeBytes = bundleSizeBytes
+        self.isRunning = isRunning
+        self.lastOpened = lastOpened
+        self.homebrewCask = homebrewCask
+        self.volumeName = volumeName
+    }
 }
 
 /// An app Homebrew installed as a cask (#254). `token` is the Caskroom folder

@@ -454,10 +454,7 @@ struct DevToolsView: View {
     }
 
     private func toolShowsUncommitted(_ tool: DevTool) -> Bool {
-        tool.paths.contains { path in
-            let key = path.standardizedFileURL.path
-            return store.devToolRepoStatusByPath[key] == .dirty
-        }
+        tool.standardizedPaths.contains { store.devToolRepoStatusByPath[$0] == .dirty }
     }
 
     private func eligibleProjectArtifactPairs() -> [(Int, Int)] {
@@ -600,9 +597,7 @@ struct DevToolsView: View {
     private func isDevToolMetadataPending(_ tool: DevTool) -> Bool {
         if store.pendingDevToolSizeIDs.contains(tool.id) { return true }
         guard store.isEnrichingDeveloper else { return false }
-        return tool.paths.contains {
-            store.devToolRepoStatusByPath[$0.standardizedFileURL.path] == nil
-        }
+        return tool.standardizedPaths.contains { store.devToolRepoStatusByPath[$0] == nil }
     }
 
     private func isArtifactMetadataPending(_ artifact: ProjectCacheArtifact) -> Bool {
