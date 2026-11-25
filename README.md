@@ -181,7 +181,7 @@ Settings is a tab in the sidebar (⌘,) with five groups:
 - **First-run onboarding**: a welcome, a first scan, and the results with a button that moves the safe items to the Trash. Last comes an optional request for Full Disk Access, shown only if Purge doesn't have it
 - **Menu bar companion**: recoverable space at a glance, quick open, and scan/clean actions. It is optional and off on a new install; turn on **Keep Purge in the menu bar** in Settings
 - **Shortcuts and Spotlight**: three actions, Scan for Junk, Clean Safe Junk, and Uninstall an App
-- **Languages**: the app is in English, Simplified Chinese, Russian and Turkish, and follows your system language
+- **Languages**: the app is in English, Simplified Chinese, Russian, Turkish and Arabic, and follows your system language
 - **Disk summary**: the Overview shows used and free space; the sidebar shows what is already in the Trash, and each scan tab's size
 - **In-app updates**: the About screen checks for, downloads, and installs new versions
 

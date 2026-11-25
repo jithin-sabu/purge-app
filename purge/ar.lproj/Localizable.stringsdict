@@ -85,17 +85,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld ملف أكبر من %@ لم تُستخدم منذ %@</string>
+			<string>%lld ملف أكبر من %@ لم يُستخدم منذ %@</string>
 			<key>one</key>
-			<string>%lld ملف أكبر من %@ لم تُستخدم منذ %@</string>
+			<string>%lld ملف أكبر من %@ لم يُستخدم منذ %@</string>
 			<key>two</key>
-			<string>%lld ملفان أكبر من %@ لم تُستخدم منذ %@</string>
+			<string>%lld ملفان أكبر من %@ لم يُستخدما منذ %@</string>
 			<key>few</key>
 			<string>%lld ملفات أكبر من %@ لم تُستخدم منذ %@</string>
 			<key>many</key>
-			<string>%lld ملفًا أكبر من %@ لم تُستخدم منذ %@</string>
+			<string>%lld ملفًا أكبر من %@ لم يُستخدم منذ %@</string>
 			<key>other</key>
-			<string>%lld ملف أكبر من %@ لم تُستخدم منذ %@</string>
+			<string>%lld ملف أكبر من %@ لم يُستخدم منذ %@</string>
 		</dict>
 	</dict>
 	<key>%lld files · %@ to review</key>
@@ -209,7 +209,7 @@
 			<key>one</key>
 			<string>%lld نسخة أخرى</string>
 			<key>two</key>
-			<string>%lld نسختان أخرى</string>
+			<string>%lld نسختان أخريان</string>
 			<key>few</key>
 			<string>%lld نسخ أخرى</string>
 			<key>many</key>
@@ -233,7 +233,7 @@
 			<key>one</key>
 			<string>عُثر على %lld نسخة أخرى مطابقة</string>
 			<key>two</key>
-			<string>عُثر على %lld نسختان أخرى مطابقة</string>
+			<string>عُثر على %lld نسختين أخريين مطابقتين</string>
 			<key>few</key>
 			<string>عُثر على %lld نسخ أخرى مطابقة</string>
 			<key>many</key>
@@ -281,7 +281,7 @@
 			<key>one</key>
 			<string>نُقل %lld عنصر إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
 			<key>two</key>
-			<string>نُقل %lld عنصرين إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+			<string>نُقل %lld عنصران إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
 			<key>few</key>
 			<string>نُقل %lld عناصر إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
 			<key>many</key>
@@ -349,23 +349,23 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>يتعذّر الآن إبقاء %lld ملف أخرى محددة في iCloud فقط، لذا ستبقى.</string>
+			<string>يتعذّر الآن إبقاء %lld ملف آخر محدد في iCloud فقط، لذا ستبقى.</string>
 			<key>one</key>
-			<string>يتعذّر الآن إبقاء %lld ملف أخرى محددة في iCloud فقط، لذا ستبقى.</string>
+			<string>يتعذّر الآن إبقاء %lld ملف آخر محدد في iCloud فقط، لذا سيبقى.</string>
 			<key>two</key>
-			<string>يتعذّر الآن إبقاء %lld ملفين أخرى محددة في iCloud فقط، لذا ستبقى.</string>
+			<string>يتعذّر الآن إبقاء %lld ملفين آخرين محددين في iCloud فقط، لذا سيبقيان.</string>
 			<key>few</key>
 			<string>يتعذّر الآن إبقاء %lld ملفات أخرى محددة في iCloud فقط، لذا ستبقى.</string>
 			<key>many</key>
-			<string>يتعذّر الآن إبقاء %lld ملفًا أخرى محددة في iCloud فقط، لذا ستبقى.</string>
+			<string>يتعذّر الآن إبقاء %lld ملفًا آخر محددًا في iCloud فقط، لذا ستبقى.</string>
 			<key>other</key>
-			<string>يتعذّر الآن إبقاء %lld ملف أخرى محددة في iCloud فقط، لذا ستبقى.</string>
+			<string>يتعذّر الآن إبقاء %lld ملف آخر محدد في iCloud فقط، لذا ستبقى.</string>
 		</dict>
 	</dict>
 	<key>%lld files, still in iCloud Drive</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@، لا تزال في iCloud Drive</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -373,17 +373,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld ملف</string>
+			<string>%lld ملف، لا تزال في iCloud Drive</string>
 			<key>one</key>
-			<string>%lld ملف</string>
+			<string>%lld ملف، لا يزال في iCloud Drive</string>
 			<key>two</key>
-			<string>%lld ملفان</string>
+			<string>%lld ملفان، لا يزالان في iCloud Drive</string>
 			<key>few</key>
-			<string>%lld ملفات</string>
+			<string>%lld ملفات، لا تزال في iCloud Drive</string>
 			<key>many</key>
-			<string>%lld ملفًا</string>
+			<string>%lld ملفًا، لا تزال في iCloud Drive</string>
 			<key>other</key>
-			<string>%lld ملف</string>
+			<string>%lld ملف، لا تزال في iCloud Drive</string>
 		</dict>
 	</dict>
 	<key>%lld identical copies</key>
@@ -401,7 +401,7 @@
 			<key>one</key>
 			<string>%lld نسخة متطابقة</string>
 			<key>two</key>
-			<string>%lld نسختان متطابقة</string>
+			<string>%lld نسختان متطابقتان</string>
 			<key>few</key>
 			<string>%lld نسخ متطابقة</string>
 			<key>many</key>
@@ -421,17 +421,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>لا يزال %lld ملف أخرى محددة.</string>
+			<string>لا يزال %lld ملف آخر محددًا.</string>
 			<key>one</key>
-			<string>لا يزال %lld ملف أخرى محددة.</string>
+			<string>لا يزال %lld ملف آخر محددًا.</string>
 			<key>two</key>
-			<string>لا يزال %lld ملفان أخرى محددة.</string>
+			<string>لا يزال %lld ملفان آخران محددين.</string>
 			<key>few</key>
-			<string>لا يزال %lld ملفات أخرى محددة.</string>
+			<string>لا تزال %lld ملفات أخرى محددة.</string>
 			<key>many</key>
-			<string>لا يزال %lld ملفًا أخرى محددة.</string>
+			<string>لا يزال %lld ملفًا آخر محددًا.</string>
 			<key>other</key>
-			<string>لا يزال %lld ملف أخرى محددة.</string>
+			<string>لا يزال %lld ملف آخر محددًا.</string>
 		</dict>
 	</dict>
 	<key>Last used %lld months ago. %@</key>
@@ -517,17 +517,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld عنصر لم تُفتح منذ 90 يومًا</string>
+			<string>%lld عنصر لم يُفتح منذ 90 يومًا</string>
 			<key>one</key>
-			<string>%lld عنصر لم تُفتح منذ 90 يومًا</string>
+			<string>%lld عنصر لم يُفتح منذ 90 يومًا</string>
 			<key>two</key>
-			<string>%lld عنصران لم تُفتح منذ 90 يومًا</string>
+			<string>%lld عنصران لم يُفتحا منذ 90 يومًا</string>
 			<key>few</key>
 			<string>%lld عناصر لم تُفتح منذ 90 يومًا</string>
 			<key>many</key>
-			<string>%lld عنصرًا لم تُفتح منذ 90 يومًا</string>
+			<string>%lld عنصرًا لم يُفتح منذ 90 يومًا</string>
 			<key>other</key>
-			<string>%lld عنصر لم تُفتح منذ 90 يومًا</string>
+			<string>%lld عنصر لم يُفتح منذ 90 يومًا</string>
 		</dict>
 	</dict>
 	<key>%lld runtimes</key>
@@ -565,17 +565,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld ملف مُبقاة في iCloud فقط</string>
+			<string>%lld ملف مُبقى في iCloud فقط</string>
 			<key>one</key>
-			<string>%lld ملف مُبقاة في iCloud فقط</string>
+			<string>%lld ملف مُبقى في iCloud فقط</string>
 			<key>two</key>
-			<string>%lld ملفان مُبقاة في iCloud فقط</string>
+			<string>%lld ملفان مُبقيان في iCloud فقط</string>
 			<key>few</key>
 			<string>%lld ملفات مُبقاة في iCloud فقط</string>
 			<key>many</key>
-			<string>%lld ملفًا مُبقاة في iCloud فقط</string>
+			<string>%lld ملفًا مُبقى في iCloud فقط</string>
 			<key>other</key>
-			<string>%lld ملف مُبقاة في iCloud فقط</string>
+			<string>%lld ملف مُبقى في iCloud فقط</string>
 		</dict>
 	</dict>
 	<key>%@, %lld apps</key>
@@ -709,17 +709,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld ملف أخرى محددة ليست في iCloud، لذا ستبقى.</string>
+			<string>%lld ملف آخر محدد ليس في iCloud، لذا ستبقى.</string>
 			<key>one</key>
-			<string>%lld ملف أخرى محددة ليست في iCloud، لذا ستبقى.</string>
+			<string>%lld ملف آخر محدد ليس في iCloud، لذا سيبقى.</string>
 			<key>two</key>
-			<string>%lld ملفان أخرى محددة ليست في iCloud، لذا ستبقى.</string>
+			<string>%lld ملفان آخران محددان ليسا في iCloud، لذا سيبقيان.</string>
 			<key>few</key>
 			<string>%lld ملفات أخرى محددة ليست في iCloud، لذا ستبقى.</string>
 			<key>many</key>
-			<string>%lld ملفًا أخرى محددة ليست في iCloud، لذا ستبقى.</string>
+			<string>%lld ملفًا آخر محددًا ليس في iCloud، لذا ستبقى.</string>
 			<key>other</key>
-			<string>%lld ملف أخرى محددة ليست في iCloud، لذا ستبقى.</string>
+			<string>%lld ملف آخر محدد ليس في iCloud، لذا ستبقى.</string>
 		</dict>
 	</dict>
 	<key>%lld model sets</key>
@@ -761,7 +761,7 @@
 			<key>one</key>
 			<string>تتم مزامنة %lld ملف من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
 			<key>two</key>
-			<string>تتم مزامنة %lld ملفان من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+			<string>تتم مزامنة %lld ملفين من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
 			<key>few</key>
 			<string>تتم مزامنة %lld ملفات من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
 			<key>many</key>
@@ -893,7 +893,7 @@
 	<key>%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now.</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>ستبقى %#@n@: %lld ليست في iCloud، و%lld يتعذّر الآن إبقاؤها هناك فقط.</string>
+		<string>%#@n@: %lld ليست في iCloud، و%lld يتعذّر الآن إبقاؤها هناك فقط.</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -901,17 +901,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld ملف أخرى محددة</string>
+			<string>ستبقى %lld ملف آخر محدد</string>
 			<key>one</key>
-			<string>%lld ملف أخرى محددة</string>
+			<string>سيبقى %lld ملف آخر محدد</string>
 			<key>two</key>
-			<string>%lld ملفان أخرى محددة</string>
+			<string>سيبقى %lld ملفان آخران محددان</string>
 			<key>few</key>
-			<string>%lld ملفات أخرى محددة</string>
+			<string>ستبقى %lld ملفات أخرى محددة</string>
 			<key>many</key>
-			<string>%lld ملفًا أخرى محددة</string>
+			<string>ستبقى %lld ملفًا آخر محددًا</string>
 			<key>other</key>
-			<string>%lld ملف أخرى محددة</string>
+			<string>ستبقى %lld ملف آخر محدد</string>
 		</dict>
 	</dict>
 	<key>%lld files in this scan have identical contents, including this one.</key>
@@ -953,7 +953,7 @@
 			<key>one</key>
 			<string>%lld نسخة</string>
 			<key>two</key>
-			<string>%lld نسختان</string>
+			<string>%lld نسختين</string>
 			<key>few</key>
 			<string>%lld نسخ</string>
 			<key>many</key>
@@ -1097,7 +1097,7 @@
 			<key>one</key>
 			<string>يستخدمه %lld جهاز محاكاة.</string>
 			<key>two</key>
-			<string>يستخدمه %lld جهازي محاكاة.</string>
+			<string>يستخدمه %lld جهازا محاكاة.</string>
 			<key>few</key>
 			<string>يستخدمه %lld أجهزة محاكاة.</string>
 			<key>many</key>
@@ -1301,7 +1301,7 @@
 	<key>…and %lld more sets where every copy is selected.</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>…و%#@n@ أخرى حُددت فيها كل النسخ.</string>
+		<string>…و%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -1309,17 +1309,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld مجموعة</string>
+			<string>%lld مجموعة أخرى حُددت فيها كل النسخ.</string>
 			<key>one</key>
-			<string>%lld مجموعة</string>
+			<string>%lld مجموعة أخرى حُددت فيها كل النسخ.</string>
 			<key>two</key>
-			<string>%lld مجموعتان</string>
+			<string>%lld مجموعتان أخريان حُددت فيهما كل النسخ.</string>
 			<key>few</key>
-			<string>%lld مجموعات</string>
+			<string>%lld مجموعات أخرى حُددت فيها كل النسخ.</string>
 			<key>many</key>
-			<string>%lld مجموعةً</string>
+			<string>%lld مجموعةً أخرى حُددت فيها كل النسخ.</string>
 			<key>other</key>
-			<string>%lld مجموعة</string>
+			<string>%lld مجموعة أخرى حُددت فيها كل النسخ.</string>
 		</dict>
 	</dict>
 	<key>%lld smaller folders</key>
@@ -1357,17 +1357,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld عنصر لم تُزل</string>
+			<string>%lld عنصر لم يُزَل</string>
 			<key>one</key>
-			<string>%lld عنصر لم تُزل</string>
+			<string>%lld عنصر لم يُزَل</string>
 			<key>two</key>
-			<string>%lld عنصران لم تُزل</string>
+			<string>%lld عنصران لم يُزالا</string>
 			<key>few</key>
-			<string>%lld عناصر لم تُزل</string>
+			<string>%lld عناصر لم تُزَل</string>
 			<key>many</key>
-			<string>%lld عنصرًا لم تُزل</string>
+			<string>%lld عنصرًا لم يُزَل</string>
 			<key>other</key>
-			<string>%lld عنصر لم تُزل</string>
+			<string>%lld عنصر لم يُزَل</string>
 		</dict>
 	</dict>
 	<key>%lld deleted permanently</key>
@@ -1381,17 +1381,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld عنصر حُذفت نهائيًا</string>
+			<string>%lld عنصر حُذف نهائيًا</string>
 			<key>one</key>
-			<string>%lld عنصر حُذفت نهائيًا</string>
+			<string>%lld عنصر حُذف نهائيًا</string>
 			<key>two</key>
-			<string>%lld عنصران حُذفت نهائيًا</string>
+			<string>%lld عنصران حُذفا نهائيًا</string>
 			<key>few</key>
 			<string>%lld عناصر حُذفت نهائيًا</string>
 			<key>many</key>
-			<string>%lld عنصرًا حُذفت نهائيًا</string>
+			<string>%lld عنصرًا حُذف نهائيًا</string>
 			<key>other</key>
-			<string>%lld عنصر حُذفت نهائيًا</string>
+			<string>%lld عنصر حُذف نهائيًا</string>
 		</dict>
 	</dict>
 	<key>%lld moved to trash, %lld deleted permanently</key>
@@ -1405,17 +1405,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld عنصر نُقلت إلى سلة المهملات</string>
+			<string>%lld عنصر نُقل إلى سلة المهملات</string>
 			<key>one</key>
-			<string>%lld عنصر نُقلت إلى سلة المهملات</string>
+			<string>%lld عنصر نُقل إلى سلة المهملات</string>
 			<key>two</key>
-			<string>%lld عنصران نُقلت إلى سلة المهملات</string>
+			<string>%lld عنصران نُقلا إلى سلة المهملات</string>
 			<key>few</key>
 			<string>%lld عناصر نُقلت إلى سلة المهملات</string>
 			<key>many</key>
-			<string>%lld عنصرًا نُقلت إلى سلة المهملات</string>
+			<string>%lld عنصرًا نُقل إلى سلة المهملات</string>
 			<key>other</key>
-			<string>%lld عنصر نُقلت إلى سلة المهملات</string>
+			<string>%lld عنصر نُقل إلى سلة المهملات</string>
 		</dict>
 		<key>b</key>
 		<dict>
@@ -1424,17 +1424,17 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>zero</key>
-			<string>%lld عنصر حُذفت نهائيًا</string>
+			<string>%lld عنصر حُذف نهائيًا</string>
 			<key>one</key>
-			<string>%lld عنصر حُذفت نهائيًا</string>
+			<string>%lld عنصر حُذف نهائيًا</string>
 			<key>two</key>
-			<string>%lld عنصران حُذفت نهائيًا</string>
+			<string>%lld عنصران حُذفا نهائيًا</string>
 			<key>few</key>
 			<string>%lld عناصر حُذفت نهائيًا</string>
 			<key>many</key>
-			<string>%lld عنصرًا حُذفت نهائيًا</string>
+			<string>%lld عنصرًا حُذف نهائيًا</string>
 			<key>other</key>
-			<string>%lld عنصر حُذفت نهائيًا</string>
+			<string>%lld عنصر حُذف نهائيًا</string>
 		</dict>
 	</dict>
 	<key>Every %lld days</key>

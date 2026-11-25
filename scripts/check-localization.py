@@ -17,11 +17,17 @@ types. Text built from a variable, or a literal passed as a plain String, is
 not localized at all, and this check can't see it either: pass
 String(localized:) in those places.
 
+It reads each Localizable.stringsdict too. Every translated one must have every
+plural entry English or another translation has, every plural form its
+language uses (PLURAL_CATEGORIES), and in each form the same placeholders as
+the key, the count included.
+
 Usage: python3 scripts/check-localization.py
 """
 import json
 import os
 import pathlib
+import plistlib
 import re
 import sys
 
@@ -260,51 +266,54 @@ def source_match_form(key):
     return match_form(key)
 
 
-# Plural categories CLDR gives each language with a Localizable.stringsdict.
-# Every counted phrase there must spell out each one, or the count falls back
-# to `other` and reads wrong.
 PLURAL_CATEGORIES = {
     "en": {"one", "other"},
     "ru": {"one", "few", "many", "other"},
     "ar": {"zero", "one", "two", "few", "many", "other"},
 }
-PLURAL_VARIABLE = re.compile(r"%#@(\w+)@")
+PLURAL_VARIABLE = re.compile(r"%(?:\d+\$)?#@(\w+)@")
 
 
-def check_stringsdict(path, english_keys):
-    """Errors for one Localizable.stringsdict: a missing English key, a missing
-    plural category, or a form whose placeholders, once put into its format,
-    differ from the key's."""
-    import plistlib
+def check_stringsdict(path, table, required_keys):
+    """Errors for one Localizable.stringsdict: a missing required key, a missing
+    plural category, a rule whose value type isn't one of the key's, or a form
+    whose placeholders, once put into its format, differ from the key's."""
     rel = path.relative_to(ROOT)
-    try:
-        table = plistlib.loads(path.read_bytes())
-    except Exception as error:
-        return [f"{rel}: {error}"]
     language = path.parent.stem
-    errors = [f"{rel}: no plural entry for {key!r}" for key in sorted(english_keys - set(table))]
+    errors = [f"{rel}: no plural entry for {key!r}" for key in sorted(required_keys - set(table))]
     wanted = PLURAL_CATEGORIES.get(language)
     if wanted is None:
         return errors + [f"{rel}: add the {language} plural categories to PLURAL_CATEGORIES"]
     for key, entry in table.items():
+        if not isinstance(entry, dict):
+            errors.append(f"{rel}: {key!r} is not a dictionary")
+            continue
         fmt = entry.get("NSStringLocalizedFormatKey", "")
-        variables = PLURAL_VARIABLE.findall(fmt)
+        variables = [(match.group(0), match.group(1)) for match in PLURAL_VARIABLE.finditer(fmt)]
         if not variables:
             errors.append(f"{rel}: {key!r} has no %#@…@ variable in its format")
             continue
-        for name in variables:
-            rule = entry.get(name)
+        rules = {name: entry.get(name) for _, name in variables}
+        key_types = {kind for _, kind in placeholders(key)}
+        for _, name in variables:
+            rule = rules[name]
             if not isinstance(rule, dict):
                 errors.append(f"{rel}: {key!r} has no rule for %#@{name}@")
                 continue
+            value_type = rule.get("NSStringFormatValueTypeKey", "")
+            declared = placeholders(f"%{value_type}")
+            if len(declared) != 1 or declared[0][1] not in key_types:
+                errors.append(f"{rel}: {key!r} %#@{name}@ has value type {value_type!r}, which the key doesn't use")
             missing = wanted - set(rule)
             if missing:
                 errors.append(f"{rel}: {key!r} lacks the {', '.join(sorted(missing))} form")
+            others = [o for _, o in variables if o != name]
+            if any(not isinstance(rules[o], dict) or "other" not in rules[o] for o in others):
+                continue
             for category in sorted(wanted & set(rule)):
                 full = fmt
-                for other in variables:
-                    form = rule[category] if other == name else entry.get(other, {}).get("other", "")
-                    full = full.replace(f"%#@{other}@", form)
+                for token, other in variables:
+                    full = full.replace(token, rule[category] if other == name else rules[other]["other"], 1)
                 if placeholders(full) != placeholders(key):
                     errors.append(f"{rel}: {key!r} {category} form has different placeholders from the key")
     return errors
@@ -332,11 +341,17 @@ def main():
         tables[path] = {key for key, _, _ in entries}
         print(f"{rel}: {len(entries)} entries")
 
-    import plistlib
-    english_plurals = set(plistlib.loads((APP / "en.lproj" / "Localizable.stringsdict").read_bytes()))
+    plural_tables = {}
     for path in sorted(APP.glob("*.lproj/Localizable.stringsdict")):
-        found = check_stringsdict(path, english_plurals)
-        errors += found
+        try:
+            plural_tables[path] = plistlib.loads(path.read_bytes())
+        except Exception as error:
+            errors.append(f"{path.relative_to(ROOT)}: {error}")
+    english_plurals = {k for p, table in plural_tables.items() if p.parent.stem == "en" for k in table}
+    translated_plurals = {k for p, table in plural_tables.items() if p.parent.stem != "en" for k in table}
+    for path, table in plural_tables.items():
+        required = english_plurals if path.parent.stem == "en" else english_plurals | translated_plurals
+        errors += check_stringsdict(path, table, required)
         print(f"{path.relative_to(ROOT)}: checked plural forms")
 
     records = json.loads(EXPLANATIONS.read_text(encoding="utf-8"))
