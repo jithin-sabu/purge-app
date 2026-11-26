@@ -54,9 +54,20 @@ struct ExplanationFitTests {
         NSHostingView(rootView: view).fittingSize
     }
 
+    /// The test host runs in English, so each style is set in the font
+    /// `language` gets in the app, not the host's.
+    static func styled(_ text: String, _ style: AppStyle.TextStyle, in language: String) -> Text {
+        Text(verbatim: text).font(style.font(for: language)).tracking(style.tracking)
+    }
+
     /// The trailing column is as wide as its widest line: the size or the badge.
-    static func trailingWidth(_ level: SafetyLevel, in bundle: Bundle) -> CGFloat {
-        let badge = fittingSize(AppBadge(text: badgeLabel(level, in: bundle))).width
+    /// The badge is measured as `AppBadge` lays it out.
+    static func trailingWidth(_ level: SafetyLevel, in bundle: Bundle, language: String) -> CGFloat {
+        let badge = fittingSize(
+            styled(badgeLabel(level, in: bundle), AppStyle.Typography.metadataEmphasis, in: language)
+                .padding(.horizontal, AppStyle.Spacing.xxSmallPlus)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
+        ).width
         let size = fittingSize(
             Text(verbatim: "999.9 MB")
                 .font(AppStyle.Typography.metadata.weight(.medium).numbers)
@@ -65,15 +76,14 @@ struct ExplanationFitTests {
         return max(badge, size)
     }
 
-    static func columnWidth(_ level: SafetyLevel, in bundle: Bundle) -> CGFloat {
-        sharedWidth - trailingWidth(level, in: bundle) - margin
+    static func columnWidth(_ level: SafetyLevel, in bundle: Bundle, language: String) -> CGFloat {
+        sharedWidth - trailingWidth(level, in: bundle, language: language) - margin
     }
 
-    static func lineCount(_ text: String, width: CGFloat) -> Int {
+    static func lineCount(_ text: String, width: CGFloat, language: String) -> Int {
         func height(_ string: String) -> CGFloat {
             fittingSize(
-                Text(verbatim: string)
-                    .font(AppStyle.Typography.metadata)
+                styled(string, AppStyle.Typography.metadata, in: language)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(width: width, alignment: .leading)
             ).height
@@ -90,10 +100,10 @@ struct ExplanationFitTests {
         var tooLong: [String] = []
         for entry in entries {
             let level = Self.level(entry.tag)
-            let width = widths[level] ?? Self.columnWidth(level, in: bundle)
+            let width = widths[level] ?? Self.columnWidth(level, in: bundle, language: language)
             widths[level] = width
             let text = bundle.localizedString(forKey: entry.explanation, value: entry.explanation, table: "Explanations")
-            let lines = Self.lineCount(text, width: width)
+            let lines = Self.lineCount(text, width: width, language: language)
             if lines > 2 {
                 tooLong.append("\(entry.key) (\(lines) lines at \(Int(width)) pt): \(text)")
             }
@@ -105,7 +115,7 @@ struct ExplanationFitTests {
     /// lines; simulator device rows have one. Checked at their longest: a large
     /// size, the longest reach prefix and a usage sentence with a count.
     @Test func devToolsExplanationsFitTheirRows() throws {
-        let width = Self.columnWidth(.medium, in: .main)
+        let width = Self.columnWidth(.medium, in: .main, language: "en")
         let now = Date()
         let elevenMonthsAgo = try #require(Calendar.current.date(byAdding: .month, value: -11, to: now))
         let twoLines: [String] = [
@@ -122,7 +132,7 @@ struct ExplanationFitTests {
             ).explanation,
         ]
         for text in twoLines {
-            #expect(Self.lineCount(text, width: width) <= 2, "\(text)")
+            #expect(Self.lineCount(text, width: width, language: "en") <= 2, "\(text)")
         }
         let oneLine: [String] = [
             SimulatorDevice.runningSafetyInfo(deviceName: "iPhone 17 Pro", runtimeVersion: "26.2", isBooted: true).explanation,
@@ -131,7 +141,7 @@ struct ExplanationFitTests {
             SimulatorDevice.safetyInfo(isAvailable: true, lastBootedAt: elevenMonthsAgo, deviceName: "iPhone", runtimeVersion: "26.2").explanation,
         ]
         for text in oneLine {
-            #expect(Self.lineCount(text, width: width) == 1, "\(text)")
+            #expect(Self.lineCount(text, width: width, language: "en") == 1, "\(text)")
         }
     }
 
@@ -147,7 +157,7 @@ struct ExplanationFitTests {
         func text(_ key: String, _ arguments: CVarArg...) -> String {
             String(format: bundle.localizedString(forKey: key, value: key, table: nil), locale: locale, arguments: arguments)
         }
-        let width = Self.columnWidth(.medium, in: bundle)
+        let width = Self.columnWidth(.medium, in: bundle, language: language)
         let lists = ListFormatter()
         lists.locale = locale
         let devices = lists.string(from: ["iPhone", "iPad", "Apple Vision"]) ?? ""
@@ -191,8 +201,8 @@ struct ExplanationFitTests {
             text("Last used %lld months ago. %@", 11, deletes),
             text("Last use unknown. %@", deletes),
         ]
-        let tooLong = twoLines.filter { Self.lineCount($0, width: width) > 2 }
-            + oneLine.filter { Self.lineCount($0, width: width) > 1 }
+        let tooLong = twoLines.filter { Self.lineCount($0, width: width, language: language) > 2 }
+            + oneLine.filter { Self.lineCount($0, width: width, language: language) > 1 }
         #expect(tooLong.isEmpty, "\(language): \(tooLong.joined(separator: "\n"))")
     }
 }

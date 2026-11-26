@@ -68,6 +68,43 @@ class PluralTablesTest(unittest.TestCase):
         self.edit("en", point_elsewhere)
         self.assertTrue(any("points at an argument of another type" in e for e in self.errors()))
 
+    def test_an_unnumbered_count_reads_the_argument_at_its_place(self):
+        def object_first(table):
+            table["%@ has %lld items"] = {
+                "NSStringLocalizedFormatKey": "%#@count@",
+                "count": {
+                    "NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
+                    "NSStringFormatValueTypeKey": "lld",
+                    **{category: "%@ has %lld items" for category in check.PLURAL_CATEGORIES["en"]},
+                },
+            }
+
+        self.edit("en", object_first)
+        self.assertTrue(any("'%@ has %lld items' %#@count@ points at an argument" in e for e in self.errors()))
+
+    def test_an_unnumbered_count_after_another_argument_passes(self):
+        def count_second(table):
+            table["%@ has %lld items"] = {
+                "NSStringLocalizedFormatKey": "%@ has %#@count@",
+                "count": {
+                    "NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
+                    "NSStringFormatValueTypeKey": "lld",
+                    **{category: "%lld items" for category in check.PLURAL_CATEGORIES["en"]},
+                },
+            }
+
+        self.edit("en", count_second)
+        self.assertFalse(any("en.lproj" in e and "'%@ has %lld items'" in e for e in self.errors()))
+
+    def test_a_value_type_with_trailing_text_fails(self):
+        def trail(table):
+            entry = next(iter(table.values()))
+            name = check.PLURAL_VARIABLE.search(entry["NSStringLocalizedFormatKey"]).group(2)
+            entry[name]["NSStringFormatValueTypeKey"] += " trailing"
+
+        self.edit("ar", trail)
+        self.assertTrue(any("trailing" in e and "which the key doesn't use" in e for e in self.errors()))
+
 
 if __name__ == "__main__":
     unittest.main()

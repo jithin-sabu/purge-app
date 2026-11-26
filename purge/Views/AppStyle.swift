@@ -81,8 +81,13 @@ enum AppStyle {
         let tracking: CGFloat
 
         var font: Font {
+            font(for: Bundle.main.preferredLocalizations.first)
+        }
+
+        /// The font this style sets in an interface shown in `localization`.
+        func font(for localization: String?) -> Font {
             switch family {
-            case .onest: AppFonts.onest(size: size, weight: weight)
+            case .onest: AppFonts.onest(size: size, weight: weight, localization: localization)
             case .rounded: .system(size: size, weight: weight, design: .rounded)
             case .monospaced: .system(size: size, weight: weight, design: .monospaced)
             }
@@ -274,8 +279,12 @@ enum AppFonts {
     }
 
     static func onest(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        onest(size: size, weight: weight, localization: Bundle.main.preferredLocalizations.first)
+    }
+
+    static func onest(size: CGFloat, weight: Font.Weight, localization: String?) -> Font {
         // Without the font file, fall back to the system font, not a missing face.
-        usesOnest(for: Bundle.main.preferredLocalizations.first) && register()
+        usesOnest(for: localization) && register()
             ? Font.custom("Onest", size: size).weight(weight)
             : Font.system(size: size, weight: weight)
     }

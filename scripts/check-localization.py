@@ -275,6 +275,19 @@ PLURAL_CATEGORIES = {
 PLURAL_VARIABLE = re.compile(r"%(?:(\d+)\$)?#@(\w+)@")
 
 
+def argument_indexes(fmt):
+    """The argument each placeholder in `fmt` reads, by where it starts. One
+    with no position reads the argument after the last one with none."""
+    indexes, auto = {}, 0
+    for match in PLACEHOLDER.finditer(fmt.replace("%%", "\0\0")):
+        if match.group(1):
+            indexes[match.start()] = int(match.group(1))
+        else:
+            auto += 1
+            indexes[match.start()] = auto
+    return indexes
+
+
 def check_stringsdict(path, table, required_keys):
     """Errors for one Localizable.stringsdict: a missing required key, a missing
     plural category, a rule whose value type isn't one of the key's, or a form
@@ -298,6 +311,7 @@ def check_stringsdict(path, table, required_keys):
         rules = {name: entry.get(name) for _, name in variables}
         key_args = dict(placeholders(key))
         key_types = set(key_args.values())
+        indexes = argument_indexes(fmt)
         for match in matches:
             name = match.group(2)
             rule = rules[name]
@@ -307,11 +321,12 @@ def check_stringsdict(path, table, required_keys):
             if rule.get("NSStringFormatSpecTypeKey") != "NSStringPluralRuleType":
                 errors.append(f"{rel}: {key!r} %#@{name}@ is not an NSStringPluralRuleType rule")
             value_type = rule.get("NSStringFormatValueTypeKey", "")
+            spec = PLACEHOLDER.fullmatch(f"%{value_type}")
             declared = placeholders(f"%{value_type}")
-            if len(declared) != 1 or declared[0][1] not in key_types:
+            if not spec or spec.group(1) or declared[0][1] not in key_types:
                 errors.append(f"{rel}: {key!r} %#@{name}@ has value type {value_type!r}, which the key doesn't use")
-            elif match.group(1) and key_args.get(int(match.group(1))) != declared[0][1]:
-                errors.append(f"{rel}: {key!r} %{match.group(1)}$#@{name}@ points at an argument of another type")
+            elif key_args.get(indexes.get(match.start())) != declared[0][1]:
+                errors.append(f"{rel}: {key!r} {match.group(0)} points at an argument of another type")
             missing = wanted - set(rule)
             if missing:
                 errors.append(f"{rel}: {key!r} lacks the {', '.join(sorted(missing))} form")
