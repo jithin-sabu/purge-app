@@ -116,7 +116,7 @@ enum SizeComparisonCatalog {
     case let .counted(one, many):
       let single = NSLocalizedString(one, comment: "Storage size comparison")
       let plural = NSLocalizedString(many, comment: "Storage size comparison")
-      return count == 1 ? single : String(localized: "\(formatCount(count)) \(plural)")
+      return count == 1 ? single : String(localized: "\(formatCount(count)) \(plural)", table: "SizeComparison")
     case let .timesOver(one, name):
       let single = NSLocalizedString(one, comment: "Storage size comparison")
       let named = NSLocalizedString(name, comment: "Storage size comparison")
