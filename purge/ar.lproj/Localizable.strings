@@ -522,7 +522,7 @@
 "Installed by Homebrew" = "مثبّت بواسطة Homebrew";
 "Installed by a package manager" = "مثبّت بواسطة مدير حزم";
 "Installed by a script" = "مثبّت بواسطة سكربت";
-"It links to %@, which Large Files doesn't scan." = "يشير إلى %@، الذي لا تفحصه أداة الملفات الكبيرة.";
+"It links to %@, which Large Files doesn't scan." = "يشير إلى ⁦%@⁩، الذي لا تفحصه أداة الملفات الكبيرة.";
 "It stays in its folder and downloads again when you open it." = "يبقى في مجلده ويُنزَّل مجددًا عند فتحه.";
 "Items found, %lld" = "العناصر التي عُثر عليها: %lld";
 "Jithin" = "Jithin";

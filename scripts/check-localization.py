@@ -17,10 +17,11 @@ types. Text built from a variable, or a literal passed as a plain String, is
 not localized at all, and this check can't see it either: pass
 String(localized:) in those places.
 
-It reads each Localizable.stringsdict too. Every translated one must have every
-plural entry English or another translation has, every plural form its
-language uses (PLURAL_CATEGORIES), and in each form the same placeholders as
-the key, the count included.
+It reads each Localizable.stringsdict too. Every language in PLURAL_CATEGORIES
+must have one. Every translated one must have every plural entry English or
+another translation has, every plural form its language uses, a plural rule
+type, a count whose argument number points at that type in the key, and in
+each form the same placeholders as the key, the count included.
 
 Usage: python3 scripts/check-localization.py
 """
@@ -271,14 +272,14 @@ PLURAL_CATEGORIES = {
     "ru": {"one", "few", "many", "other"},
     "ar": {"zero", "one", "two", "few", "many", "other"},
 }
-PLURAL_VARIABLE = re.compile(r"%(?:\d+\$)?#@(\w+)@")
+PLURAL_VARIABLE = re.compile(r"%(?:(\d+)\$)?#@(\w+)@")
 
 
 def check_stringsdict(path, table, required_keys):
     """Errors for one Localizable.stringsdict: a missing required key, a missing
     plural category, a rule whose value type isn't one of the key's, or a form
     whose placeholders, once put into its format, differ from the key's."""
-    rel = path.relative_to(ROOT)
+    rel = shown(path)
     language = path.parent.stem
     errors = [f"{rel}: no plural entry for {key!r}" for key in sorted(required_keys - set(table))]
     wanted = PLURAL_CATEGORIES.get(language)
@@ -289,21 +290,28 @@ def check_stringsdict(path, table, required_keys):
             errors.append(f"{rel}: {key!r} is not a dictionary")
             continue
         fmt = entry.get("NSStringLocalizedFormatKey", "")
-        variables = [(match.group(0), match.group(1)) for match in PLURAL_VARIABLE.finditer(fmt)]
+        matches = list(PLURAL_VARIABLE.finditer(fmt))
+        variables = [(match.group(0), match.group(2)) for match in matches]
         if not variables:
             errors.append(f"{rel}: {key!r} has no %#@…@ variable in its format")
             continue
         rules = {name: entry.get(name) for _, name in variables}
-        key_types = {kind for _, kind in placeholders(key)}
-        for _, name in variables:
+        key_args = dict(placeholders(key))
+        key_types = set(key_args.values())
+        for match in matches:
+            name = match.group(2)
             rule = rules[name]
             if not isinstance(rule, dict):
                 errors.append(f"{rel}: {key!r} has no rule for %#@{name}@")
                 continue
+            if rule.get("NSStringFormatSpecTypeKey") != "NSStringPluralRuleType":
+                errors.append(f"{rel}: {key!r} %#@{name}@ is not an NSStringPluralRuleType rule")
             value_type = rule.get("NSStringFormatValueTypeKey", "")
             declared = placeholders(f"%{value_type}")
             if len(declared) != 1 or declared[0][1] not in key_types:
                 errors.append(f"{rel}: {key!r} %#@{name}@ has value type {value_type!r}, which the key doesn't use")
+            elif match.group(1) and key_args.get(int(match.group(1))) != declared[0][1]:
+                errors.append(f"{rel}: {key!r} %{match.group(1)}$#@{name}@ points at an argument of another type")
             missing = wanted - set(rule)
             if missing:
                 errors.append(f"{rel}: {key!r} lacks the {', '.join(sorted(missing))} form")
@@ -316,6 +324,35 @@ def check_stringsdict(path, table, required_keys):
                     full = full.replace(token, rule[category] if other == name else rules[other]["other"], 1)
                 if placeholders(full) != placeholders(key):
                     errors.append(f"{rel}: {key!r} {category} form has different placeholders from the key")
+    return errors
+
+
+def shown(path):
+    try:
+        return path.relative_to(ROOT)
+    except ValueError:
+        return path
+
+
+def check_plural_tables(app):
+    """Errors for every Localizable.stringsdict under `app`, and for each
+    language in PLURAL_CATEGORIES that has none."""
+    errors, plural_tables = [], {}
+    for language in sorted(PLURAL_CATEGORIES):
+        path = app / f"{language}.lproj" / "Localizable.stringsdict"
+        if not path.exists():
+            errors.append(f"{shown(path)}: missing, so its plural entries show in English or not at all")
+    for path in sorted(app.glob("*.lproj/Localizable.stringsdict")):
+        try:
+            plural_tables[path] = plistlib.loads(path.read_bytes())
+        except Exception as error:
+            errors.append(f"{shown(path)}: {error}")
+    english_plurals = {k for p, table in plural_tables.items() if p.parent.stem == "en" for k in table}
+    translated_plurals = {k for p, table in plural_tables.items() if p.parent.stem != "en" for k in table}
+    for path, table in plural_tables.items():
+        required = english_plurals if path.parent.stem == "en" else english_plurals | translated_plurals
+        errors += check_stringsdict(path, table, required)
+        print(f"{shown(path)}: checked plural forms")
     return errors
 
 
@@ -341,18 +378,7 @@ def main():
         tables[path] = {key for key, _, _ in entries}
         print(f"{rel}: {len(entries)} entries")
 
-    plural_tables = {}
-    for path in sorted(APP.glob("*.lproj/Localizable.stringsdict")):
-        try:
-            plural_tables[path] = plistlib.loads(path.read_bytes())
-        except Exception as error:
-            errors.append(f"{path.relative_to(ROOT)}: {error}")
-    english_plurals = {k for p, table in plural_tables.items() if p.parent.stem == "en" for k in table}
-    translated_plurals = {k for p, table in plural_tables.items() if p.parent.stem != "en" for k in table}
-    for path, table in plural_tables.items():
-        required = english_plurals if path.parent.stem == "en" else english_plurals | translated_plurals
-        errors += check_stringsdict(path, table, required)
-        print(f"{path.relative_to(ROOT)}: checked plural forms")
+    errors += check_plural_tables(APP)
 
     records = json.loads(EXPLANATIONS.read_text(encoding="utf-8"))
     wanted = {r[field] for r in records for field in ("display_name", "explanation") if r.get(field)}
