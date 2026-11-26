@@ -1,0 +1,3 @@
+/* The count and noun of a storage comparison in SizeComparisonCatalog, kept apart from the general "%@ %@" so a language can set its direction. */
+
+"%@ %@" = "%@ %@";

@@ -81,8 +81,13 @@ enum AppStyle {
         let tracking: CGFloat
 
         var font: Font {
+            font(for: Bundle.main.preferredLocalizations.first)
+        }
+
+        /// The font this style sets in an interface shown in `localization`.
+        func font(for localization: String?) -> Font {
             switch family {
-            case .onest: AppFonts.onest(size: size, weight: weight)
+            case .onest: AppFonts.onest(size: size, weight: weight, localization: localization)
             case .rounded: .system(size: size, weight: weight, design: .rounded)
             case .monospaced: .system(size: size, weight: weight, design: .monospaced)
             }
@@ -226,6 +231,10 @@ struct InsetCardDivider: View {
 /// until a rebuild put the file back. So `register()` copies the font into
 /// Application Support, where nothing moves it, and registers the copy. It
 /// runs from `applicationWillFinishLaunching`, before the first paint.
+///
+/// Onest has no Arabic letters, and CoreText fills them in from Geeza Pro,
+/// which has only two weights and matches nothing else on the Mac. So an
+/// Arabic interface uses the system font, whose Arabic is SF Arabic.
 enum AppFonts {
     private static let resourceName = "OnestText"
     private static var registration: Bool?
@@ -270,9 +279,18 @@ enum AppFonts {
     }
 
     static func onest(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        onest(size: size, weight: weight, localization: Bundle.main.preferredLocalizations.first)
+    }
+
+    static func onest(size: CGFloat, weight: Font.Weight, localization: String?) -> Font {
         // Without the font file, fall back to the system font, not a missing face.
-        register()
+        usesOnest(for: localization) && register()
             ? Font.custom("Onest", size: size).weight(weight)
             : Font.system(size: size, weight: weight)
+    }
+
+    /// Whether Onest can set the interface in `localization`.
+    static func usesOnest(for localization: String?) -> Bool {
+        localization != "ar"
     }
 }

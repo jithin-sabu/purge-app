@@ -19,6 +19,13 @@ struct AppFontsTests {
         }
     }
 
+    @Test func arabicUsesTheSystemFont() {
+        #expect(!AppFonts.usesOnest(for: "ar"))
+        for localization in ["en", "zh-Hans", "ru", "tr", nil] {
+            #expect(AppFonts.usesOnest(for: localization))
+        }
+    }
+
     @Test func stableCopyWritesOnceAndRefreshesWhenTheBundledFileChanges() throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("AppFontsTests-\(UUID().uuidString)", isDirectory: true)

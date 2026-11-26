@@ -1,0 +1,1537 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%@ %lld Check First items (%@)</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@ %#@n@ (%@)</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر للفحص أولًا</string>
+			<key>one</key>
+			<string>%lld عنصر للفحص أولًا</string>
+			<key>two</key>
+			<string>%lld عنصران للفحص أولًا</string>
+			<key>few</key>
+			<string>%lld عناصر للفحص أولًا</string>
+			<key>many</key>
+			<string>%lld عنصرًا للفحص أولًا</string>
+			<key>other</key>
+			<string>%lld عنصر للفحص أولًا</string>
+		</dict>
+	</dict>
+	<key>%lld apps</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld تطبيق</string>
+			<key>one</key>
+			<string>%lld تطبيق</string>
+			<key>two</key>
+			<string>%lld تطبيقان</string>
+			<key>few</key>
+			<string>%lld تطبيقات</string>
+			<key>many</key>
+			<string>%lld تطبيقًا</string>
+			<key>other</key>
+			<string>%lld تطبيق</string>
+		</dict>
+	</dict>
+	<key>%lld files over %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف أكبر من %@</string>
+			<key>one</key>
+			<string>%lld ملف أكبر من %@</string>
+			<key>two</key>
+			<string>%lld ملفان أكبر من %@</string>
+			<key>few</key>
+			<string>%lld ملفات أكبر من %@</string>
+			<key>many</key>
+			<string>%lld ملفًا أكبر من %@</string>
+			<key>other</key>
+			<string>%lld ملف أكبر من %@</string>
+		</dict>
+	</dict>
+	<key>%lld files over %@ not used in %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف أكبر من %@ لم يُستخدم منذ %@</string>
+			<key>one</key>
+			<string>%lld ملف أكبر من %@ لم يُستخدم منذ %@</string>
+			<key>two</key>
+			<string>%lld ملفان أكبر من %@ لم يُستخدما منذ %@</string>
+			<key>few</key>
+			<string>%lld ملفات أكبر من %@ لم تُستخدم منذ %@</string>
+			<key>many</key>
+			<string>%lld ملفًا أكبر من %@ لم يُستخدم منذ %@</string>
+			<key>other</key>
+			<string>%lld ملف أكبر من %@ لم يُستخدم منذ %@</string>
+		</dict>
+	</dict>
+	<key>%lld files · %@ to review</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف · %@ للمراجعة</string>
+			<key>one</key>
+			<string>%lld ملف · %@ للمراجعة</string>
+			<key>two</key>
+			<string>%lld ملفان · %@ للمراجعة</string>
+			<key>few</key>
+			<string>%lld ملفات · %@ للمراجعة</string>
+			<key>many</key>
+			<string>%lld ملفًا · %@ للمراجعة</string>
+			<key>other</key>
+			<string>%lld ملف · %@ للمراجعة</string>
+		</dict>
+	</dict>
+	<key>%lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصران</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>%lld items to trash</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر إلى سلة المهملات</string>
+			<key>one</key>
+			<string>%lld عنصر إلى سلة المهملات</string>
+			<key>two</key>
+			<string>%lld عنصران إلى سلة المهملات</string>
+			<key>few</key>
+			<string>%lld عناصر إلى سلة المهملات</string>
+			<key>many</key>
+			<string>%lld عنصرًا إلى سلة المهملات</string>
+			<key>other</key>
+			<string>%lld عنصر إلى سلة المهملات</string>
+		</dict>
+	</dict>
+	<key>%lld items · %@ recoverable</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر · %@ يمكن استعادتها</string>
+			<key>one</key>
+			<string>%lld عنصر · %@ يمكن استعادتها</string>
+			<key>two</key>
+			<string>%lld عنصران · %@ يمكن استعادتها</string>
+			<key>few</key>
+			<string>%lld عناصر · %@ يمكن استعادتها</string>
+			<key>many</key>
+			<string>%lld عنصرًا · %@ يمكن استعادتها</string>
+			<key>other</key>
+			<string>%lld عنصر · %@ يمكن استعادتها</string>
+		</dict>
+	</dict>
+	<key>%lld other copies</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld نسخة أخرى</string>
+			<key>one</key>
+			<string>%lld نسخة أخرى</string>
+			<key>two</key>
+			<string>%lld نسختان أخريان</string>
+			<key>few</key>
+			<string>%lld نسخ أخرى</string>
+			<key>many</key>
+			<string>%lld نسخةً أخرى</string>
+			<key>other</key>
+			<string>%lld نسخة أخرى</string>
+		</dict>
+	</dict>
+	<key>%lld other identical copies found</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>عُثر على %lld نسخة أخرى مطابقة</string>
+			<key>one</key>
+			<string>عُثر على %lld نسخة أخرى مطابقة</string>
+			<key>two</key>
+			<string>عُثر على %lld نسختين أخريين مطابقتين</string>
+			<key>few</key>
+			<string>عُثر على %lld نسخ أخرى مطابقة</string>
+			<key>many</key>
+			<string>عُثر على %lld نسخةً أخرى مطابقة</string>
+			<key>other</key>
+			<string>عُثر على %lld نسخة أخرى مطابقة</string>
+		</dict>
+	</dict>
+	<key>%lld tools</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld أداة</string>
+			<key>one</key>
+			<string>%lld أداة</string>
+			<key>two</key>
+			<string>%lld أداتان</string>
+			<key>few</key>
+			<string>%lld أدوات</string>
+			<key>many</key>
+			<string>%lld أداةً</string>
+			<key>other</key>
+			<string>%lld أداة</string>
+		</dict>
+	</dict>
+	<key>Moved %lld items to Trash, about %@. Empty the trash to reclaim the space.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>نُقل %lld عنصر إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+			<key>one</key>
+			<string>نُقل %lld عنصر إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+			<key>two</key>
+			<string>نُقل %lld عنصران إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+			<key>few</key>
+			<string>نُقل %lld عناصر إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+			<key>many</key>
+			<string>نُقل %lld عنصرًا إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+			<key>other</key>
+			<string>نُقل %lld عنصر إلى سلة المهملات، بحجم %@ تقريبًا. أفرغ سلة المهملات لاستعادة المساحة.</string>
+		</dict>
+	</dict>
+	<key>%lld of %lld groups</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%lld من %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld مجموعة</string>
+			<key>one</key>
+			<string>%lld مجموعة</string>
+			<key>two</key>
+			<string>%lld مجموعتين</string>
+			<key>few</key>
+			<string>%lld مجموعات</string>
+			<key>many</key>
+			<string>%lld مجموعةً</string>
+			<key>other</key>
+			<string>%lld مجموعة</string>
+		</dict>
+	</dict>
+	<key>%lld items couldn't be cleaned</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>تعذّر تنظيف %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>%lld other selected files can't be kept only in iCloud right now, so they stay.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>يتعذّر الآن إبقاء %lld ملف آخر محدد في iCloud فقط، لذا ستبقى.</string>
+			<key>one</key>
+			<string>يتعذّر الآن إبقاء %lld ملف آخر محدد في iCloud فقط، لذا سيبقى.</string>
+			<key>two</key>
+			<string>يتعذّر الآن إبقاء %lld ملفين آخرين محددين في iCloud فقط، لذا سيبقيان.</string>
+			<key>few</key>
+			<string>يتعذّر الآن إبقاء %lld ملفات أخرى محددة في iCloud فقط، لذا ستبقى.</string>
+			<key>many</key>
+			<string>يتعذّر الآن إبقاء %lld ملفًا آخر محددًا في iCloud فقط، لذا ستبقى.</string>
+			<key>other</key>
+			<string>يتعذّر الآن إبقاء %lld ملف آخر محدد في iCloud فقط، لذا ستبقى.</string>
+		</dict>
+	</dict>
+	<key>%lld files, still in iCloud Drive</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف، لا تزال في iCloud Drive</string>
+			<key>one</key>
+			<string>%lld ملف، لا يزال في iCloud Drive</string>
+			<key>two</key>
+			<string>%lld ملفان، لا يزالان في iCloud Drive</string>
+			<key>few</key>
+			<string>%lld ملفات، لا تزال في iCloud Drive</string>
+			<key>many</key>
+			<string>%lld ملفًا، لا تزال في iCloud Drive</string>
+			<key>other</key>
+			<string>%lld ملف، لا تزال في iCloud Drive</string>
+		</dict>
+	</dict>
+	<key>%lld identical copies</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld نسخة متطابقة</string>
+			<key>one</key>
+			<string>%lld نسخة متطابقة</string>
+			<key>two</key>
+			<string>%lld نسختان متطابقتان</string>
+			<key>few</key>
+			<string>%lld نسخ متطابقة</string>
+			<key>many</key>
+			<string>%lld نسخةً متطابقة</string>
+			<key>other</key>
+			<string>%lld نسخة متطابقة</string>
+		</dict>
+	</dict>
+	<key>%lld other files are still selected.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>لا يزال %lld ملف آخر محددًا.</string>
+			<key>one</key>
+			<string>لا يزال %lld ملف آخر محددًا.</string>
+			<key>two</key>
+			<string>لا يزال %lld ملفان آخران محددين.</string>
+			<key>few</key>
+			<string>لا تزال %lld ملفات أخرى محددة.</string>
+			<key>many</key>
+			<string>لا يزال %lld ملفًا آخر محددًا.</string>
+			<key>other</key>
+			<string>لا يزال %lld ملف آخر محددًا.</string>
+		</dict>
+	</dict>
+	<key>Last used %lld months ago. %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>آخر استخدام قبل %#@n@. %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld شهر</string>
+			<key>one</key>
+			<string>%lld شهر</string>
+			<key>two</key>
+			<string>%lld شهرين</string>
+			<key>few</key>
+			<string>%lld أشهر</string>
+			<key>many</key>
+			<string>%lld شهرًا</string>
+			<key>other</key>
+			<string>%lld شهر</string>
+		</dict>
+	</dict>
+	<key>Keep %lld files only in iCloud?</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>هل تريد إبقاء %#@n@ في iCloud فقط؟</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفين</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>%lld commands</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld أمر</string>
+			<key>one</key>
+			<string>%lld أمر</string>
+			<key>two</key>
+			<string>%lld أمران</string>
+			<key>few</key>
+			<string>%lld أوامر</string>
+			<key>many</key>
+			<string>%lld أمرًا</string>
+			<key>other</key>
+			<string>%lld أمر</string>
+		</dict>
+	</dict>
+	<key>%lld not opened in 90 days</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر لم يُفتح منذ 90 يومًا</string>
+			<key>one</key>
+			<string>%lld عنصر لم يُفتح منذ 90 يومًا</string>
+			<key>two</key>
+			<string>%lld عنصران لم يُفتحا منذ 90 يومًا</string>
+			<key>few</key>
+			<string>%lld عناصر لم تُفتح منذ 90 يومًا</string>
+			<key>many</key>
+			<string>%lld عنصرًا لم يُفتح منذ 90 يومًا</string>
+			<key>other</key>
+			<string>%lld عنصر لم يُفتح منذ 90 يومًا</string>
+		</dict>
+	</dict>
+	<key>%lld runtimes</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld بيئة تشغيل</string>
+			<key>one</key>
+			<string>%lld بيئة تشغيل</string>
+			<key>two</key>
+			<string>%lld بيئتا تشغيل</string>
+			<key>few</key>
+			<string>%lld بيئات تشغيل</string>
+			<key>many</key>
+			<string>%lld بيئة تشغيل</string>
+			<key>other</key>
+			<string>%lld بيئة تشغيل</string>
+		</dict>
+	</dict>
+	<key>%lld files kept only in iCloud</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف مُبقى في iCloud فقط</string>
+			<key>one</key>
+			<string>%lld ملف مُبقى في iCloud فقط</string>
+			<key>two</key>
+			<string>%lld ملفان مُبقيان في iCloud فقط</string>
+			<key>few</key>
+			<string>%lld ملفات مُبقاة في iCloud فقط</string>
+			<key>many</key>
+			<string>%lld ملفًا مُبقى في iCloud فقط</string>
+			<key>other</key>
+			<string>%lld ملف مُبقى في iCloud فقط</string>
+		</dict>
+	</dict>
+	<key>%@, %lld apps</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@، %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld تطبيق</string>
+			<key>one</key>
+			<string>%lld تطبيق</string>
+			<key>two</key>
+			<string>%lld تطبيقان</string>
+			<key>few</key>
+			<string>%lld تطبيقات</string>
+			<key>many</key>
+			<string>%lld تطبيقًا</string>
+			<key>other</key>
+			<string>%lld تطبيق</string>
+		</dict>
+	</dict>
+	<key>%lld of %lld items cleaned</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>نُظّف %lld من %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>Last scan: %lld files, %@, %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>آخر فحص: %#@n@، %@، %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفان</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>from %lld folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>من %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld مجلد</string>
+			<key>one</key>
+			<string>%lld مجلد</string>
+			<key>two</key>
+			<string>%lld مجلدين</string>
+			<key>few</key>
+			<string>%lld مجلدات</string>
+			<key>many</key>
+			<string>%lld مجلدًا</string>
+			<key>other</key>
+			<string>%lld مجلد</string>
+		</dict>
+	</dict>
+	<key>%lld bytes</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld بايت</string>
+			<key>one</key>
+			<string>%lld بايت</string>
+			<key>two</key>
+			<string>%lld بايت</string>
+			<key>few</key>
+			<string>%lld بايت</string>
+			<key>many</key>
+			<string>%lld بايت</string>
+			<key>other</key>
+			<string>%lld بايت</string>
+		</dict>
+	</dict>
+	<key>%lld other selected files aren't in iCloud, so they stay.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف آخر محدد ليس في iCloud، لذا ستبقى.</string>
+			<key>one</key>
+			<string>%lld ملف آخر محدد ليس في iCloud، لذا سيبقى.</string>
+			<key>two</key>
+			<string>%lld ملفان آخران محددان ليسا في iCloud، لذا سيبقيان.</string>
+			<key>few</key>
+			<string>%lld ملفات أخرى محددة ليست في iCloud، لذا ستبقى.</string>
+			<key>many</key>
+			<string>%lld ملفًا آخر محددًا ليس في iCloud، لذا ستبقى.</string>
+			<key>other</key>
+			<string>%lld ملف آخر محدد ليس في iCloud، لذا ستبقى.</string>
+		</dict>
+	</dict>
+	<key>%lld model sets</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld مجموعة نماذج</string>
+			<key>one</key>
+			<string>%lld مجموعة نماذج</string>
+			<key>two</key>
+			<string>%lld مجموعتا نماذج</string>
+			<key>few</key>
+			<string>%lld مجموعات نماذج</string>
+			<key>many</key>
+			<string>%lld مجموعة نماذج</string>
+			<key>other</key>
+			<string>%lld مجموعة نماذج</string>
+		</dict>
+	</dict>
+	<key>%lld of these files sync with iCloud, so they also leave your other devices.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>تتم مزامنة %lld ملف من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+			<key>one</key>
+			<string>تتم مزامنة %lld ملف من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+			<key>two</key>
+			<string>تتم مزامنة %lld ملفين من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+			<key>few</key>
+			<string>تتم مزامنة %lld ملفات من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+			<key>many</key>
+			<string>تتم مزامنة %lld ملفًا من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+			<key>other</key>
+			<string>تتم مزامنة %lld ملف من هذه الملفات مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+		</dict>
+	</dict>
+	<key>%lld folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld مجلد</string>
+			<key>one</key>
+			<string>%lld مجلد</string>
+			<key>two</key>
+			<string>%lld مجلدان</string>
+			<key>few</key>
+			<string>%lld مجلدات</string>
+			<key>many</key>
+			<string>%lld مجلدًا</string>
+			<key>other</key>
+			<string>%lld مجلد</string>
+		</dict>
+	</dict>
+	<key>%lld apps · %lld selected</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ · %lld محدد</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld تطبيق</string>
+			<key>one</key>
+			<string>%lld تطبيق</string>
+			<key>two</key>
+			<string>%lld تطبيقان</string>
+			<key>few</key>
+			<string>%lld تطبيقات</string>
+			<key>many</key>
+			<string>%lld تطبيقًا</string>
+			<key>other</key>
+			<string>%lld تطبيق</string>
+		</dict>
+	</dict>
+	<key>%@, %lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@، %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصران</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>Clean %lld Items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>تنظيف %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>%lld files · %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ · %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفان</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@: %lld ليست في iCloud، و%lld يتعذّر الآن إبقاؤها هناك فقط.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>ستبقى %lld ملف آخر محدد</string>
+			<key>one</key>
+			<string>سيبقى %lld ملف آخر محدد</string>
+			<key>two</key>
+			<string>سيبقى %lld ملفان آخران محددان</string>
+			<key>few</key>
+			<string>ستبقى %lld ملفات أخرى محددة</string>
+			<key>many</key>
+			<string>ستبقى %lld ملفًا آخر محددًا</string>
+			<key>other</key>
+			<string>ستبقى %lld ملف آخر محدد</string>
+		</dict>
+	</dict>
+	<key>%lld files in this scan have identical contents, including this one.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>في هذا الفحص %#@n@ بالمحتوى نفسه، ومنها هذا الملف.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفان</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>You're deleting all %lld copies of %@. No copy will remain.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>أنت تحذف %#@n@ من %@، أي كل النسخ. لن تبقى أي نسخة.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld نسخة</string>
+			<key>one</key>
+			<string>%lld نسخة</string>
+			<key>two</key>
+			<string>%lld نسختين</string>
+			<key>few</key>
+			<string>%lld نسخ</string>
+			<key>many</key>
+			<string>%lld نسخةً</string>
+			<key>other</key>
+			<string>%lld نسخة</string>
+		</dict>
+	</dict>
+	<key>You picked %lld of %lld apps in %@. Removing only some of them can stop its own uninstaller from removing the rest.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>اخترت %lld من %#@n@ في %@. إزالة بعضها فقط قد تمنع أداة إلغاء التثبيت الخاصة بها من إزالة البقية.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld تطبيق</string>
+			<key>one</key>
+			<string>%lld تطبيق</string>
+			<key>two</key>
+			<string>%lld تطبيقين</string>
+			<key>few</key>
+			<string>%lld تطبيقات</string>
+			<key>many</key>
+			<string>%lld تطبيقًا</string>
+			<key>other</key>
+			<string>%lld تطبيق</string>
+		</dict>
+	</dict>
+	<key>Last scan found %lld files, %@, %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>وجد آخر فحص %#@n@، %@، %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفين</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>%lld seconds</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ثانية</string>
+			<key>one</key>
+			<string>%lld ثانية</string>
+			<key>two</key>
+			<string>%lld ثانيتان</string>
+			<key>few</key>
+			<string>%lld ثوانٍ</string>
+			<key>many</key>
+			<string>%lld ثانيةً</string>
+			<key>other</key>
+			<string>%lld ثانية</string>
+		</dict>
+	</dict>
+	<key>%lld files</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفان</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>Remove %lld apps</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>إزالة %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld تطبيق</string>
+			<key>one</key>
+			<string>%lld تطبيق</string>
+			<key>two</key>
+			<string>%lld تطبيقين</string>
+			<key>few</key>
+			<string>%lld تطبيقات</string>
+			<key>many</key>
+			<string>%lld تطبيقًا</string>
+			<key>other</key>
+			<string>%lld تطبيق</string>
+		</dict>
+	</dict>
+	<key>%lld simulators use it. %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>يستخدمه %lld جهاز محاكاة.</string>
+			<key>one</key>
+			<string>يستخدمه %lld جهاز محاكاة.</string>
+			<key>two</key>
+			<string>يستخدمه %lld جهازا محاكاة.</string>
+			<key>few</key>
+			<string>يستخدمه %lld أجهزة محاكاة.</string>
+			<key>many</key>
+			<string>يستخدمه %lld جهاز محاكاة.</string>
+			<key>other</key>
+			<string>يستخدمه %lld جهاز محاكاة.</string>
+		</dict>
+	</dict>
+	<key>%lld items couldn't be removed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>تعذّرت إزالة %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>Purge kept %lld items to stay on the safe side.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>أبقى Purge على %#@n@ احتياطًا للأمان.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>All %lld files sync with iCloud, so they also leave your other devices.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>تتم مزامنة كل الملفات (%#@n@) مع iCloud، لذا ستُزال من أجهزتك الأخرى أيضًا.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld ملف</string>
+			<key>one</key>
+			<string>%lld ملف</string>
+			<key>two</key>
+			<string>%lld ملفان</string>
+			<key>few</key>
+			<string>%lld ملفات</string>
+			<key>many</key>
+			<string>%lld ملفًا</string>
+			<key>other</key>
+			<string>%lld ملف</string>
+		</dict>
+	</dict>
+	<key>Remove %lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>إزالة %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>%lld percent</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld بالمئة</string>
+			<key>one</key>
+			<string>%lld بالمئة</string>
+			<key>two</key>
+			<string>%lld بالمئة</string>
+			<key>few</key>
+			<string>%lld بالمئة</string>
+			<key>many</key>
+			<string>%lld بالمئة</string>
+			<key>other</key>
+			<string>%lld بالمئة</string>
+		</dict>
+	</dict>
+	<key>Uninstall %lld apps?</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>هل تريد إلغاء تثبيت %#@n@؟</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld تطبيق</string>
+			<key>one</key>
+			<string>%lld تطبيق</string>
+			<key>two</key>
+			<string>%lld تطبيقين</string>
+			<key>few</key>
+			<string>%lld تطبيقات</string>
+			<key>many</key>
+			<string>%lld تطبيقًا</string>
+			<key>other</key>
+			<string>%lld تطبيق</string>
+		</dict>
+	</dict>
+	<key>Remove %lld command-line tools?</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>هل تريد إزالة %#@n@؟</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld أداة لسطر الأوامر</string>
+			<key>one</key>
+			<string>%lld أداة لسطر الأوامر</string>
+			<key>two</key>
+			<string>%lld أداتين لسطر الأوامر</string>
+			<key>few</key>
+			<string>%lld أدوات لسطر الأوامر</string>
+			<key>many</key>
+			<string>%lld أداةً لسطر الأوامر</string>
+			<key>other</key>
+			<string>%lld أداة لسطر الأوامر</string>
+		</dict>
+	</dict>
+	<key> %lld items couldn't be moved.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string> تعذّر نقل %#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+	<key>…and %lld more sets where every copy is selected.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>…و%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld مجموعة أخرى حُددت فيها كل النسخ.</string>
+			<key>one</key>
+			<string>%lld مجموعة أخرى حُددت فيها كل النسخ.</string>
+			<key>two</key>
+			<string>%lld مجموعتان أخريان حُددت فيهما كل النسخ.</string>
+			<key>few</key>
+			<string>%lld مجموعات أخرى حُددت فيها كل النسخ.</string>
+			<key>many</key>
+			<string>%lld مجموعةً أخرى حُددت فيها كل النسخ.</string>
+			<key>other</key>
+			<string>%lld مجموعة أخرى حُددت فيها كل النسخ.</string>
+		</dict>
+	</dict>
+	<key>%lld smaller folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld مجلد أصغر</string>
+			<key>one</key>
+			<string>%lld مجلد أصغر</string>
+			<key>two</key>
+			<string>%lld مجلدان أصغر</string>
+			<key>few</key>
+			<string>%lld مجلدات أصغر</string>
+			<key>many</key>
+			<string>%lld مجلدًا أصغر</string>
+			<key>other</key>
+			<string>%lld مجلد أصغر</string>
+		</dict>
+	</dict>
+	<key>%lld not removed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر لم يُزَل</string>
+			<key>one</key>
+			<string>%lld عنصر لم يُزَل</string>
+			<key>two</key>
+			<string>%lld عنصران لم يُزالا</string>
+			<key>few</key>
+			<string>%lld عناصر لم تُزَل</string>
+			<key>many</key>
+			<string>%lld عنصرًا لم يُزَل</string>
+			<key>other</key>
+			<string>%lld عنصر لم يُزَل</string>
+		</dict>
+	</dict>
+	<key>%lld deleted permanently</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر حُذف نهائيًا</string>
+			<key>one</key>
+			<string>%lld عنصر حُذف نهائيًا</string>
+			<key>two</key>
+			<string>%lld عنصران حُذفا نهائيًا</string>
+			<key>few</key>
+			<string>%lld عناصر حُذفت نهائيًا</string>
+			<key>many</key>
+			<string>%lld عنصرًا حُذف نهائيًا</string>
+			<key>other</key>
+			<string>%lld عنصر حُذف نهائيًا</string>
+		</dict>
+	</dict>
+	<key>%lld moved to trash, %lld deleted permanently</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@a@، %#@b@</string>
+		<key>a</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر نُقل إلى سلة المهملات</string>
+			<key>one</key>
+			<string>%lld عنصر نُقل إلى سلة المهملات</string>
+			<key>two</key>
+			<string>%lld عنصران نُقلا إلى سلة المهملات</string>
+			<key>few</key>
+			<string>%lld عناصر نُقلت إلى سلة المهملات</string>
+			<key>many</key>
+			<string>%lld عنصرًا نُقل إلى سلة المهملات</string>
+			<key>other</key>
+			<string>%lld عنصر نُقل إلى سلة المهملات</string>
+		</dict>
+		<key>b</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر حُذف نهائيًا</string>
+			<key>one</key>
+			<string>%lld عنصر حُذف نهائيًا</string>
+			<key>two</key>
+			<string>%lld عنصران حُذفا نهائيًا</string>
+			<key>few</key>
+			<string>%lld عناصر حُذفت نهائيًا</string>
+			<key>many</key>
+			<string>%lld عنصرًا حُذف نهائيًا</string>
+			<key>other</key>
+			<string>%lld عنصر حُذف نهائيًا</string>
+		</dict>
+	</dict>
+	<key>Every %lld days</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>كل %lld يوم</string>
+			<key>one</key>
+			<string>كل %lld يوم</string>
+			<key>two</key>
+			<string>كل %lld يومين</string>
+			<key>few</key>
+			<string>كل %lld أيام</string>
+			<key>many</key>
+			<string>كل %lld يومًا</string>
+			<key>other</key>
+			<string>كل %lld يوم</string>
+		</dict>
+	</dict>
+	<key>Every %lld months</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>كل %lld شهر</string>
+			<key>one</key>
+			<string>كل %lld شهر</string>
+			<key>two</key>
+			<string>كل %lld شهرين</string>
+			<key>few</key>
+			<string>كل %lld أشهر</string>
+			<key>many</key>
+			<string>كل %lld شهرًا</string>
+			<key>other</key>
+			<string>كل %lld شهر</string>
+		</dict>
+	</dict>
+	<key>Every %lld weeks</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>كل %lld أسبوع</string>
+			<key>one</key>
+			<string>كل %lld أسبوع</string>
+			<key>two</key>
+			<string>كل %lld أسبوعين</string>
+			<key>few</key>
+			<string>كل %lld أسابيع</string>
+			<key>many</key>
+			<string>كل %lld أسبوعًا</string>
+			<key>other</key>
+			<string>كل %lld أسبوع</string>
+		</dict>
+	</dict>
+	<key>Retry %lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>إعادة المحاولة لـ %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>zero</key>
+			<string>%lld عنصر</string>
+			<key>one</key>
+			<string>%lld عنصر</string>
+			<key>two</key>
+			<string>%lld عنصرين</string>
+			<key>few</key>
+			<string>%lld عناصر</string>
+			<key>many</key>
+			<string>%lld عنصرًا</string>
+			<key>other</key>
+			<string>%lld عنصر</string>
+		</dict>
+	</dict>
+</dict>
+</plist>
