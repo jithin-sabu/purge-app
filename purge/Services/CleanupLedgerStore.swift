@@ -1,7 +1,7 @@
 import Foundation
 
 /// The permanent record of every clean, one JSON line per clean in a file per
-/// calendar year (`ledger/2026.jsonl`).
+/// Gregorian year (`ledger/2026.jsonl`), whatever calendar the Mac is set to.
 ///
 /// `CleanupHistoryStore` keeps only the last 100 cleans, which can be a few weeks
 /// for a heavy user, so it cannot answer "what did this year add up to". The
@@ -31,12 +31,14 @@ final class CleanupLedgerStore {
     init(
         directory: URL,
         homePath: String = FileManager.default.homeDirectoryForCurrentUser.path,
-        calendar: Calendar = .current,
+        calendar userCalendar: Calendar = .current,
         resolveBundleID: @escaping @Sendable (String) -> String? = { appDisplayName(forBundleID: $0) }
     ) {
         self.directory = directory
         self.homePath = homePath
-        self.calendar = calendar
+        // Never `Calendar.current`: on the Islamic calendar that named the file
+        // `1448.jsonl` and imported all of History into it a second time (#461).
+        self.calendar = CleanupLedgerCalendar.gregorian(from: userCalendar)
         self.resolveBundleID = resolveBundleID
     }
 
@@ -98,11 +100,12 @@ final class CleanupLedgerStore {
         var now = Date()
     }
 
-    /// Run at every launch. The first time, saves the baseline. Every time, copies
-    /// in History cleans the ledger lacks: all of them on first run, and after
-    /// that only cleans an older version made following a downgrade, or a ledger
-    /// write that failed. History lines share their id with the ledger, so nothing
-    /// is counted twice. Reading and naming run off the main thread.
+    /// Run at every launch. The first time, saves the baseline. Every time, moves
+    /// cleans out of files an older build named by the Mac's own calendar, then
+    /// copies in History cleans the ledger lacks: all of them on first run, and
+    /// after that only cleans an older version made following a downgrade, or a
+    /// ledger write that failed. History lines share their id with the ledger, so
+    /// nothing is counted twice. Reading and naming run off the main thread.
     @discardableResult
     func reconcile(with legacy: LegacyRecord) -> Task<Void, Never> {
         captureBaselineIfNeeded(legacy)
@@ -116,10 +119,21 @@ final class CleanupLedgerStore {
         let startGeneration = generation
         let task = Task { [weak self] in
             await previous?.value
+            let strays = await Self.strayFiles(in: directory, calendar: calendar)
+            guard let self, self.generation == startGeneration else { return }
+            if !strays.files.isEmpty {
+                self.append(strays.missing)
+                let merged = await Self.filesFullyMerged(strays.files, directory: directory, calendar: calendar)
+                guard self.generation == startGeneration else { return }
+                for file in merged {
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
+
             let missing = await Self.sessionsMissing(
                 from: snapshot, directory: directory, calendar: calendar, homePath: homePath, resolve: resolve
             )
-            guard let self, self.generation == startGeneration else { return }
+            guard self.generation == startGeneration else { return }
             self.append(missing)
         }
         pendingReconcile = task
@@ -241,11 +255,7 @@ final class CleanupLedgerStore {
         let candidates = snapshot.filter { $0.belongsInLedger && !$0.items.isEmpty }
         guard !candidates.isEmpty else { return [] }
 
-        let years = Set(candidates.flatMap { entry -> [Int] in
-            let year = calendar.component(.year, from: entry.date)
-            return [year - 1, year, year + 1]
-        })
-        let known = Set(years.flatMap { loadSessions(fileURL(forYear: $0, in: directory)) }.map(\.id))
+        let known = Set(gregorianSessions(near: candidates.map(\.date), directory: directory, calendar: calendar).map(\.id))
 
         // One lookup per bundle ID: History repeats the same folders clean after clean.
         var names: [String: String?] = [:]
@@ -260,6 +270,104 @@ final class CleanupLedgerStore {
             .filter { !known.contains($0.id) }
             .sorted { $0.date < $1.date }
             .map { importedSession($0, homePath: homePath, resolve: cachedResolve) }
+    }
+
+    /// Every line in the year files that could hold a clean dated `dates`: each
+    /// date's year and the years either side, for time-zone changes.
+    nonisolated private static func gregorianSessions(
+        near dates: [Date],
+        directory: URL,
+        calendar: Calendar
+    ) -> [CleanupLedgerSession] {
+        let years = Set(dates.flatMap { date -> [Int] in
+            let year = calendar.component(.year, from: date)
+            return [year - 1, year, year + 1]
+        })
+        return years.flatMap { loadSessions(fileURL(forYear: $0, in: directory)) }
+    }
+
+    // MARK: - Files named by another calendar
+
+    /// Builds before #461 named each file by the Mac's own calendar year, so a
+    /// Mac on the Islamic calendar wrote `1447.jsonl` and `1448.jsonl`, and one
+    /// on the Buddhist calendar `2569.jsonl`. Those files are never read, and for
+    /// such a user they hold every clean since the ledger shipped.
+    ///
+    /// A file is stray when every clean in it falls more than a year from its
+    /// name in the Gregorian calendar. Within a year is a time-zone change, which
+    /// `loadYear` already reads across, so those files are left alone. `missing`
+    /// is the stray cleans the Gregorian files lack, once each: the same History
+    /// import can sit in two stray files. A History import in a Gregorian file
+    /// does not stand in for a clean's own line, so that line is still copied.
+    @concurrent
+    nonisolated private static func strayFiles(
+        in directory: URL,
+        calendar: Calendar
+    ) async -> (files: [StrayFile], missing: [CleanupLedgerSession]) {
+        let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        var files: [StrayFile] = []
+        var strays: [CleanupLedgerSession] = []
+        for url in urls where url.pathExtension == "jsonl" {
+            guard let namedYear = Int(url.deletingPathExtension().lastPathComponent) else { continue }
+            let sessions = loadSessions(url)
+            let isStray = !sessions.isEmpty && sessions.allSatisfy {
+                abs(calendar.component(.year, from: $0.date) - namedYear) > 1
+            }
+            guard isStray else { continue }
+            files.append(StrayFile(url: url, sessions: sessions))
+            strays.append(contentsOf: sessions)
+        }
+        guard !files.isEmpty else { return ([], []) }
+
+        let held = heldIDs(gregorianSessions(near: strays.map(\.date), directory: directory, calendar: calendar))
+        let missing = CleanupLedgerSession.onePerClean(strays)
+            .filter { !isHeld($0, by: held) }
+            .sorted { $0.date < $1.date }
+        return (files, missing)
+    }
+
+    /// A stray file and the cleans read from it when it was found.
+    nonisolated struct StrayFile: Sendable {
+        let url: URL
+        let sessions: [CleanupLedgerSession]
+    }
+
+    /// The stray files that can go. Every clean read when the file was found is
+    /// now in a Gregorian file, and so is every clean in it now: the file is read
+    /// again, must read in full, and every line in it must decode. A file with a
+    /// line this build cannot read, a clean that did not land, or a read that
+    /// fails stays for the next launch.
+    @concurrent
+    nonisolated private static func filesFullyMerged(
+        _ files: [StrayFile],
+        directory: URL,
+        calendar: Calendar
+    ) async -> [URL] {
+        files.compactMap { file in
+            guard let data = try? Data(contentsOf: file.url) else { return nil }
+            let current = loadSessions(file.url)
+            guard data.split(separator: UInt8(ascii: "\n")).count == current.count else { return nil }
+            let sessions = file.sessions + current
+            let held = heldIDs(gregorianSessions(near: sessions.map(\.date), directory: directory, calendar: calendar))
+            return sessions.allSatisfy { isHeld($0, by: held) } ? file.url : nil
+        }
+    }
+
+    /// For each id in `lines`, whether any of its lines is the clean's own rather
+    /// than a History import.
+    nonisolated private static func heldIDs(_ lines: [CleanupLedgerSession]) -> [UUID: Bool] {
+        var held: [UUID: Bool] = [:]
+        for line in lines {
+            held[line.id] = (held[line.id] ?? false) || !line.importedFromHistory
+        }
+        return held
+    }
+
+    /// Whether the Gregorian files hold `session` as fully as the stray line
+    /// does. Only the clean's own line stands in for an own line.
+    nonisolated private static func isHeld(_ session: CleanupLedgerSession, by held: [UUID: Bool]) -> Bool {
+        guard let hasOwnLine = held[session.id] else { return false }
+        return hasOwnLine || session.importedFromHistory
     }
 
     nonisolated private static func importedSession(
@@ -339,10 +447,11 @@ final class CleanupLedgerStore {
     }
 
     nonisolated private static func loadYear(_ year: Int, directory: URL, calendar: Calendar) -> [CleanupLedgerSession] {
-        var seen = Set<UUID>()
-        return [year - 1, year, year + 1]
-            .flatMap { loadSessions(fileURL(forYear: $0, in: directory)) }
-            .filter { calendar.component(.year, from: $0.date) == year && seen.insert($0.id).inserted }
+        CleanupLedgerSession.onePerClean(
+            [year - 1, year, year + 1]
+                .flatMap { loadSessions(fileURL(forYear: $0, in: directory)) }
+                .filter { calendar.component(.year, from: $0.date) == year }
+        )
     }
 
     nonisolated private static func loadSessions(_ url: URL) -> [CleanupLedgerSession] {
