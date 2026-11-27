@@ -7,9 +7,11 @@ import Testing
 struct CleanupLedgerTests {
     private static let home = "/Users/me"
 
+    private static let utcZone = TimeZone(identifier: "UTC")!
+
     private static var utc: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
+        calendar.timeZone = utcZone
         return calendar
     }
 
@@ -21,7 +23,7 @@ struct CleanupLedgerTests {
         CleanupLedgerStore(
             directory: directory,
             homePath: home,
-            calendar: utc,
+            timeZone: utcZone,
             resolveBundleID: { ["company.thebrowser.dia": "Dia", "ru.keepcoder.Telegram": "Telegram"][$0] }
         )
     }
@@ -393,6 +395,140 @@ struct CleanupLedgerTests {
 
     /// A user who skips every ledger release until a recap in 2027: untracked
     /// bytes span the new year, so they are split by days and marked an estimate.
+    // MARK: - Gregorian years (#461)
+
+    private static func ledgerSession(id: UUID = UUID(), _ date: Date, bytes: Int64 = 10) -> CleanupLedgerSession {
+        CleanupLedgerSession(
+            id: id,
+            date: date,
+            trigger: .manual,
+            source: .clean,
+            bytesMovedToTrash: bytes,
+            bytesRemovedDirectly: 0,
+            bytesReclaimedOnVolume: nil,
+            skippedForSafetyCount: 0,
+            failedCount: 0,
+            importedFromHistory: false,
+            items: [CleanupLedgerItem(path: "~/.npm", bytes: bytes, label: "npm", movedToTrash: true)]
+        )
+    }
+
+    /// Writes ledger lines the way an older build did, under any file name.
+    private static func writeLedgerFile(_ name: String, _ sessions: [CleanupLedgerSession], in directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var data = Data()
+        for session in sessions {
+            data.append(try encoder.encode(session))
+            data.append(UInt8(ascii: "\n"))
+        }
+        try data.write(to: directory.appendingPathComponent(name))
+    }
+
+    private static func jsonlFiles(in directory: URL) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
+            .filter { $0.hasSuffix(".jsonl") }
+            .sorted()
+    }
+
+    /// A Mac on the Islamic calendar wrote `1447.jsonl` and `1448.jsonl` before
+    /// #461, and copied History into them. Launch moves every clean into the
+    /// Gregorian file once, then removes the stray files.
+    @Test
+    func strayCalendarFilesMergeIntoTheirGregorianYear() async throws {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let inBoth = UUID()
+        let inHistory = UUID()
+        let onlyInLedger = UUID()
+        try Self.writeLedgerFile("1447.jsonl", [
+            Self.ledgerSession(id: inBoth, Self.date(2026, 5, 20)),
+            Self.ledgerSession(id: onlyInLedger, Self.date(2026, 6, 1), bytes: 30),
+        ], in: directory)
+        try Self.writeLedgerFile("1448.jsonl", [
+            Self.ledgerSession(id: inBoth, Self.date(2026, 5, 20)),
+            Self.ledgerSession(id: inHistory, Self.date(2026, 7, 1), bytes: 20),
+        ], in: directory)
+
+        let store = Self.makeStore(directory)
+        let history = [Self.historyEntry(id: inHistory, Self.date(2026, 7, 1), [("/Users/me/.npm", 20)])]
+        await store.reconcile(with: Self.legacy(history, lifetime: 60)).value
+
+        #expect(Self.jsonlFiles(in: directory) == ["2026.jsonl"])
+        let ids = store.sessions(inYear: 2026).map(\.id)
+        #expect(ids.count == 3)
+        #expect(Set(ids) == [inBoth, inHistory, onlyInLedger])
+        // The History clean kept the ledger's own line, not a second import.
+        #expect(store.sessions(inYear: 2026).allSatisfy { !$0.importedFromHistory })
+
+        await store.reconcile(with: Self.legacy(history, lifetime: 60)).value
+        #expect(store.sessions(inYear: 2026).count == 3)
+        #expect(await store.yearTotals(2026).bytesCleared == 60)
+    }
+
+    /// A clean filed under the next year after a time-zone change is not stray.
+    @Test
+    func neighbourYearFileIsNotStray() async throws {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Self.writeLedgerFile("2027.jsonl", [Self.ledgerSession(Self.date(2026, 12, 31))], in: directory)
+
+        let store = Self.makeStore(directory)
+        await store.reconcile(with: Self.legacy([], lifetime: 10)).value
+
+        #expect(Self.jsonlFiles(in: directory) == ["2027.jsonl"])
+        #expect(store.sessions(inYear: 2026).count == 1)
+    }
+
+    /// A file named by a year that is not ours, or that holds nothing readable,
+    /// is left alone.
+    @Test
+    func unreadableOrUnnamedFilesAreLeftAlone() async throws {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{\"id\":\"torn".utf8).write(to: directory.appendingPathComponent("1448.jsonl"))
+        try Self.writeLedgerFile("notes.jsonl", [Self.ledgerSession(Self.date(2026, 5, 1))], in: directory)
+
+        let store = Self.makeStore(directory)
+        await store.reconcile(with: Self.legacy([], lifetime: 0)).value
+
+        #expect(Self.jsonlFiles(in: directory) == ["1448.jsonl", "notes.jsonl"])
+        #expect(store.sessions(inYear: 2026).isEmpty)
+    }
+
+    /// The store's default time zone path still names the file by Gregorian year.
+    @Test
+    func defaultStoreNamesFilesByGregorianYear() {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = CleanupLedgerStore(directory: directory, homePath: Self.home)
+        let midYear = Self.date(2026, 6, 15)
+
+        store.record(
+            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 10)], on: midYear),
+            id: UUID(),
+            trigger: .manual,
+            source: .clean
+        )
+
+        #expect(Self.jsonlFiles(in: directory) == ["2026.jsonl"])
+    }
+
+    /// Mar 1 and Mar 31 2026 fall in two Islamic months (Ramadan and Shawwal);
+    /// the recap counts both in March.
+    @Test
+    func monthsAreGregorian() {
+        let sessions = [Self.ledgerSession(Self.date(2026, 3, 1)), Self.ledgerSession(Self.date(2026, 3, 31))]
+
+        let totals = CleanupYearTotals.compute(year: 2026, sessions: sessions, timeZone: Self.utcZone)
+
+        #expect(totals.bytesByMonth[2] == 20)
+        #expect(totals.activeDayCount == 2)
+    }
+
     @Test
     func untrackedBytesAcrossANewYearAreSplitByDays() {
         let baseline = CleanupLedgerBaseline(
@@ -406,8 +542,8 @@ struct CleanupLedgerTests {
             firstSeenVersion: "1.9"
         )
 
-        let in2026 = baseline.untrackedBytes(inYear: 2026, calendar: Self.utc)
-        let in2027 = baseline.untrackedBytes(inYear: 2027, calendar: Self.utc)
+        let in2026 = baseline.untrackedBytes(inYear: 2026, timeZone: Self.utcZone)
+        let in2027 = baseline.untrackedBytes(inYear: 2027, timeZone: Self.utcZone)
 
         #expect(in2026.isEstimate && in2027.isEstimate)
         #expect(abs(in2026.bytes + in2027.bytes - 1_000_000) <= 1)
@@ -480,7 +616,7 @@ struct CleanupLedgerTests {
             session(Self.date(2025, 12, 30), .clean, items: [("~/.npm", "npm", 9_999)]),
         ]
 
-        let totals = CleanupYearTotals.compute(year: 2026, sessions: sessions, calendar: Self.utc)
+        let totals = CleanupYearTotals.compute(year: 2026, sessions: sessions, timeZone: Self.utcZone)
 
         #expect(totals.cleanCount == 3)
         #expect(totals.scheduledCleanCount == 1)

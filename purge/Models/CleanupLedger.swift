@@ -1,5 +1,19 @@
 import Foundation
 
+/// The calendar every ledger year, month and day is counted in (#461).
+///
+/// Always Gregorian, whatever calendar the Mac is set to. A Mac on the Islamic,
+/// Buddhist, Japanese, Persian or Hebrew calendar would otherwise file its cleans
+/// as `1448.jsonl` or `2569.jsonl` and split the year. Only the time zone is the
+/// user's, so a clean on New Year's Eve counts on the day the user saw it.
+nonisolated enum CleanupLedgerCalendar {
+    static func gregorian(in timeZone: TimeZone = .current) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar
+    }
+}
+
 /// Which part of Purge a clean came from. Stored with every ledger session so a
 /// year's totals can be split by feature later.
 nonisolated enum CleanupSource: String, Codable, Hashable, CaseIterable {
@@ -106,7 +120,8 @@ nonisolated struct CleanupLedgerBaseline: Codable, Equatable {
     /// The untracked bytes that belong to `year`. Exact when the window sits in
     /// one year, which is always true for 2026. A window that crosses a new year
     /// is split by days and flagged as an estimate.
-    func untrackedBytes(inYear year: Int, calendar: Calendar) -> (bytes: Int64, isEstimate: Bool) {
+    func untrackedBytes(inYear year: Int, timeZone: TimeZone) -> (bytes: Int64, isEstimate: Bool) {
+        let calendar = CleanupLedgerCalendar.gregorian(in: timeZone)
         let window = untrackedWindow
         guard untrackedBytes > 0,
               let yearInterval = calendar.dateInterval(of: .year, for: calendar.date(
@@ -232,6 +247,7 @@ nonisolated struct CleanupYearTotals: Equatable {
         let bytes: Int64
     }
 
+    /// A Gregorian year, whatever calendar the Mac uses (#461).
     let year: Int
     /// The first clean on record for the year. When imported history is the
     /// oldest data, this is where the record starts, not January 1.
@@ -276,11 +292,12 @@ nonisolated struct CleanupYearTotals: Equatable {
         year: Int,
         sessions: [CleanupLedgerSession],
         baseline: CleanupLedgerBaseline? = nil,
-        calendar: Calendar = .current
+        timeZone: TimeZone = .current
     ) -> CleanupYearTotals {
+        let calendar = CleanupLedgerCalendar.gregorian(in: timeZone)
         var totals = CleanupYearTotals(year: year)
         if let baseline {
-            let untracked = baseline.untrackedBytes(inYear: year, calendar: calendar)
+            let untracked = baseline.untrackedBytes(inYear: year, timeZone: timeZone)
             totals.bytesBeforeRecord = untracked.bytes
             totals.bytesBeforeRecordIsEstimate = untracked.isEstimate
         }
