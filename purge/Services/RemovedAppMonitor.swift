@@ -797,9 +797,14 @@ final class RemovedAppMonitor: ObservableObject {
                 // Every review still waiting in the queue was withdrawn before
                 // it could show. A Purge started for them goes away again, as
                 // when the drain finds nothing; this path used to leave it
-                // running with nothing to show (#464).
+                // running with nothing to show (#464). Not while a drain is
+                // checking another record: it closes the launch itself if that
+                // one is no removal either. Not while a sheet that blocked the
+                // review is up: the window is in use, and stays as before.
                 stopWaitingForWindow()
-                closeWindowIfOpenedForReview()
+                if drainTask == nil, store?.isShowingReviewOrCleaning != true {
+                    closeWindowIfOpenedForReview()
+                }
             }
             updatePresenceWatch()
         }
