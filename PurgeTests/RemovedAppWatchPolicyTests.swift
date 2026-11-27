@@ -886,7 +886,14 @@ struct ApplicationsFolderWatcherTests {
             movedFollowWindow: .seconds(5),
             pollInterval: .milliseconds(50)
         )
-        let watcher = ApplicationsFolderWatcher(roots: [root], tracksDestinations: true, timing: timing)
+        // No real installer state: a package install running on this Mac
+        // would hold the deleted departure for `maxInstallerWait`.
+        let watcher = ApplicationsFolderWatcher(
+            roots: [root],
+            tracksDestinations: true,
+            timing: timing,
+            installerActivity: { false }
+        )
         let clock = ContinuousClock()
         var departures: [(at: ContinuousClock.Instant, departure: ApplicationsFolderWatcher.Departure)] = []
         var indexes: [ApplicationsFolderWatcher.Index] = []
@@ -1243,7 +1250,14 @@ struct ApplicationsFolderWatcherTests {
             movedFollowWindow: .seconds(2),
             pollInterval: .milliseconds(50)
         )
-        let watcher = ApplicationsFolderWatcher(roots: [root], tracksDestinations: true, timing: timing)
+        // No real installer state: a package install running on this Mac
+        // would hold the deleted departure for `maxInstallerWait`.
+        let watcher = ApplicationsFolderWatcher(
+            roots: [root],
+            tracksDestinations: true,
+            timing: timing,
+            installerActivity: { false }
+        )
         var departures: [ApplicationsFolderWatcher.Departure] = []
         var indexes: [ApplicationsFolderWatcher.Index] = []
         watcher.onDeparture = { departures.append($0) }
