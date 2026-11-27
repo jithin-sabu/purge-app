@@ -4,12 +4,14 @@ import Foundation
 ///
 /// Always Gregorian, whatever calendar the Mac is set to. A Mac on the Islamic,
 /// Buddhist, Japanese, Persian or Hebrew calendar would otherwise file its cleans
-/// as `1448.jsonl` or `2569.jsonl` and split the year. Only the time zone is the
-/// user's, so a clean on New Year's Eve counts on the day the user saw it.
+/// as `1448.jsonl` or `2569.jsonl` and split the year. Only the time zone is
+/// taken from the user's calendar, so a clean on New Year's Eve counts on the day
+/// the user saw it. Callers pass the user's calendar rather than a time zone, so
+/// tests can hand in an Islamic one and prove it is never used as is.
 nonisolated enum CleanupLedgerCalendar {
-    static func gregorian(in timeZone: TimeZone = .current) -> Calendar {
+    static func gregorian(from userCalendar: Calendar = .current) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
+        calendar.timeZone = userCalendar.timeZone
         return calendar
     }
 }
@@ -71,6 +73,26 @@ nonisolated struct CleanupLedgerSession: Codable, Identifiable, Hashable {
     let items: [CleanupLedgerItem]
 
     var bytesCleared: Int64 { bytesMovedToTrash + bytesRemovedDirectly }
+
+    /// One line per clean, in the order first seen. When a clean has both its
+    /// own line and a History import of it, the own line wins: the import has no
+    /// direct-removal bytes, a guessed source, and labels derived from paths.
+    /// Both can exist after a stray calendar-year file is merged (#461).
+    nonisolated static func onePerClean(_ sessions: [CleanupLedgerSession]) -> [CleanupLedgerSession] {
+        var result: [CleanupLedgerSession] = []
+        var indexByID: [UUID: Int] = [:]
+        for session in sessions {
+            guard let index = indexByID[session.id] else {
+                indexByID[session.id] = result.count
+                result.append(session)
+                continue
+            }
+            if result[index].importedFromHistory, !session.importedFromHistory {
+                result[index] = session
+            }
+        }
+        return result
+    }
 }
 
 // MARK: - Baseline
@@ -120,8 +142,8 @@ nonisolated struct CleanupLedgerBaseline: Codable, Equatable {
     /// The untracked bytes that belong to `year`. Exact when the window sits in
     /// one year, which is always true for 2026. A window that crosses a new year
     /// is split by days and flagged as an estimate.
-    func untrackedBytes(inYear year: Int, timeZone: TimeZone) -> (bytes: Int64, isEstimate: Bool) {
-        let calendar = CleanupLedgerCalendar.gregorian(in: timeZone)
+    func untrackedBytes(inYear year: Int, calendar userCalendar: Calendar) -> (bytes: Int64, isEstimate: Bool) {
+        let calendar = CleanupLedgerCalendar.gregorian(from: userCalendar)
         let window = untrackedWindow
         guard untrackedBytes > 0,
               let yearInterval = calendar.dateInterval(of: .year, for: calendar.date(
@@ -292,12 +314,12 @@ nonisolated struct CleanupYearTotals: Equatable {
         year: Int,
         sessions: [CleanupLedgerSession],
         baseline: CleanupLedgerBaseline? = nil,
-        timeZone: TimeZone = .current
+        calendar userCalendar: Calendar = .current
     ) -> CleanupYearTotals {
-        let calendar = CleanupLedgerCalendar.gregorian(in: timeZone)
+        let calendar = CleanupLedgerCalendar.gregorian(from: userCalendar)
         var totals = CleanupYearTotals(year: year)
         if let baseline {
-            let untracked = baseline.untrackedBytes(inYear: year, timeZone: timeZone)
+            let untracked = baseline.untrackedBytes(inYear: year, calendar: calendar)
             totals.bytesBeforeRecord = untracked.bytes
             totals.bytesBeforeRecordIsEstimate = untracked.isEstimate
         }
@@ -307,9 +329,8 @@ nonisolated struct CleanupYearTotals: Equatable {
 
         // A clean can sit in a neighbouring year's file when the time zone changed
         // since it was written, so callers pass several files. Ids keep it single.
-        var seenIDs = Set<UUID>()
-        let ordered = sessions
-            .filter { calendar.component(.year, from: $0.date) == year && seenIDs.insert($0.id).inserted }
+        let ordered = CleanupLedgerSession
+            .onePerClean(sessions.filter { calendar.component(.year, from: $0.date) == year })
             .sorted { $0.date < $1.date }
 
         for session in ordered {
