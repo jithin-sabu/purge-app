@@ -1,5 +1,6 @@
 import CoreServices
 import Foundation
+import os
 
 /// Watches the app roots for bundles leaving them (issue #65).
 ///
@@ -80,6 +81,13 @@ final class ApplicationsFolderWatcher {
     private let rootPaths: [String]
     private let tracksDestinations: Bool
     private let timing: RemovedAppWatchPolicy.FollowTiming
+    /// Whether macOS's installer is running, read on each check of a followed
+    /// departure (`RemovedAppWatchPolicy.installerIsRunning`). Tests pass their own.
+    private let installerActivity: @Sendable () -> Bool
+    /// Departures and what became of them, for the background agent only, so a
+    /// report of Purge opening by itself can be traced (#464). Identifiers are
+    /// public; paths stay private.
+    private static let log = Logger(subsystem: "io.getpurge.watch", category: "departures")
     /// The last time anything changed under the roots, for the quiet period.
     private var lastActivity = ContinuousClock.now
     /// Event-only descriptors on each indexed bundle, keyed like `index.apps`.
@@ -104,12 +112,14 @@ final class ApplicationsFolderWatcher {
     init(
         roots: [URL] = RemovedAppWatchPolicy.installedAppRoots(),
         tracksDestinations: Bool = false,
-        timing: RemovedAppWatchPolicy.FollowTiming = .standard
+        timing: RemovedAppWatchPolicy.FollowTiming = .standard,
+        installerActivity: @escaping @Sendable () -> Bool = RemovedAppWatchPolicy.installerIsRunning
     ) {
         self.roots = roots
         rootPaths = roots.map(Self.eventPath(for:))
         self.tracksDestinations = tracksDestinations
         self.timing = timing
+        self.installerActivity = installerActivity
     }
 
     /// The form FSEvents reports a root in. `realpath` rather than
@@ -394,19 +404,24 @@ final class ApplicationsFolderWatcher {
             currentPath: handle.flatMap(Self.currentPath(of:)),
             fileNumber: fileNumber
         )
+        let bundleID = app.bundleID ?? "none"
         if kind == .trashed {
+            Self.log.notice("\(bundleID, privacy: .public) went to the Trash: reported")
             handle.map { _ = close($0) }
             report(app, fileNumber: fileNumber, kind: .trashed)
             return
         }
+        Self.log.notice("\(bundleID, privacy: .public) left (\(String(describing: kind), privacy: .public)): following")
         followTasks[app.id]?.cancel()
         let current = generation
         let timing = timing
+        let installerActivity = installerActivity
         followTasks[app.id] = Task { [weak self] in
             defer { handle.map { _ = close($0) } }
             let clock = ContinuousClock()
             let departedAt = clock.now
             var deletedAt: ContinuousClock.Instant?
+            var sawInstaller = false
             while true {
                 try? await Task.sleep(for: timing.pollInterval)
                 guard !Task.isCancelled, let self, self.generation == current else { return }
@@ -416,21 +431,29 @@ final class ApplicationsFolderWatcher {
                 )
                 if kind == .deleted, deletedAt == nil { deletedAt = clock.now }
                 let now = clock.now
+                let installerActive = kind == .deleted && installerActivity()
+                if installerActive, !sawInstaller {
+                    sawInstaller = true
+                    Self.log.notice("\(bundleID, privacy: .public) deleted while an installer runs: waiting for it")
+                }
                 let decision = RemovedAppWatchPolicy.followDecision(
                     kind: kind,
                     appIsBack: self.isBack(app),
                     sinceDeparture: now - departedAt,
                     sinceDeleted: deletedAt.map { now - $0 },
                     sinceActivity: now - self.lastActivity,
+                    installerActive: installerActive,
                     timing: timing
                 )
                 switch decision {
                 case .keepFollowing:
                     continue
                 case .drop:
+                    Self.log.notice("\(bundleID, privacy: .public) dropped after \(String(describing: now - departedAt), privacy: .public): back, or only moved")
                     self.followTasks[app.id] = nil
                     return
                 case .report:
+                    Self.log.notice("\(bundleID, privacy: .public) reported (\(String(describing: kind), privacy: .public)) after \(String(describing: now - departedAt), privacy: .public), quiet for \(String(describing: now - self.lastActivity), privacy: .public)")
                     self.followTasks[app.id] = nil
                     self.report(app, fileNumber: fileNumber, kind: kind)
                     return

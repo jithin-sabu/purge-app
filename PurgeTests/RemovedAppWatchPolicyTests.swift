@@ -1,5 +1,6 @@
 import CoreServices
 import Foundation
+import os
 import ServiceManagement
 import Testing
 @testable import Purge
@@ -271,6 +272,72 @@ struct RemovedAppWatchPolicyTests {
         // The update landed or the app was put back: never reported.
         #expect(decide(.deleted, back: true, deleted: .seconds(5), activity: .seconds(5)) == .drop)
         #expect(decide(.trashed, back: true) == .drop)
+    }
+
+    /// A package update removes the old copy, then builds the new one in a
+    /// sandbox outside the roots, so the roots stay quiet. While the installer
+    /// runs, a deletion waits for it, past both the quiet period and the cap
+    /// (#464). Moves and Trash moves are not affected.
+    @Test
+    func aDeletionWaitsWhileAnInstallerRuns() {
+        let timing = RemovedAppWatchPolicy.FollowTiming.standard
+        func decide(
+            _ kind: RemovedAppWatchPolicy.DepartureKind = .deleted,
+            back: Bool = false,
+            deleted: Duration,
+            installer: Bool = true
+        ) -> RemovedAppWatchPolicy.FollowDecision {
+            RemovedAppWatchPolicy.followDecision(
+                kind: kind,
+                appIsBack: back,
+                sinceDeparture: deleted,
+                sinceDeleted: kind == .deleted ? deleted : nil,
+                sinceActivity: deleted,
+                installerActive: installer,
+                timing: timing
+            )
+        }
+        #expect(decide(deleted: .seconds(3)) == .keepFollowing)
+        #expect(decide(deleted: .seconds(45)) == .keepFollowing)
+        #expect(decide(deleted: timing.maxInstallerWait - .seconds(1)) == .keepFollowing)
+        // An installer that never finishes does not hold a removal forever.
+        #expect(decide(deleted: timing.maxInstallerWait) == .report)
+        // The installer moved the new copy in.
+        #expect(decide(back: true, deleted: .seconds(45)) == .drop)
+        // Once it ends with the app still gone (an uninstaller package), the
+        // usual rules report it.
+        #expect(decide(deleted: .seconds(45), installer: false) == .report)
+        #expect(decide(.trashed, deleted: .seconds(1)) == .report)
+        #expect(decide(.movedElsewhere, deleted: timing.movedFollowWindow) == .drop)
+    }
+
+    @Test
+    func installerSandboxesShowAnInstallUnderWay() {
+        #expect(!RemovedAppWatchPolicy.installerSandboxIsActive(entries: []))
+        #expect(!RemovedAppWatchPolicy.installerSandboxIsActive(entries: [".metadata_never_index", "Old.sandbox"]))
+        #expect(RemovedAppWatchPolicy.installerSandboxIsActive(
+            entries: ["998A1EB0-E3AF-4C9B-8B42-77A36E0FE359.activeSandbox"]
+        ))
+    }
+
+    /// Both places PackageKit builds installs: every manager folder under the
+    /// system root, and the one in the user's cache folder. A system root that
+    /// cannot be listed adds nothing.
+    @Test
+    func installerSandboxFoldersCoverTheMacAndTheUser() throws {
+        let fm = FileManager.default
+        let system = fm.temporaryDirectory.appendingPathComponent("purge-sandboxes-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: system) }
+        for name in [".PKInstallSandboxManager", ".PKInstallSandboxManager-SystemSoftware", "Unrelated"] {
+            try fm.createDirectory(at: system.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
+        let folders = RemovedAppWatchPolicy.installerSandboxFolders(systemRoot: system.path, userCacheFolder: "/var/folders/xx/C/")
+        #expect(Set(folders) == [
+            system.appendingPathComponent(".PKInstallSandboxManager").path,
+            system.appendingPathComponent(".PKInstallSandboxManager-SystemSoftware").path,
+            "/var/folders/xx/C/PKInstallSandboxManager"
+        ])
+        #expect(RemovedAppWatchPolicy.installerSandboxFolders(systemRoot: "/purge-nowhere-\(UUID().uuidString)", userCacheFolder: nil).isEmpty)
     }
 
     // MARK: Review decision
@@ -912,6 +979,81 @@ struct ApplicationsFolderWatcherTests {
         #expect(!watcher.isFollowing)
         #expect(reported("com.test.moved") == nil)
         #expect(reported("com.test.upgraded") == nil)
+    }
+
+    /// A pkg update whose preinstall removes the old copy builds the new one in
+    /// an installer sandbox outside the roots, so the roots stay quiet until it
+    /// moves in. That gap used to read as a deletion, and the agent opened Purge
+    /// for an app that was back seconds later (#464). The same deletion with no
+    /// installer running is still reported.
+    @Test(.timeLimit(.minutes(1)))
+    func anInstallerReplacingAnAppIsNotReported() async throws {
+        let root = try makeRoot()
+        defer { try? fm.removeItem(at: root) }
+        let updated = try makeBundle(in: root, name: "Updated", bundleID: "com.test.updated")
+
+        let timing = RemovedAppWatchPolicy.FollowTiming(
+            quietPeriod: .milliseconds(300),
+            maxDeletedWait: .seconds(1),
+            movedFollowWindow: .seconds(5),
+            pollInterval: .milliseconds(50)
+        )
+        let installing = OSAllocatedUnfairLock(initialState: false)
+        let watcher = ApplicationsFolderWatcher(
+            roots: [root],
+            tracksDestinations: true,
+            timing: timing,
+            installerActivity: { installing.withLock { $0 } }
+        )
+        var departures: [ApplicationsFolderWatcher.Departure] = []
+        var indexes: [ApplicationsFolderWatcher.Index] = []
+        watcher.onDeparture = { departures.append($0) }
+        watcher.onChange = { indexes.append($0) }
+        watcher.start()
+        defer { watcher.stop() }
+
+        var isLive = false
+        for attempt in 0..<20 where !isLive {
+            let probeID = "com.test.probe\(attempt)"
+            _ = try makeBundle(in: root, name: "Probe\(attempt)", bundleID: probeID)
+            for _ in 0..<25 where !isLive {
+                try await Task.sleep(nanoseconds: 20_000_000)
+                isLive = indexes.contains { $0.bundleIDs.contains(probeID) }
+            }
+        }
+        try #require(isLive)
+        #expect(indexes.last?.bundleIDs.contains("com.test.updated") == true)
+
+        // The installer starts, the old copy goes, and nothing changes in the
+        // roots for longer than both the quiet period and the cap while the new
+        // copy is extracted.
+        installing.withLock { $0 = true }
+        try fm.removeItem(at: updated)
+        for _ in 0..<250 where !watcher.isFollowing {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(watcher.isFollowing)
+        try await Task.sleep(for: .seconds(2))
+        let replacement = try makeBundle(in: root, name: "Updated", bundleID: "com.test.updated")
+        installing.withLock { $0 = false }
+        for _ in 0..<250 where watcher.isFollowing {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(!watcher.isFollowing)
+        #expect(departures.isEmpty)
+
+        // With no installer running, the same deletion is a removal. The follow
+        // ends as soon as the copy is on disk, which can be before the re-list
+        // has indexed it; a bundle never indexed cannot depart.
+        for _ in 0..<250 where indexes.last?.bundleIDs.contains("com.test.updated") != true {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        try fm.removeItem(at: replacement)
+        for _ in 0..<500 where departures.isEmpty {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(departures.map(\.app.bundleID) == ["com.test.updated"])
+        #expect(departures.first?.kind == .deleted)
     }
 
     /// A root that is moved away is noticed, and watched again when it comes

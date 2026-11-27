@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import os
 import Security
 
 /// Background agent that watches Applications folders when Purge itself is not
@@ -26,6 +27,9 @@ enum PurgeWatchMain {
     private static var replacedChecks = 0
     /// Nil while dormant.
     private static var watcher: ApplicationsFolderWatcher?
+    /// Shares its subsystem with the watcher's own lines, so one `log show`
+    /// predicate gives a departure from start to end (#464).
+    private static let log = Logger(subsystem: "io.getpurge.watch", category: "agent")
     /// The folders `watcher` was started on.
     private static var watchedRoots: [String] = []
 
@@ -57,14 +61,19 @@ enum PurgeWatchMain {
 
     private static func handle(_ departure: ApplicationsFolderWatcher.Departure) {
         guard watcher != nil else { return }
+        let id = departure.app.bundleID ?? "none"
         guard RemovedAppWatchPolicy.shouldOfferReview(
             for: departure.app,
             bundleStillExists: departure.bundleStillExists,
             installedBundleIDs: departure.installedBundleIDs,
             otherCopyExists: RemovedAppWatchPolicy.otherCopyExists(of: departure.app),
             removedByPurge: RemovedAppHandoff.isIgnored(path: departure.app.id)
-        ) else { return }
+        ) else {
+            log.notice("\(id, privacy: .public) not offered: still installed, removed by Purge, or no identifier")
+            return
+        }
         guard let bundleID = departure.app.bundleID, let appURL = containingApp() else { return }
+        log.notice("\(bundleID, privacy: .public) removed: opening Purge to review its leftovers")
 
         RemovedAppHandoff.enqueue(
             RemovedAppHandoff.Record(
@@ -121,7 +130,8 @@ enum PurgeWatchMain {
         // Dormant: its Purge is gone, and it watches nothing.
         guard let current = watcher else { return }
         guard RemovedAppWatchPolicy.installedAppRoots().map(\.path) != watchedRoots else { return }
-        // A removal being followed is reported within a minute; let it finish.
+        // A removal being followed is decided within a minute, or once an
+        // installer it waits for ends (#464); let it finish.
         guard !current.isFollowing else {
             Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { _ in
                 MainActor.assumeIsolated { appFoldersMayHaveChanged() }
@@ -191,7 +201,8 @@ enum PurgeWatchMain {
             break
         case .replaced:
             replacedChecks += 1
-            // A removal being followed is reported within a minute; wait for it.
+            // A removal being followed is decided within a minute, or once an
+            // installer it waits for ends (#464); wait for it.
             guard watcher?.isFollowing != true else { return }
             // Finder copies a bundle file by file, and launchd waits minutes
             // before retrying a start that failed on a half-copied one. A valid

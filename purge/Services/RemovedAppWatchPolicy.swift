@@ -45,6 +45,11 @@ nonisolated enum RemovedAppWatchPolicy {
         /// outside the roots being deleted, so it is polled; one `fcntl` and one
         /// `lstat` per check, only while a departure is being followed.
         var pollInterval: Duration
+        /// How long a deleted bundle waits while macOS's installer is running.
+        /// A package that removes the old copy first builds the new one in a
+        /// sandbox outside the roots, so the roots stay quiet until it moves in
+        /// (#464). Long enough for a large suite; past it, the usual rules apply.
+        var maxInstallerWait: Duration = .seconds(600)
 
         static let standard = FollowTiming(
             quietPeriod: .seconds(2),
@@ -62,13 +67,17 @@ nonisolated enum RemovedAppWatchPolicy {
 
     /// What to do with a departure that did not go straight to the Trash, at one
     /// check. `sinceDeleted` is how long the bundle has been known to be deleted
-    /// (nil while it still exists somewhere).
+    /// (nil while it still exists somewhere). `installerActive` is whether
+    /// macOS's installer is running (`installerIsRunning()`): a deletion waits
+    /// that out, since a package update removes the old copy before it moves
+    /// the new one in (#464).
     static func followDecision(
         kind: DepartureKind,
         appIsBack: Bool,
         sinceDeparture: Duration,
         sinceDeleted: Duration?,
         sinceActivity: Duration,
+        installerActive: Bool = false,
         timing: FollowTiming
     ) -> FollowDecision {
         // The update landed, or the app was put back: nothing was removed.
@@ -79,10 +88,54 @@ nonisolated enum RemovedAppWatchPolicy {
         case .movedElsewhere:
             return sinceDeparture >= timing.movedFollowWindow ? .drop : .keepFollowing
         case .deleted:
+            if installerActive, (sinceDeleted ?? .zero) < timing.maxInstallerWait { return .keepFollowing }
             if sinceActivity >= timing.quietPeriod { return .report }
             if let sinceDeleted, sinceDeleted >= timing.maxDeletedWait { return .report }
             return .keepFollowing
         }
+    }
+
+    // MARK: Installer
+
+    /// Whether a sandbox folder's entries show a package install under way.
+    /// PackageKit builds each install in a `<UUID>.activeSandbox` folder and
+    /// removes it once the payload has moved into place.
+    static func installerSandboxIsActive(entries: [String]) -> Bool {
+        entries.contains { $0.hasSuffix(".activeSandbox") }
+    }
+
+    /// The folders PackageKit keeps its install sandboxes in: every
+    /// `.PKInstallSandboxManager*` folder under `/Library/InstallerSandboxes`
+    /// for installs to the whole Mac, and `PKInstallSandboxManager` in the
+    /// user's cache folder for installs to the home folder. Both can be listed
+    /// without any privilege.
+    static func installerSandboxFolders(
+        systemRoot: String = "/Library/InstallerSandboxes",
+        userCacheFolder: String? = userCacheFolder()
+    ) -> [String] {
+        let system = ((try? FileManager.default.contentsOfDirectory(atPath: systemRoot)) ?? [])
+            .filter { $0.hasPrefix(".PKInstallSandboxManager") }
+            .map { (systemRoot as NSString).appendingPathComponent($0) }
+        let user = userCacheFolder.map { [($0 as NSString).appendingPathComponent("PKInstallSandboxManager")] } ?? []
+        return system + user
+    }
+
+    /// Whether macOS's installer is running a package install right now. A
+    /// folder that cannot be listed counts as no install, so a Mac where these
+    /// cannot be read behaves as before.
+    static func installerIsRunning() -> Bool {
+        installerSandboxFolders().contains { folder in
+            installerSandboxIsActive(entries: (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? [])
+        }
+    }
+
+    /// `DARWIN_USER_CACHE_DIR`, the per-user folder under `/var/folders`.
+    private static func userCacheFolder() -> String? {
+        let length = confstr(_CS_DARWIN_USER_CACHE_DIR, nil, 0)
+        guard length > 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: length)
+        guard confstr(_CS_DARWIN_USER_CACHE_DIR, &buffer, length) > 0 else { return nil }
+        return String(cString: buffer)
     }
 
     /// How long an unhandled removal record stays worth acting on. A record only
