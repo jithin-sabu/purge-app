@@ -30,12 +30,12 @@ nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
 }
 
 /// Decimal units with one decimal at most, rounded to nearest or truncated.
-/// `decimalSeparator` is injected so the tests can check both ways of writing a
-/// fraction without touching the process-wide locale.
+/// `locale` is injected so the tests can check other regions and digit settings
+/// without touching the process-wide locale.
 nonisolated func formatOneDecimal(
     _ bytes: Int64,
     roundingDown: Bool,
-    decimalSeparator: String = Locale.current.decimalSeparator ?? "."
+    locale: Locale = .current
 ) -> String {
     guard bytes > 0 else { return String(localized: "0 bytes") }
 
@@ -49,11 +49,16 @@ nonisolated func formatOneDecimal(
     ]
 
     for unit in units where bytes >= unit.threshold {
+        // The rounding is done here in whole tenths, so the formatter below never
+        // rounds again and a ceiling stays rounded down.
         let tenths = (bytes * 10 + (roundingDown ? 0 : unit.threshold / 2)) / unit.threshold
-        let whole = tenths / 10
-        let fraction = tenths % 10
-        guard fraction > 0 else { return "\(whole) \(unit.suffix)" }
-        return "\(whole)\(decimalSeparator)\(fraction) \(unit.suffix)"
+        let value = Decimal(sign: .plus, exponent: -1, significand: Decimal(tenths))
+        // The locale writes the digits and the separator, so an Arabic or Persian Mac
+        // gets its own digits here, the same as `formatBytes` and the counts (#460).
+        let figure = value.formatted(
+            .number.locale(locale).precision(.fractionLength(0...1)).grouping(.never)
+        )
+        return "\(figure) \(unit.suffix)"
     }
 
     return String(localized: "\(bytes) bytes")
