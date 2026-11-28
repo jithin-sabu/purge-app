@@ -43,7 +43,7 @@ struct UnityCacheTests {
         let home = try Self.makeHome("claimed")
         defer { try? FileManager.default.removeItem(at: home) }
         let claimed = DevScanner.claimedGlobalCachePaths(home: home)
-        for relative in ["Library/Unity/cache", "Library/Caches/Unity/upm"] {
+        for relative in ["Library/Unity/cache", "Library/Caches/Unity/upm", "Library/Caches/Unity"] {
             #expect(claimed.contains(home.appendingPathComponent(relative).standardizedFileURL.path), "\(relative)")
         }
     }
@@ -110,7 +110,7 @@ struct UnityCacheTests {
     }
 
     /// The scan lists each Asset Store folder by name, and nothing else in
-    /// `~/Library/Unity`.
+    /// `~/Library/Unity`. A file or a link with such a name is not a row.
     @Test
     func devToolsScanListsOnlyAssetStoreFolders() throws {
         let fm = FileManager.default
@@ -120,11 +120,12 @@ struct UnityCacheTests {
         for name in ["Asset Store-5.x", "Asset Store", "cache", "Licenses", "Asset Store-5.x old", "config"] {
             try fm.createDirectory(at: unity.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: true)
         }
-        try Data().write(to: unity.appendingPathComponent("Asset Store-6.x"))
+        try Data("notes".utf8).write(to: unity.appendingPathComponent("Asset Store-6.x"))
+        let elsewhere = home.appendingPathComponent("Elsewhere", isDirectory: true)
+        try fm.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: unity.appendingPathComponent("Asset Store-7.x"), withDestinationURL: elsewhere)
         let names = DevScanner.unityAssetStorePaths(home: home).map(\.lastPathComponent)
-        // A file with the name is listed too; the scan's `fileExists` keeps it,
-        // and the policy allows it by name like the folder.
-        #expect(names == ["Asset Store", "Asset Store-5.x", "Asset Store-6.x"])
+        #expect(names == ["Asset Store", "Asset Store-5.x"])
         let claimed = DevScanner.claimedGlobalCachePaths(home: home)
         #expect(claimed.contains(unity.appendingPathComponent("Asset Store-5.x").standardizedFileURL.path))
         #expect(!claimed.contains(unity.appendingPathComponent("Licenses").standardizedFileURL.path))

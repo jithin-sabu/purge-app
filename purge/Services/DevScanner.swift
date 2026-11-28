@@ -749,8 +749,15 @@ nonisolated final class DevScanner {
     /// Folders claimed by name although no row lists them whole. The JetBrains and
     /// Playwright rows list entries inside their folders, so each folder is
     /// claimed here to keep App Caches off it. Reads nothing.
+    ///
+    /// `~/Library/Caches/Unity` holds Unity 6's package cache, which the Unity
+    /// Package Cache row lists as `upm` (#474). Claimed so App Caches never lists
+    /// the folder around it, should it ever get an entry of its own.
     nonisolated static func claimedRoots(home: URL) -> [URL] {
-        [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
+        [
+            home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true),
+            home.appendingPathComponent("Library/Caches/Unity", isDirectory: true),
+        ]
             + PlaywrightBuildScanPolicy.roots.map { home.appendingPathComponent($0, isDirectory: true) }
     }
 
@@ -775,7 +782,8 @@ nonisolated final class DevScanner {
 
     /// Each Asset Store download folder in `~/Library/Unity`, such as
     /// `Asset Store-5.x` (#474). The policy allows the same names, and nothing
-    /// else in the folder.
+    /// else in the folder. Only a real folder: a file or a link with one of
+    /// these names is not Unity's and is left alone.
     nonisolated static func unityAssetStorePaths(home: URL) -> [URL] {
         let unity = home.appendingPathComponent(DeletionSafetyPolicy.unityFolderRelative, isDirectory: true)
         // Listing follows a link, so a `~/Library/Unity` linked into Documents is skipped.
@@ -785,6 +793,8 @@ nonisolated final class DevScanner {
             .filter(DeletionSafetyPolicy.isUnityAssetStoreFolderName)
             .sorted()
             .map { unity.appendingPathComponent($0, isDirectory: true) }
+            // `isDirectoryKey` reads the entry itself and does not follow a link.
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
     }
 
     /// Each `~/.gradle/daemon/<version>` folder and `~/.gradle/.tmp`. Which of them
