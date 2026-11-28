@@ -80,6 +80,8 @@ struct SettingsView: View {
         .onAppear {
             startup.refreshLoginItemStatus()
             helper.refresh()
+            // Changed in System Settings while another page was open (#465).
+            language.refresh()
         }
         // The user can turn the login item off in System Settings without telling
         // us; re-read on the way back in so the switch isn't stale. The privileged
@@ -216,7 +218,7 @@ struct SettingsView: View {
                 info: String(localized: """
                     Changes the language of Purge only. It's the same setting as Purge's \
                     entry under Language & Region > Applications in System Settings. \
-                    Arabic reads right to left in Purge only when your Mac itself uses Arabic.
+                    Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic.
                     """),
                 status: languageStatus,
                 selection: Binding(
@@ -239,7 +241,7 @@ struct SettingsView: View {
             text: String(localized: "Relaunch Purge to switch to \(name)."),
             tint: AppColors.statusCheckText,
             actionTitle: String(localized: "Relaunch Now"),
-            isActionDisabled: store.isReviewingOrCleaning || store.isScanningAll,
+            isActionDisabled: store.isReviewingOrCleaning || store.isAnyScanRunning,
             action: { AppRelauncher.relaunch() }
         )
     }

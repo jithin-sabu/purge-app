@@ -136,3 +136,34 @@ struct AppLanguagePreferenceTests {
         #expect(!AppRelauncher.launchedByRelaunch)
     }
 }
+
+/// Relaunch Now waits for every scan, not only the full cache scan (#465).
+/// Drives the real store and queue with held fake scans.
+@MainActor
+@Suite("Relaunch waits for scans")
+struct RelaunchWaitsForScansTests {
+    @Test("An idle store has no scan running")
+    func idleStoreIsNotScanning() {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        #expect(!store.isAnyScanRunning)
+        fake.cleanUp()
+    }
+
+    @Test("A Large Files scan counts, though it is not the full cache scan")
+    func largeFilesScanCounts() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        fake.holdsFullAccessSteps = true
+        store.requestScan(.largeFiles)
+        #expect(await eventually { fake.log == ["step largeFiles"] })
+        #expect(!store.isScanningAll)
+        #expect(store.isAnyScanRunning)
+
+        fake.holdsFullAccessSteps = false
+        fake.finishHeldSteps()
+        #expect(await eventually { !store.isAnyScanRunning })
+        fake.cleanUp()
+    }
+}
