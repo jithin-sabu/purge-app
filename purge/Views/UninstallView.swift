@@ -614,9 +614,13 @@ struct UninstallView: View {
             return entry
         }
         let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
-        func bytes(_ entry: AppListEntry) -> Int64 {
-            displayedSize(for: entry.apps, savedPaths: savedPaths).bytes
+        // Each entry's total once, not twice per comparison. The bytes don't
+        // depend on `measuredAll`, which only sets the pending flag.
+        var totals: [String: Int64] = [:]
+        for entry in inner {
+            totals[entry.id] = displayedSize(for: entry.apps, savedPaths: savedPaths, measuredAll: true).bytes
         }
+        func bytes(_ entry: AppListEntry) -> Int64 { totals[entry.id] ?? 0 }
         func newest(_ entry: AppListEntry) -> Date? { entry.apps.compactMap(\.lastOpened).max() }
         func byName(_ lhs: AppListEntry, _ rhs: AppListEntry) -> Bool {
             lhs.sortName.localizedCaseInsensitiveCompare(rhs.sortName) == .orderedAscending
@@ -641,8 +645,13 @@ struct UninstallView: View {
     }
 
     /// A group's size: the sum its members show, pending while any is.
-    private func displayedSize(for apps: [InstalledApp], savedPaths: Set<String>) -> AppRowSize {
-        let sizes = apps.map { displayedSize(for: $0, isFromLastScan: savedPaths.contains($0.bundleURL.path)) }
+    /// `measuredAll` is `store.hasMeasuredAllRemovableTotals` when the caller
+    /// has it already.
+    private func displayedSize(for apps: [InstalledApp], savedPaths: Set<String>, measuredAll: Bool? = nil) -> AppRowSize {
+        let measuredAll = measuredAll ?? store.hasMeasuredAllRemovableTotals
+        let sizes = apps.map {
+            displayedSize(for: $0, isFromLastScan: savedPaths.contains($0.bundleURL.path), measuredAll: measuredAll)
+        }
         return AppRowSize(
             bytes: sizes.reduce(Int64(0)) { $0 + $1.bytes },
             isPending: sizes.contains(where: \.isPending),
@@ -764,9 +773,13 @@ struct UninstallView: View {
     /// reshuffle tile by tile as the background pass lands.
     private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
         let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
-        return currentSort.sorted(apps) { app in
-            displayedSize(for: app, isFromLastScan: savedPaths.contains(app.bundleURL.path)).bytes
+        // Each app's total once, not twice per comparison. The bytes don't
+        // depend on `measuredAll`, which only sets the pending flag.
+        var totals: [String: Int64] = [:]
+        for app in apps {
+            totals[app.id] = displayedSize(for: app, isFromLastScan: savedPaths.contains(app.bundleURL.path), measuredAll: true).bytes
         }
+        return currentSort.sorted(apps) { app in totals[app.id] ?? 0 }
     }
 
     /// Relative date for the active date sort. Last-used sorts say "Not opened"
@@ -998,6 +1011,7 @@ struct UninstallView: View {
     private var collectionKey: AppCollectionKey {
         let entries = filteredEntries
         let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
+        let measuredAll = store.hasMeasuredAllRemovableTotals
         var groups: [String: AppGroupRowValue] = [:]
         for entry in entries {
             guard case .group(let group, let apps) = entry else { continue }
@@ -1005,7 +1019,7 @@ struct UninstallView: View {
             groups[group.id] = AppGroupRowValue(
                 group: group,
                 apps: apps,
-                size: displayedSize(for: apps, savedPaths: savedPaths),
+                size: displayedSize(for: apps, savedPaths: savedPaths, measuredAll: measuredAll),
                 activityLabel: activityLabel(for: apps),
                 selection: groupSelection(apps),
                 pickedCount: live.filter(store.selectedAppIDs.contains).count,
@@ -2322,7 +2336,12 @@ final class AppRowState: ObservableObject {
 final class AppRowStates {
     private var states: [String: AppRowState] = [:]
 
+    /// How many rows have a state, for tests.
+    var count: Int { states.count }
+
     /// Brings every row up to date, and publishes only for the rows that changed.
+    /// `values` holds every live and saved app, not only the ones the search
+    /// shows, so an app that is still there keeps its state.
     func apply(_ values: [String: AppRowValue]) {
         for (id, value) in values {
             if let state = states[id] {
@@ -2330,6 +2349,11 @@ final class AppRowStates {
             } else {
                 states[id] = AppRowState(value)
             }
+        }
+        // Every id in `values` is in `states` now, so a larger count means
+        // some apps have left, as after a rescan without a drive.
+        if states.count > values.count {
+            states = states.filter { values[$0.key] != nil }
         }
     }
 
@@ -2403,15 +2427,7 @@ private struct AppCollectionHost<Content: View>: NSViewRepresentable {
     let rowStates: AppRowStates
     let content: () -> Content
 
-    final class Coordinator {
-        var model: AppCollectionRootModel?
-        var key: AppCollectionKey?
-        var locale: Locale?
-        var layoutDirection: LayoutDirection?
-        var isEnabled = true
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> AppCollectionCoordinator { AppCollectionCoordinator() }
 
     func makeNSView(context: Context) -> NSHostingView<AppCollectionRoot> {
         rowStates.apply(rowValues)
@@ -2468,6 +2484,16 @@ private struct AppCollectionHost<Content: View>: NSViewRepresentable {
                 .tint(AppColors.textPrimary)
         )
     }
+}
+
+/// What `AppCollectionHost` last drew. Outside the generic host: nested in it,
+/// the Xcode 26 compiler crashed optimizing its deinit.
+private final class AppCollectionCoordinator {
+    var model: AppCollectionRootModel?
+    var key: AppCollectionKey?
+    var locale: Locale?
+    var layoutDirection: LayoutDirection?
+    var isEnabled = true
 }
 
 /// The collection host's root view. It is set once; each new collection

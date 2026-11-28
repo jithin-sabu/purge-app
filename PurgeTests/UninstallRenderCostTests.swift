@@ -14,7 +14,8 @@ struct UninstallRenderCostTests {
         AppRowValue(
             app: InstalledApp(
                 name: name,
-                bundleURL: URL(fileURLWithPath: "/Applications/\(name).app"),
+                // Not a real folder: nothing here reads the disk.
+                bundleURL: FileManager.default.temporaryDirectory.appendingPathComponent("UninstallRenderCostTests/\(name).app"),
                 bundleID: "com.example.\(name)",
                 bundleSizeBytes: bytes,
                 isRunning: false
@@ -71,16 +72,18 @@ struct UninstallRenderCostTests {
     @Test
     func theSharedMenuFindsTheRowUnderThePoint() {
         let center = ScanRowMenuCenter()
+        let ownerA = ScanRowMenuOwner()
+        let ownerB = ScanRowMenuOwner()
         var activeA = false
         var activeB = false
-        center.register("a", isMenuActive: Binding(get: { activeA }, set: { activeA = $0 })) {
+        center.register("a", owner: ownerA, isMenuActive: Binding(get: { activeA }, set: { activeA = $0 })) {
             [.action(title: "A", handler: {})]
         }
-        center.register("b", isMenuActive: Binding(get: { activeB }, set: { activeB = $0 })) {
+        center.register("b", owner: ownerB, isMenuActive: Binding(get: { activeB }, set: { activeB = $0 })) {
             [.action(title: "B", handler: {})]
         }
-        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a")
-        center.setFrame(CGRect(x: 0, y: 50, width: 100, height: 40), for: "b")
+        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a", owner: ownerA)
+        center.setFrame(CGRect(x: 0, y: 50, width: 100, height: 40), for: "b", owner: ownerB)
 
         let menuB = center.menu(at: CGPoint(x: 10, y: 60))
         if case .action(let title, _) = menuB?.entries().first {
@@ -99,17 +102,47 @@ struct UninstallRenderCostTests {
     @Test
     func aRemovedRowHasNoMenu() {
         let center = ScanRowMenuCenter()
-        center.register("a", isMenuActive: .constant(false)) { [.separator] }
-        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a")
+        let owner = ScanRowMenuOwner()
+        center.register("a", owner: owner, isMenuActive: .constant(false)) { [.separator] }
+        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a", owner: owner)
         #expect(center.menu(at: CGPoint(x: 5, y: 5)) != nil)
-        center.remove("a")
+        center.remove("a", owner: owner)
         #expect(center.menu(at: CGPoint(x: 5, y: 5)) == nil)
     }
 
     @Test
     func aRowWithAFrameButNoMenuIsNotClaimed() {
         let center = ScanRowMenuCenter()
-        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a")
+        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a", owner: ScanRowMenuOwner())
         #expect(center.menu(at: CGPoint(x: 5, y: 5)) == nil)
+    }
+
+    /// A sort can move a grid tile to another row, which makes a new view for
+    /// the same app. The new view registers before the old one disappears.
+    @Test
+    func anOldRowViewLeavingKeepsTheNewOnesMenu() {
+        let center = ScanRowMenuCenter()
+        let old = ScanRowMenuOwner()
+        let new = ScanRowMenuOwner()
+        center.register("a", owner: old, isMenuActive: .constant(false)) { [.separator] }
+        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a", owner: old)
+        center.register("a", owner: new, isMenuActive: .constant(false)) { [.separator] }
+        center.setFrame(CGRect(x: 0, y: 100, width: 100, height: 40), for: "a", owner: new)
+        // The old view, still on its way out, reports its last frame.
+        center.setFrame(CGRect(x: 0, y: 0, width: 100, height: 40), for: "a", owner: old)
+        center.remove("a", owner: old)
+
+        #expect(center.menu(at: CGPoint(x: 5, y: 105)) != nil)
+        #expect(center.menu(at: CGPoint(x: 5, y: 5)) == nil)
+    }
+
+    @Test
+    func appsThatLeaveLoseTheirState() {
+        let states = AppRowStates()
+        states.apply(["a": value("A"), "b": value("B")])
+        let kept = states.state(for: "a")
+        states.apply(["a": value("A")])
+        #expect(states.state(for: "a") === kept)
+        #expect(states.count == 1)
     }
 }

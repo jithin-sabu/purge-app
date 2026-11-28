@@ -435,21 +435,23 @@ private struct FinderRevealMenuModifier: ViewModifier {
     let locations: () -> [ScanRowLocation]
 
     @Environment(\.scanRowMenuCenter) private var center
+    @State private var owner = ScanRowMenuOwner()
 
     func body(content: Content) -> some View {
         if let center, let rowID {
             let entries = locations
+            let owner = owner
             // Not observed state: read only when the row is right-clicked.
-            let _ = center.register(rowID, isMenuActive: isMenuActive) {
+            let _ = center.register(rowID, owner: owner, isMenuActive: isMenuActive) {
                 FinderReveal.menuEntries(for: entries())
             }
             content
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .named(ScanRowMenuCenter.coordinateSpace))
                 } action: { frame in
-                    center.setFrame(frame, for: rowID)
+                    center.setFrame(frame, for: rowID, owner: owner)
                 }
-                .onDisappear { center.remove(rowID) }
+                .onDisappear { center.remove(rowID, owner: owner) }
         } else {
             content.overlay {
                 ScanRowContextMenu(isMenuActive: isMenuActive, entries: {
@@ -481,30 +483,48 @@ final class ScanRowMenuCenter {
         let entries: () -> [ScanRowMenuEntry]
     }
 
-    private var menus: [AnyHashable: Menu] = [:]
-    private var frames: [AnyHashable: CGRect] = [:]
-
-    func register(_ id: AnyHashable, isMenuActive: Binding<Bool>, entries: @escaping () -> [ScanRowMenuEntry]) {
-        menus[id] = Menu(isMenuActive: isMenuActive, entries: entries)
+    /// The row's view that registered it, and its menu and frame. A row's
+    /// view can be replaced by a new one for the same app, as when a sort
+    /// moves a tile to another grid row. The new view registers before the old
+    /// one disappears, so the old one may only clear or move what it owns.
+    private struct Row {
+        weak var owner: AnyObject?
+        var menu: Menu
+        var frame: CGRect?
     }
 
-    func setFrame(_ frame: CGRect, for id: AnyHashable) {
-        frames[id] = frame
+    private var rows: [AnyHashable: Row] = [:]
+
+    func register(_ id: AnyHashable, owner: AnyObject, isMenuActive: Binding<Bool>, entries: @escaping () -> [ScanRowMenuEntry]) {
+        let menu = Menu(isMenuActive: isMenuActive, entries: entries)
+        if let row = rows[id], row.owner === owner {
+            rows[id]?.menu = menu
+        } else {
+            rows[id] = Row(owner: owner, menu: menu, frame: nil)
+        }
     }
 
-    func remove(_ id: AnyHashable) {
-        menus[id] = nil
-        frames[id] = nil
+    func setFrame(_ frame: CGRect, for id: AnyHashable, owner: AnyObject) {
+        guard let row = rows[id], row.owner === owner else { return }
+        rows[id]?.frame = frame
+    }
+
+    func remove(_ id: AnyHashable, owner: AnyObject) {
+        guard let row = rows[id], row.owner === owner else { return }
+        rows[id] = nil
     }
 
     /// The menu of the row at `point`, in the layer's coordinates.
     func menu(at point: CGPoint) -> Menu? {
-        for (id, frame) in frames where frame.contains(point) {
-            if let menu = menus[id] { return menu }
+        for row in rows.values {
+            if let frame = row.frame, frame.contains(point) { return row.menu }
         }
         return nil
     }
 }
+
+/// Stands for one row view in `ScanRowMenuCenter`.
+final class ScanRowMenuOwner {}
 
 private nonisolated struct ScanRowMenuCenterKey: EnvironmentKey {
     static let defaultValue: ScanRowMenuCenter? = nil
@@ -614,8 +634,11 @@ struct ScanRowContextMenu: NSViewRepresentable {
         var onMenuClosed: (() -> Void)?
 
         func menuDidClose(_ menu: NSMenu) {
-            DispatchQueue.main.async { [weak self] in
-                self?.onMenuClosed?()
+            // Taken now: by the time the block runs, another row's menu may
+            // have opened and replaced it.
+            let onMenuClosed = onMenuClosed
+            DispatchQueue.main.async {
+                onMenuClosed?()
             }
         }
     }
