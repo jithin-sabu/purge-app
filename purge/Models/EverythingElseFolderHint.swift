@@ -21,6 +21,9 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
     let action: Action?
 
     static let steamBundleID = "com.valvesoftware.steam"
+    static let unityHubBundleID = "com.unity3d.unityhub"
+    /// Where Unity Hub installs Editors unless told otherwise (#474).
+    static let unityApplicationsFolder = "/Applications/Unity"
 
     /// The hint for a folder, or nil when Purge has nothing to add beyond Finder.
     /// `steamGames` is keyed by install folder, from the measurement.
@@ -51,6 +54,15 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
             return EverythingElseFolderHint(
                 steps: String(localized: "Steam keeps its installed games here. Uninstall a game from its page in your Steam library."),
                 action: .openApp(bundleID: steamBundleID, title: String(localized: "Open Steam"))
+            )
+        }
+
+        // Purge never offers an Editor: Unity Hub keeps its own list of installs,
+        // and a folder deleted in Finder leaves a broken entry there (#474).
+        if path == unityApplicationsFolder || PathContainment.isSameOrInside(path, "\(unityApplicationsFolder)/Hub") {
+            return EverythingElseFolderHint(
+                steps: String(localized: "Unity Hub installs its Editors here. Remove one in Unity Hub: go to Installs, open the Editor's menu and choose Uninstall. Deleting the folder in Finder leaves a broken entry in Unity Hub."),
+                action: .openApp(bundleID: unityHubBundleID, title: String(localized: "Open Unity Hub"))
             )
         }
 

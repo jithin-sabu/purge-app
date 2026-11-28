@@ -780,6 +780,8 @@
 "Open System Settings" = "Открыть Системные настройки";
 "Open TV" = "Открыть TV";
 "Open Toolbox" = "Открыть Toolbox";
+"Unity Hub installs its Editors here. Remove one in Unity Hub: go to Installs, open the Editor's menu and choose Uninstall. Deleting the folder in Finder leaves a broken entry in Unity Hub." = "Unity Hub устанавливает сюда редакторы. Удаляйте их в Unity Hub: откройте Installs, затем меню редактора и выберите Uninstall. Если удалить папку в Finder, в Unity Hub останется битая запись.";
+"Open Unity Hub" = "Открыть Unity Hub";
 "Open Trash" = "Открыть Корзину";
 "Open Xcode once to accept its license, then try again." = "Откройте Xcode один раз и примите лицензию, затем повторите попытку.";
 "Open at login" = "Открывать при входе";

@@ -1819,6 +1819,9 @@ struct ShapeLinkTests {
         (".grok/downloads/grok-1.0.13", ".grok/downloads/grok-1.0.13", false),
         (".gradle/daemon/8.10.2", ".gradle/daemon/8.10.2", false),
         (".gradle/.tmp", ".gradle/.tmp", false),
+        ("Library/Unity/Asset Store-5.x", "Library/Unity/Asset Store-5.x", false),
+        ("Library/Unity/Asset Store-5.x/Publisher/Pack.unitypackage", "Library/Unity/Asset Store-5.x", false),
+        ("Library/Unity/Asset Store", "Library/Unity/Asset Store", false),
     ]
 
     /// A temporary home, with a `Developer` folder beside it for links to point at.
@@ -1861,6 +1864,7 @@ struct ShapeLinkTests {
         DeletionSafetyPolicy.isWhitelistedContainerCachePath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedTelegramMediaCachePath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedGemDownloadCachePath(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedUnityAssetStorePath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedUnfinishedDownloadPath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedEditorWorkspaceStorageEntry(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedOldCLIVersionPath(path, home: home)
@@ -2039,6 +2043,9 @@ struct ShapeLinkTests {
         (".gradle", ".gradle/daemon/8.10.2"),
         (".gradle/daemon", ".gradle/daemon/8.10.2"),
         (".gradle", ".gradle/.tmp"),
+        ("Library/Unity", "Library/Unity/Asset Store-5.x"),
+        ("Library/Unity", "Library/Unity/Asset Store/Publisher/Pack.unitypackage"),
+        ("Library/Unity/Asset Store-5.x", "Library/Unity/Asset Store-5.x/Publisher/Pack.unitypackage"),
     ])
     func aLinkedFolderAboveTheRowRefusesIt(link: String, row: String) throws {
         let fm = FileManager.default
@@ -2068,6 +2075,8 @@ struct ShapeLinkTests {
         (".local/share/claude/versions/2.0.1", ".local/share/claude/versions/2.0.1", true),
         (".grok/downloads/grok-1.0.13", ".grok/downloads/grok-1.0.13", false),
         (".gradle/daemon/8.10.2", ".gradle/daemon/8.10.2", false),
+        ("Library/Unity/Asset Store-5.x", "Library/Unity/Asset Store-5.x", true),
+        ("Library/Unity/Asset Store", "Library/Unity/Asset Store", true),
     ])
     func aLinkedNamedFolderRefusesItsRows(folder: String, row: String, allowsInside: Bool) throws {
         let fm = FileManager.default
@@ -2091,6 +2100,8 @@ struct ShapeLinkTests {
         ("Downloads/Big.dmg.download/parts", "Downloads/Big.dmg.download/parts/1", "Downloads/Big.dmg.download/Info.plist"),
         (".local/share/claude/versions/2.0.1/lib", ".local/share/claude/versions/2.0.1/lib/a", ".local/share/claude/versions/2.0.0"),
         ("\(profile)/Default/Cache/Cache_Data", "\(profile)/Default/Cache/Cache_Data/f_0001", "\(profile)/Default/Cache/index"),
+        ("Library/Unity/Asset Store-5.x/Publisher", "Library/Unity/Asset Store-5.x/Publisher/Pack.unitypackage",
+         "Library/Unity/Asset Store-5.x/Other/Pack.unitypackage"),
     ])
     func aLinkInsideTheNamedFolderOnlyRefusesWhatIsBehindIt(link: String, behind: String, sibling: String) throws {
         let fm = FileManager.default
@@ -2116,6 +2127,7 @@ struct ShapeLinkTests {
         ("Downloads/Big.dmg.download/parts", "\u{301}1"),
         (".local/share/claude/versions/2.0.1/lib", "\u{301}a"),
         ("\(profile)/Default/Cache/Cache_Data", "\u{301}f_0001"),
+        ("Library/Unity/Asset Store-5.x/Publisher", "\u{301}Pack.unitypackage"),
     ])
     func aNameThatStartsWithACombiningMarkHidesNoFolder(link: String, rest: String) throws {
         let fm = FileManager.default
@@ -2227,7 +2239,7 @@ struct ShapeLinkTests {
         #expect(!Self.refuses(row, home: home, reuseRecentRead: true))
     }
 
-    /// The guard answers only for the nine shape rules. Allowlist entries have
+    /// The guard answers only for the ten shape rules. Allowlist entries have
     /// their own guard, the rules that check links themselves are left to
     /// them, and a project on a linked drive still cleans (#190).
     @Test

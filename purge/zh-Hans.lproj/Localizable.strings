@@ -1091,6 +1091,8 @@
 "Open Steam" = "打开 Steam";
 "Toolbox keeps every version of each IDE it installed. Remove old versions in Toolbox under Settings." = "Toolbox 保留它安装的每个 IDE 的每个版本。可在 Toolbox 的“设置”中移除旧版本。";
 "Open Toolbox" = "打开 Toolbox";
+"Unity Hub installs its Editors here. Remove one in Unity Hub: go to Installs, open the Editor's menu and choose Uninstall. Deleting the folder in Finder leaves a broken entry in Unity Hub." = "Unity Hub 将编辑器安装在这里。请在 Unity Hub 中移除：前往“Installs”，打开该编辑器的菜单并选择“Uninstall”。在访达中删除该文件夹会在 Unity Hub 中留下失效的条目。";
+"Open Unity Hub" = "打开 Unity Hub";
 "itch installs games here. Uninstall one from its page in the itch app." = "itch 把游戏安装在这里。可在 itch 应用中该游戏的页面上卸载。";
 "Open itch" = "打开 itch";
 "Mail keeps a copy of every message and attachment here. Mail > Settings > Accounts lets you download only recent attachments, and Mailbox > Erase Junk Mail and Erase Deleted Items free space." = "邮件会在这里保存每封邮件和附件的副本。在“邮件”>“设置”>“帐户”中可以只下载最近的附件；“邮箱”>“抹掉垃圾邮件”和“抹掉已删除的项目”可释放空间。";

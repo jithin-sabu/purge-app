@@ -198,6 +198,8 @@ enum BrandIconMapping {
         "screenflow": "ScreenFlow",
         "bartender": "Bartender 5",
         "lungo": "Lungo",
+        "unity-package-cache": "Unity Hub",
+        "unity-asset-store": "Unity Hub",
         "granola": "Granola",
         "yab": "Yab",
     ]

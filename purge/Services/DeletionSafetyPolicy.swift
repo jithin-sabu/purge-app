@@ -463,6 +463,14 @@ enum DeletionSafetyPolicy {
             // `~/.config/opencode` the settings. Neither is listed. Refused when
             // reached through a link; see `allowlistLinkRefusesDeletion`.
             "\(home)/.cache/opencode",
+            // Unity's Package Manager cache (#474): the packages and registry data it
+            // downloaded. Editors up to 2023.2 keep it here; Unity 6 keeps it in
+            // `~/Library/Caches/Unity/upm`, which the entry above already allows.
+            // Check First by its explanation: a project whose `Library` folder is gone
+            // fetches its packages again, which needs a connection. The rest of
+            // `~/Library/Unity` is never listed, except the Asset Store folders that
+            // `isWhitelistedUnityAssetStorePath` allows by name.
+            "\(home)/Library/Unity/cache",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
@@ -753,7 +761,8 @@ enum DeletionSafetyPolicy {
         "\(CacheDiscoveryPaths.telegramGroupContainerRelative)/",
         "Downloads/",
         ".gem/ruby/",
-        ".gradle/"
+        ".gradle/",
+        "Library/Unity/"
     ]
         + chromiumUserDataStores.map { "\($0.relative)/" }
         + cliVersionStores.map { "\($0.versions)/" }
@@ -836,6 +845,7 @@ enum DeletionSafetyPolicy {
     /// | `isWhitelistedContainerCachePath` | `Containers/<id>/Data/Library/Caches` |
     /// | `isWhitelistedTelegramMediaCachePath` | `account-*/postbox/media` |
     /// | `isWhitelistedGemDownloadCachePath` | `~/.gem/ruby/<version>/cache` |
+    /// | `isWhitelistedUnityAssetStorePath` | `~/Library/Unity/Asset Store-<n>.x` |
     /// | `isWhitelistedUnfinishedDownloadPath` | the entry in `~/Downloads` |
     /// | `isWhitelistedEditorWorkspaceStorageEntry` | the entry in `workspaceStorage` |
     /// | `isWhitelistedOldCLIVersionPath` | the version entry |
@@ -861,6 +871,9 @@ enum DeletionSafetyPolicy {
         }
         if isWhitelistedGemDownloadCachePath(path, home: home) {
             return firstNames(2, of: path, below: "\(home)/.gem/ruby/")
+        }
+        if isWhitelistedUnityAssetStorePath(path, home: home) {
+            return firstNames(1, of: path, below: "\(home)/\(unityFolderRelative)/")
         }
         if isWhitelistedUnfinishedDownloadPath(path, home: home) {
             return firstNames(1, of: path, below: "\(home)/Downloads/")
@@ -1787,6 +1800,35 @@ enum DeletionSafetyPolicy {
         return parts.count >= 2 && !parts[0].isEmpty && parts[1] == "cache"
     }
 
+    /// `~/Library/Unity`, where Unity keeps its Package Manager cache (up to
+    /// 2023.2) and the packages downloaded from the Asset Store.
+    nonisolated static let unityFolderRelative = "Library/Unity"
+
+    /// Whether `name` is one of the folders Unity downloads Asset Store packages
+    /// into: `Asset Store-5.x`, which every editor since Unity 5 uses, the same
+    /// name with another major version, or plain `Asset Store` from Unity 4.
+    nonisolated static func isUnityAssetStoreFolderName(_ name: String) -> Bool {
+        let prefix = "Asset Store"
+        guard name.hasPrefix(prefix) else { return false }
+        let rest = name.dropFirst(prefix.count)
+        if rest.isEmpty { return true }
+        guard rest.hasPrefix("-"), rest.hasSuffix(".x") else { return false }
+        let version = rest.dropFirst().dropLast(2)
+        return !version.isEmpty && version.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// `~/Library/Unity/Asset Store-5.x` (or a file in it): the `.unitypackage`
+    /// files Unity downloaded from the Asset Store (#474). Assets imported from
+    /// them stay in their projects. Check First by its explanation, since they
+    /// download again only from My Assets with the Unity account. A folder moved
+    /// with `ASSETSTORE_CACHE_PATH` or Preferences is never matched.
+    nonisolated static func isWhitelistedUnityAssetStorePath(_ path: String, home: String) -> Bool {
+        let root = "\(home)/\(unityFolderRelative)/"
+        guard path.hasPrefix(root) else { return false }
+        guard let first = path.dropFirst(root.count).split(separator: "/", maxSplits: 1).first else { return false }
+        return isUnityAssetStoreFolderName(String(first))
+    }
+
     /// One entry directly inside VS Code's or Cursor's `User/workspaceStorage`.
     /// This only proves the shape. Which entries belong to projects that no longer
     /// exist is decided by `EditorWorkspaceStoragePolicy` at scan time, and the
@@ -2005,6 +2047,9 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedGemDownloadCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedUnityAssetStorePath(path, home: home) {
             return .allow
         }
         if isWhitelistedEditorWorkspaceStorageEntry(path, home: home) {
