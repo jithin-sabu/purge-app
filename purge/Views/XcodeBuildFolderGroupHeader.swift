@@ -14,15 +14,19 @@ import SwiftUI
 enum XcodeBuildFolderTree {
     /// The checkbox's own width, the same box every scan row draws.
     static let checkboxSlot: CGFloat = 16
-    static let headerHeight: CGFloat = 60
+    /// The header's title, summary and checkbox sit in a band this tall, the
+    /// same as a child row, so the card's elbow matches a part's.
+    static let headerContentHeight: CGFloat = 40
+    /// Above the header's band, and the height of the card's footer row.
+    static let headerPadding = AppStyle.Spacing.small
     static let childHeight: CGFloat = 40
     /// From the card's checkbox to a part's, centre to centre, both ways.
-    static let partIndent = headerHeight / 2 + childHeight / 2
+    static let partIndent = headerContentHeight / 2 + childHeight / 2
     /// From a part's checkbox to a folder's, centre to centre, both ways.
     static let folderIndent = childHeight
     /// Between each end of an elbow and the checkbox it points at.
-    static let lineGap = AppStyle.Spacing.xxSmallPlus
-    static let lineCorner: CGFloat = 10
+    static let lineGap = AppStyle.Spacing.small
+    static let lineCorner: CGFloat = 12
     /// Where the card's checkbox starts, as on every scan row.
     static let leading = AppStyle.Row.scanCardHorizontalPadding
 }
@@ -202,7 +206,7 @@ struct XcodeBuildFolderGroupHeader: View {
             .accessibilityHint(isExpanded ? Text("Hide folders") : Text("Show folders"))
             .accessibilityAction { onToggleExpanded() }
 
-            VStack(alignment: .trailing, spacing: AppStyle.Spacing.xSmall) {
+            VStack(alignment: .trailing, spacing: AppStyle.Spacing.xxSmall) {
                 Text(formatBytes(bytes))
                     .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                     .monospacedDigit()
@@ -210,13 +214,17 @@ struct XcodeBuildFolderGroupHeader: View {
             }
         }
         .padding(.horizontal, XcodeBuildFolderTree.leading)
-        .frame(height: XcodeBuildFolderTree.headerHeight)
+        .frame(height: XcodeBuildFolderTree.headerContentHeight)
         .overlay {
             if showsStub {
                 XcodeBuildFolderStub(checkboxX: XcodeBuildFolderTree.leading).treeLine()
                     .accessibilityHidden(true)
             }
         }
+        // Nothing below the band: the first part's row meets it, so the elbow
+        // runs on. The card's footer row holds the space under the card, so
+        // no row changes height when the card opens or closes.
+        .padding(.top, XcodeBuildFolderTree.headerPadding)
     }
 }
 

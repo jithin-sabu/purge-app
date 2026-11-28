@@ -1195,7 +1195,7 @@ struct DevToolsView: View {
                             .listRowInsets(XcodeBuildFolderCardSlice.listInsets)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                            .transition(row.isHeader ? rowInsertionTransition : expandCollapseTransition)
+                            .transition(row.isHeader || row.isFooter ? rowInsertionTransition : expandCollapseTransition)
                     }
                 case .savedBuildFolders:
                     lastScanBuildFolderCard
@@ -1799,6 +1799,9 @@ struct DevToolsView: View {
             case header
             case part(XcodeBuildFolderGroup.Part, count: Int, bytes: Int64)
             case folder(DevTool)
+            /// The card's last row, the space under the card. Always there, so
+            /// no other row ever changes its corners or height.
+            case footer
         }
 
         let kind: Kind
@@ -1812,17 +1815,24 @@ struct DevToolsView: View {
             if case .header = kind { return true }
             return false
         }
+
+        var isFooter: Bool {
+            if case .footer = kind { return true }
+            return false
+        }
     }
 
     /// The card's rows in order: the header, and when open, each part, and
-    /// the folders of each open part.
+    /// the folders of each open part, then the footer. Opening and closing
+    /// only adds and removes rows between the header and the footer.
     private func buildFolderListRows(tools: [DevTool]) -> [BuildFolderListRow] {
         let parts = XcodeBuildFolderGroup.Part.allCases.compactMap { part -> (XcodeBuildFolderGroup.Part, [DevTool])? in
             let members = tools.filter { buildFolderPart(of: $0) == part }
             return members.isEmpty ? nil : (part, members)
         }
         var rows = [BuildFolderListRow(kind: .header, id: "bf-header", showsStub: buildFoldersExpanded && !parts.isEmpty)]
-        guard buildFoldersExpanded else { return rows }
+        let footer = BuildFolderListRow(kind: .footer, id: "bf-footer")
+        guard buildFoldersExpanded else { return rows + [footer] }
         for (partIndex, (part, members)) in parts.enumerated() {
             let isOpen = expandedBuildFolderParts.contains(part)
             rows.append(BuildFolderListRow(
@@ -1836,7 +1846,7 @@ struct DevToolsView: View {
                 rows.append(BuildFolderListRow(kind: .folder(tool), id: "bf-folder-\(tool.id)", isFirstChild: folderIndex == 0))
             }
         }
-        return rows
+        return rows + [footer]
     }
 
     @ViewBuilder
@@ -1888,6 +1898,10 @@ struct DevToolsView: View {
             .scanListRow(DevRowKey.buildFolderPart(part), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
         case .folder(let tool):
             buildFolderRow(tool, isFirst: row.isFirstChild)
+        case .footer:
+            Color.clear
+                .frame(height: XcodeBuildFolderTree.headerPadding)
+                .accessibilityHidden(true)
         }
     }
 
