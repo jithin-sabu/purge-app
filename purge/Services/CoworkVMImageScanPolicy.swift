@@ -230,15 +230,22 @@ nonisolated enum CoworkVMImageScanPolicy {
     // MARK: Scan
 
     /// The row a scan offers: the image, then its origin file, in that order so
-    /// a clean moves the image first. Empty unless both are offered, so the
-    /// image is never listed without the file that names its version.
-    static func definitions(home: String, context: Context) -> [(label: String, paths: [URL])] {
+    /// a clean moves the image first. Empty unless both are offered and neither
+    /// is on the user's exclusion list, so the image is never listed without the
+    /// file that names its version. The scanner checks exclusions again for each
+    /// path; this keeps it from listing one path alone.
+    static func definitions(
+        home: String,
+        context: Context,
+        isExcluded: (URL) -> Bool = ExcludedPathsStore.isExcluded
+    ) -> [(label: String, paths: [URL])] {
         let bundle = bundleFolder(home: home)
-        let image = "\(bundle)/\(imageName)"
-        let origin = "\(bundle)/\(imageOriginName)"
-        // `.quick` for the origin: the image's `lsof` read covers it.
-        guard isOffered(image, home: home, context: context, check: .scan),
-              isOffered(origin, home: home, context: context, check: .quick) else { return [] }
-        return [(label, [URL(fileURLWithPath: image), URL(fileURLWithPath: origin)])]
+        let image = URL(fileURLWithPath: "\(bundle)/\(imageName)")
+        let origin = URL(fileURLWithPath: "\(bundle)/\(imageOriginName)")
+        guard !isExcluded(image), !isExcluded(origin),
+              isOffered(image.path, home: home, context: context, check: .scan),
+              // `.quick` for the origin: the image's `lsof` read covers it.
+              isOffered(origin.path, home: home, context: context, check: .quick) else { return [] }
+        return [(label, [image, origin])]
     }
 }

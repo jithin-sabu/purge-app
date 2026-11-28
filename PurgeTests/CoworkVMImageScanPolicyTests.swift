@@ -53,6 +53,11 @@ struct CoworkVMImageScanPolicyTests {
         "p42\ncVirtualization\nn\(image(home))\n"
     }
 
+    /// The scan's row, with nothing on the exclusion list.
+    static func rows(_ home: URL, _ context: Policy.Context) -> [(label: String, paths: [URL])] {
+        Policy.definitions(home: home.path, context: context, isExcluded: { _ in false })
+    }
+
     static func offered(
         _ path: String,
         _ home: URL,
@@ -79,10 +84,23 @@ struct CoworkVMImageScanPolicyTests {
     func theScanListsTheImageThenItsOrigin() throws {
         let home = try Self.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        let rows = Policy.definitions(home: home.path, context: Self.context())
+        let rows = Self.rows(home, Self.context())
         #expect(rows.count == 1)
         #expect(rows.first?.label == Policy.label)
         #expect(rows.first?.paths.map(\.path) == [Self.image(home), Self.origin(home)])
+    }
+
+    /// The scanner drops excluded paths one by one. An exclusion on either file
+    /// keeps the whole row out, so the image is never listed alone.
+    @Test(arguments: ["rootfs.img", ".rootfs.img.origin"])
+    func anExcludedFileKeepsTheRowOut(excluded: String) throws {
+        let home = try Self.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(Self.rows(home, Self.context()).count == 1)
+        let rows = Policy.definitions(home: home.path, context: Self.context()) {
+            $0.lastPathComponent == excluded
+        }
+        #expect(rows.isEmpty)
     }
 
     /// The origin can be refused while the image is offered, as when it has a
@@ -102,7 +120,7 @@ struct CoworkVMImageScanPolicyTests {
             try fm.createSymbolicLink(at: origin, withDestinationURL: elsewhere)
         }
         #expect(!Self.offered(Self.origin(home), home, Self.context(), .quick))
-        #expect(Policy.definitions(home: home.path, context: Self.context()).isEmpty)
+        #expect(Self.rows(home, Self.context()).isEmpty)
     }
 
     @Test
@@ -154,7 +172,7 @@ struct CoworkVMImageScanPolicyTests {
         for check in [NvmNodeVersionPolicy.Check.quick, .scan, .move] {
             #expect(!Self.offered(Self.image(home), home, Self.context(), check), "\(change) \(check)")
         }
-        #expect(Policy.definitions(home: home.path, context: Self.context()).isEmpty)
+        #expect(Self.rows(home, Self.context()).isEmpty)
     }
 
     @Test
@@ -166,7 +184,7 @@ struct CoworkVMImageScanPolicyTests {
             #expect(!Self.offered(Self.image(home), home, running, check))
             #expect(!Self.offered(Self.origin(home), home, running, check))
         }
-        #expect(Policy.definitions(home: home.path, context: running).isEmpty)
+        #expect(Self.rows(home, running).isEmpty)
     }
 
     @Test
@@ -176,7 +194,7 @@ struct CoworkVMImageScanPolicyTests {
         let busy = Self.context(lsof: Self.holding(home))
         #expect(!Self.offered(Self.image(home), home, busy, .scan))
         #expect(!Self.offered(Self.image(home), home, busy, .move))
-        #expect(Policy.definitions(home: home.path, context: busy).isEmpty)
+        #expect(Self.rows(home, busy).isEmpty)
     }
 
     /// An empty answer is not proof that nothing is open.
@@ -187,7 +205,7 @@ struct CoworkVMImageScanPolicyTests {
         let unreadable = Self.context(lsof: nil)
         #expect(!Self.offered(Self.image(home), home, unreadable, .scan))
         #expect(!Self.offered(Self.image(home), home, unreadable, .move))
-        #expect(Policy.definitions(home: home.path, context: unreadable).isEmpty)
+        #expect(Self.rows(home, unreadable).isEmpty)
     }
 
     /// The main-thread filter runs `.quick` on every scan flush, so it never
@@ -208,7 +226,7 @@ struct CoworkVMImageScanPolicyTests {
         #expect(Self.offered(Self.origin(home), home, context, .quick))
         #expect(!Policy.refusesDeletion(URL(fileURLWithPath: Self.image(home)), home: home.path, context: context))
         #expect(count.calls == 0)
-        _ = Policy.definitions(home: home.path, context: context)
+        _ = Self.rows(home, context)
         #expect(count.calls == 1, "the scan reads lsof once, for the image")
     }
 
@@ -294,7 +312,7 @@ struct CoworkVMImageScanPolicyTests {
         try FileManager.default.removeItem(at: Self.bundle(home).appendingPathComponent("rootfs.img.zst"))
         #expect(Policy.refusesDeletion(origin, home: home.path, context: context))
         // A scan with no image lists nothing, the origin included.
-        #expect(Policy.definitions(home: home.path, context: context).isEmpty)
+        #expect(Self.rows(home, context).isEmpty)
     }
 
     // MARK: Shape
