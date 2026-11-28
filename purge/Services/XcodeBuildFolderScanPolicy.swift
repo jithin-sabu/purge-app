@@ -165,6 +165,24 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         projectGone.withLock { $0.contains(path) }
     }
 
+    /// What a compact row in the card shows for a folder: its name, the
+    /// project it was built from and when, read at scan time.
+    struct FolderFacts: Equatable, Sendable {
+        let name: String
+        let project: String?
+        let lastBuilt: Date?
+    }
+
+    private static let folderFacts = OSAllocatedUnfairLock<[String: FolderFacts]>(initialState: [:])
+
+    static func facts(ofFolder path: String) -> FolderFacts? {
+        folderFacts.withLock { $0[path] }
+    }
+
+    static func record(_ facts: FolderFacts, ofFolder path: String) {
+        folderFacts.withLock { $0[path] = facts }
+    }
+
     static func recordProject(ofFolder path: String, exists: Bool?) {
         projectGone.withLock { gone in
             if exists == false {
@@ -430,6 +448,7 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         let base = SafetyInfo.fromExplanationDatabase(key: explanationKey, friendlyFallback: labelPrefix + path)
         let name = displayName(ofFolder: path, home: home)
         guard let mark = readInfoPlist(at: "\(path)/info.plist") else {
+            record(FolderFacts(name: name, project: nil, lastBuilt: nil), ofFolder: path)
             return SafetyInfo(
                 level: base.level,
                 headline: String(localized: "Xcode Build Files in \(name)"),
@@ -443,6 +462,10 @@ nonisolated enum XcodeBuildFolderScanPolicy {
             ? FileManager.default.fileExists(atPath: mark.workspacePath)
             : nil
         recordProject(ofFolder: path, exists: projectExists)
+        record(
+            FolderFacts(name: name, project: projectName(of: mark.workspacePath), lastBuilt: mark.lastAccessed),
+            ofFolder: path
+        )
         return SafetyInfo(
             level: base.level,
             headline: String(localized: "Xcode Build Files in \(name)"),

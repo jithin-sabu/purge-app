@@ -440,12 +440,19 @@ struct DevToolsView: View {
         for id in change.deselect { store.setDevToolSelected(id: id, isSelected: false) }
     }
 
+    /// A plain ease, not the cards' spring: the card's rows are list rows of
+    /// their own, and a spring's overshoot pushed a part's 25 rows past their
+    /// places for a frame before they settled.
+    private var buildFolderTreeAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.2)
+    }
+
     private func toggleBuildFoldersExpanded() {
-        withAnimation(expandCollapseAnimation) { buildFoldersExpanded.toggle() }
+        withAnimation(buildFolderTreeAnimation) { buildFoldersExpanded.toggle() }
     }
 
     private func toggleBuildFolderPartExpanded(_ part: XcodeBuildFolderGroup.Part) {
-        withAnimation(expandCollapseAnimation) {
+        withAnimation(buildFolderTreeAnimation) {
             if expandedBuildFolderParts.contains(part) {
                 expandedBuildFolderParts.remove(part)
             } else {
@@ -1176,12 +1183,20 @@ struct DevToolsView: View {
                         .transition(rowInsertionTransition)
                     }
                 case .buildFolders:
-                    buildFolderGroupCard
-                        .id(DeveloperListRowID.buildFolders)
-                        .listRowInsets(ScanListRowInsets.standard)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .transition(rowInsertionTransition)
+                    // A list row each, so opening a part inserts rows and
+                    // nothing above them moves (#480).
+                    let tools = visibleBuildFolderTools()
+                    let rows = buildFolderListRows(tools: tools)
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        let slice = XcodeBuildFolderCardSlice.at(index, of: rows.count)
+                        buildFolderListRowView(row, tools: tools)
+                            .modifier(XcodeBuildFolderCardChrome(slice: slice))
+                            .id(row.isHeader ? AnyHashable(DeveloperListRowID.buildFolders) : AnyHashable(row.id))
+                            .listRowInsets(XcodeBuildFolderCardSlice.listInsets)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(row.isHeader ? rowInsertionTransition : expandCollapseTransition)
+                    }
                 case .savedBuildFolders:
                     lastScanBuildFolderCard
                         .id(DeveloperListRowID.buildFolders)
@@ -1480,8 +1495,6 @@ struct DevToolsView: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: developerTotalRowCount)
         .animation(expandCollapseAnimation, value: expandedProjectRoots)
-        .animation(expandCollapseAnimation, value: buildFoldersExpanded)
-        .animation(expandCollapseAnimation, value: expandedBuildFolderParts)
     }
 
     private var rowInsertionAnimation: Animation? {
@@ -1780,20 +1793,64 @@ struct DevToolsView: View {
         }
     }
 
-    /// The Xcode build folders card (#480): one header with a checkbox for every
-    /// folder, and, open, the folders whose project is gone and the rest as two
-    /// parts with a checkbox each. Every folder is still its own Dev Tools row.
+    /// One row of the Xcode build folders card (#480).
+    private struct BuildFolderListRow: Identifiable {
+        enum Kind {
+            case header
+            case part(XcodeBuildFolderGroup.Part, count: Int, bytes: Int64)
+            case folder(DevTool)
+        }
+
+        let kind: Kind
+        let id: String
+        /// The first child of its parent, which gets the elbow.
+        var isFirstChild = false
+        /// Has its first child right below, so the elbow starts in this row.
+        var showsStub = false
+
+        var isHeader: Bool {
+            if case .header = kind { return true }
+            return false
+        }
+    }
+
+    /// The card's rows in order: the header, and when open, each part, and
+    /// the folders of each open part.
+    private func buildFolderListRows(tools: [DevTool]) -> [BuildFolderListRow] {
+        let parts = XcodeBuildFolderGroup.Part.allCases.compactMap { part -> (XcodeBuildFolderGroup.Part, [DevTool])? in
+            let members = tools.filter { buildFolderPart(of: $0) == part }
+            return members.isEmpty ? nil : (part, members)
+        }
+        var rows = [BuildFolderListRow(kind: .header, id: "bf-header", showsStub: buildFoldersExpanded && !parts.isEmpty)]
+        guard buildFoldersExpanded else { return rows }
+        for (partIndex, (part, members)) in parts.enumerated() {
+            let isOpen = expandedBuildFolderParts.contains(part)
+            rows.append(BuildFolderListRow(
+                kind: .part(part, count: members.count, bytes: members.reduce(0) { $0 + $1.sizeBytes }),
+                id: "bf-part-\(part)",
+                isFirstChild: partIndex == 0,
+                showsStub: isOpen
+            ))
+            guard isOpen else { continue }
+            for (folderIndex, tool) in members.enumerated() {
+                rows.append(BuildFolderListRow(kind: .folder(tool), id: "bf-folder-\(tool.id)", isFirstChild: folderIndex == 0))
+            }
+        }
+        return rows
+    }
+
     @ViewBuilder
-    private var buildFolderGroupCard: some View {
-        let tools = visibleBuildFolderTools()
-        if let iconTool = tools.first {
-            VStack(alignment: .leading, spacing: 0) {
+    private func buildFolderListRowView(_ row: BuildFolderListRow, tools: [DevTool]) -> some View {
+        switch row.kind {
+        case .header:
+            if let iconTool = tools.first {
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
                     XcodeBuildFolderGroupHeader(
                         iconTool: iconTool,
                         folderCount: tools.count,
                         bytes: tools.reduce(0) { $0 + $1.sizeBytes },
                         isExpanded: buildFoldersExpanded,
+                        showsStub: row.showsStub,
                         selectionState: buildFolderGroup()?.state ?? .none,
                         onToggleSelection: {
                             keyboard.highlight(DevRowKey.buildFolders)
@@ -1806,88 +1863,68 @@ struct DevToolsView: View {
                     )
                 }
                 .scanListRow(DevRowKey.buildFolders, in: keyboard, ring: .inside)
-
-                if buildFoldersExpanded {
-                    ForEach(XcodeBuildFolderGroup.Part.allCases, id: \.self) { part in
-                        let partTools = tools.filter { buildFolderPart(of: $0) == part }
-                        if !partTools.isEmpty {
-                            buildFolderPartSection(part, tools: partTools)
-                        }
+                .accessibilityElement(children: .contain)
+            }
+        case .part(let part, let count, let bytes):
+            ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+                XcodeBuildFolderPartHeader(
+                    part: part,
+                    folderCount: count,
+                    bytes: bytes,
+                    isExpanded: expandedBuildFolderParts.contains(part),
+                    showsElbow: row.isFirstChild,
+                    showsStub: row.showsStub,
+                    selectionState: buildFolderGroup()?.state(in: part) ?? .none,
+                    onToggleSelection: {
+                        keyboard.highlight(DevRowKey.buildFolderPart(part))
+                        if let group = buildFolderGroup() { apply(group.toggled(part: part)) }
+                    },
+                    onToggleExpanded: {
+                        keyboard.highlight(DevRowKey.buildFolderPart(part))
+                        toggleBuildFolderPartExpanded(part)
                     }
-                    .transition(expandCollapseTransition)
-                }
+                )
             }
-            .padding(.bottom, buildFoldersExpanded ? AppStyle.Spacing.xSmall : 0)
-            .devToolsGroupCardChrome()
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(Text("Xcode build folders"))
+            .scanListRow(DevRowKey.buildFolderPart(part), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
+        case .folder(let tool):
+            buildFolderRow(tool, isFirst: row.isFirstChild)
         }
     }
 
-    @ViewBuilder
-    private func buildFolderPartSection(_ part: XcodeBuildFolderGroup.Part, tools: [DevTool]) -> some View {
-        let isExpanded = expandedBuildFolderParts.contains(part)
-        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-            XcodeBuildFolderPartHeader(
-                part: part,
-                folderCount: tools.count,
-                bytes: tools.reduce(0) { $0 + $1.sizeBytes },
-                isExpanded: isExpanded,
-                selectionState: buildFolderGroup()?.state(in: part) ?? .none,
-                onToggleSelection: {
-                    keyboard.highlight(DevRowKey.buildFolderPart(part))
-                    if let group = buildFolderGroup() { apply(group.toggled(part: part)) }
-                },
-                onToggleExpanded: {
-                    keyboard.highlight(DevRowKey.buildFolderPart(part))
-                    toggleBuildFolderPartExpanded(part)
-                }
-            )
-        }
-        .scanListRow(DevRowKey.buildFolderPart(part), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
-
-        if isExpanded {
-            ForEach(tools, id: \.id) { tool in
-                buildFolderRow(tool)
-            }
-            .transition(expandCollapseTransition)
-        }
-    }
-
-    /// One folder inside an open part, drawn like a project's folder row.
-    private func buildFolderRow(_ tool: DevTool) -> some View {
+    /// One folder inside an open part, as a compact row of the tree.
+    private func buildFolderRow(_ tool: DevTool, isFirst: Bool) -> some View {
         let toolID = tool.id
+        let path = XcodeBuildFolderScanPolicy.folderPath(inLabel: tool.toolName) ?? ""
+        let locations = { tool.paths.map { ScanRowLocation(url: $0, sizeBytes: tool.sizeBytes) } }
         return ScanSelectionScope(
             selection: store.scanSelection,
             isSelected: { $0.devToolIDs.contains(toolID) }
         ) { selected in
-            ScanResultRow(
-                isSelected: selected,
-                onToggle: {
-                    store.setDevToolSelected(id: toolID, isSelected: !store.scanSelection.devToolIDs.contains(toolID))
-                },
-                primaryLabel: tool.safetyInfo.headline,
+            XcodeBuildFolderRow(
+                facts: XcodeBuildFolderScanPolicy.facts(ofFolder: path),
+                fallbackName: URL(fileURLWithPath: path).lastPathComponent,
                 formattedSize: tool.formattedSize,
-                safetyInfo: tool.safetyInfo,
-                brandIcon: nil,
-                detailCaption: nil,
-                reinstallSafety: nil,
-                showUncommittedRepoChanges: false,
-                onExcludeFromScans: { store.excludeFromScans(tool) },
-                revealLocations: {
-                    tool.paths.map { ScanRowLocation(url: $0, sizeBytes: tool.sizeBytes) }
-                },
-                showsBulkCheckbox: true,
-                isMetadataPending: isDevToolMetadataPending(tool),
-                showsCardChrome: false,
-                showsLeadingIcon: false,
-                onHighlight: highlightAction(.tool(toolID))
+                isSelected: selected,
+                showsElbow: isFirst,
+                onToggle: {
+                    keyboard.highlight(DevRowKey.tool(toolID))
+                    store.setDevToolSelected(id: toolID, isSelected: !store.scanSelection.devToolIDs.contains(toolID))
+                }
             )
+            .overlay {
+                ScanRowContextMenu(isMenuActive: .constant(false)) {
+                    [
+                        .action(title: String(localized: "Exclude from scans")) { store.excludeFromScans(tool) },
+                        .separator,
+                    ] + FinderReveal.menuEntries(for: locations())
+                }
+            }
+            .modifier(ScanRowAccessibilityActions(
+                onExcludeFromScans: { store.excludeFromScans(tool) },
+                revealLocations: locations
+            ))
         }
         .scanListRow(DevRowKey.tool(toolID), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
-        .padding(.trailing, AppStyle.Spacing.xSmall)
-        .padding(.leading, AppStyle.Row.projectArtifactLeadingInset + AppStyle.Row.projectArtifactLeadingInset)
-        .transition(cleaningRowRemovalTransition)
     }
 
     /// The card from the last scan (#283), read only, with the clock where its
