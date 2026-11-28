@@ -126,7 +126,12 @@ nonisolated enum CoworkVMImageScanPolicy {
         case .imageOrigin:
             guard isSingleNameRegularFile(path) else { return false }
             switch check {
-            case .quick, .scan:
+            case .quick:
+                // `FileDeleter` asks this right before the origin's own move, when the
+                // image has already gone to the Trash. `.move` then decides on what's left.
+                if !exists(image) { return isLocalRebuildReady(bundle: bundle) && !context.isClaudeRunning() }
+                return isImageOffered(image, bundle: bundle, context: context, check: check)
+            case .scan:
                 return isImageOffered(image, bundle: bundle, context: context, check: check)
             case .move:
                 // The image went first. Its origin is all that's left of it.

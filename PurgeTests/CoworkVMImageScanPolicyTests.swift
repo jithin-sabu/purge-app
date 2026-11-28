@@ -250,6 +250,33 @@ struct CoworkVMImageScanPolicyTests {
         #expect(!Self.offered(Self.origin(home), home, Self.context(running: true), .move))
     }
 
+    /// The order `FileDeleter.deleteItems` asks in: `isOfferedForCleanup` (the
+    /// `.quick` check behind `refusesDeletion`) and then the move check, for the
+    /// image and then for the origin, once the image is in the Trash. Review of
+    /// #485 found the origin refused by the `.quick` check at that point.
+    @Test
+    func aCleanAsksForTheOriginAfterTheImageHasMoved() throws {
+        let home = try Self.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let image = URL(fileURLWithPath: Self.image(home))
+        let origin = URL(fileURLWithPath: Self.origin(home))
+        let context = Self.context()
+        #expect(!Policy.refusesDeletion(image, home: home.path, context: context))
+        #expect(Policy.passesImmediateTrashBoundary(image, home: home.path, context: context))
+        // The image's move failed: the origin stays with it.
+        #expect(!Policy.passesImmediateTrashBoundary(origin, home: home.path, context: context))
+        // The image moved.
+        try FileManager.default.removeItem(at: image)
+        #expect(!Policy.refusesDeletion(origin, home: home.path, context: context))
+        #expect(Policy.passesImmediateTrashBoundary(origin, home: home.path, context: context))
+        // Claude started, or its copy went, in between.
+        #expect(Policy.refusesDeletion(origin, home: home.path, context: Self.context(running: true)))
+        try FileManager.default.removeItem(at: Self.bundle(home).appendingPathComponent("rootfs.img.zst"))
+        #expect(Policy.refusesDeletion(origin, home: home.path, context: context))
+        // A scan with no image lists nothing, the origin included.
+        #expect(Policy.definitions(home: home.path, context: context).isEmpty)
+    }
+
     // MARK: Shape
 
     /// Session data, Claude's markers, the boot files, the compressed cache, the
