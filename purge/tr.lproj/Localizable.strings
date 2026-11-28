@@ -1628,7 +1628,7 @@
 "Built from %@." = "%@ projesinden derlendi.";
 "That project is no longer on this Mac." = "Bu proje artık bu Mac'te değil.";
 "Xcode build folders" = "Xcode derleme klasörleri";
-"Built outside Xcode's own folder" = "Xcode'un kendi klasörü dışında";
+"Built outside Xcode's own folder. %@" = "Xcode'un kendi klasörü dışında. %@";
 "Select all Xcode build folders" = "Tüm Xcode derleme klasörlerini seç";
 "Show folders" = "Klasörleri göster";
 "Hide folders" = "Klasörleri gizle";

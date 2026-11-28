@@ -1562,7 +1562,7 @@
 "Built from %@." = "بُنيت من %@.";
 "That project is no longer on this Mac." = "لم يعد هذا المشروع على جهاز Mac هذا.";
 "Xcode build folders" = "مجلدات بناء Xcode";
-"Built outside Xcode's own folder" = "خارج مجلد Xcode نفسه";
+"Built outside Xcode's own folder. %@" = "خارج مجلد Xcode نفسه. %@";
 "Select all Xcode build folders" = "تحديد كل مجلدات بناء Xcode";
 "Show folders" = "إظهار المجلدات";
 "Hide folders" = "إخفاء المجلدات";

@@ -1959,10 +1959,10 @@ struct DevToolsView: View {
                 VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                     Text("Xcode build folders")
                         .font(AppStyle.Typography.rowTitle)
-                    Text(String(localized: "\(tools.count) folders") + " · " + String(localized: "Built outside Xcode's own folder"))
+                    Text(XcodeBuildFolderGroupHeader.summary(folderCount: tools.count))
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(formatBytes(tools.reduce(Int64(0)) { $0 + $1.sizeBytes }))

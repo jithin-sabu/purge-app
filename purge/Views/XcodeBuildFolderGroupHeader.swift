@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The Xcode build folders card in Dev Tools (#480) is a small tree: the
@@ -14,9 +15,13 @@ import SwiftUI
 enum XcodeBuildFolderTree {
     /// The checkbox's own width, the same box every scan row draws.
     static let checkboxSlot: CGFloat = 16
-    /// The header's title, summary and checkbox sit in a band this tall, the
-    /// same as a child row, so the card's elbow matches a part's.
-    static let headerContentHeight: CGFloat = 40
+    /// The header's title, two-line summary and checkbox sit in a band just
+    /// tall enough for them, measured in the font the interface uses. Any
+    /// shorter and SwiftUI drops the summary's second line.
+    static let headerContentHeight: CGFloat =
+        lineHeight(of: AppStyle.Typography.headline, lines: 1)
+            + AppStyle.Spacing.xxSmall
+            + lineHeight(of: AppStyle.Typography.metadata, lines: 2)
     /// Above the header's band, and the card's footer row while it is closed.
     static let headerPadding = AppStyle.Spacing.small
     static let childHeight: CGFloat = 40
@@ -29,6 +34,14 @@ enum XcodeBuildFolderTree {
     static let lineCorner: CGFloat = 12
     /// Where the card's checkbox starts, as on every scan row.
     static let leading = AppStyle.Row.scanCardHorizontalPadding
+
+    /// The height of `lines` lines of `style`: Onest, or the system font where
+    /// the interface doesn't use Onest.
+    private static func lineHeight(of style: AppStyle.TextStyle, lines: Int) -> CGFloat {
+        let usesOnest = AppFonts.usesOnest(for: Bundle.main.preferredLocalizations.first) && AppFonts.register()
+        let font = (usesOnest ? NSFont(name: "Onest", size: style.size) : nil) ?? NSFont.systemFont(ofSize: style.size)
+        return ceil((font.ascender - font.descender + font.leading) * CGFloat(lines))
+    }
 }
 
 /// The lower part of an elbow, in the indent in front of a child's checkbox:
@@ -170,9 +183,20 @@ struct XcodeBuildFolderGroupHeader: View {
 
     private var title: String { String(localized: "Xcode build folders") }
 
-    private var summary: String {
-        String(localized: "\(folderCount) folders") + " · " + String(localized: "Built outside Xcode's own folder")
+    private var summary: String { Self.summary(folderCount: folderCount) }
+
+    /// The count, where the folders are, and that Xcode makes them again, in
+    /// two lines like the explanation on every other scan row. The last
+    /// scan's card shows the same text.
+    static func summary(folderCount: Int) -> String {
+        String(localized: "\(folderCount) folders") + " · " + String(localized: "Built outside Xcode's own folder. \(rebuildNote)")
     }
+
+    /// The build folders' explanation from explanations.json.
+    private static let rebuildNote = SafetyInfo.fromExplanationDatabase(
+        key: XcodeBuildFolderScanPolicy.explanationKey,
+        friendlyFallback: ""
+    ).explanation
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
@@ -193,8 +217,9 @@ struct XcodeBuildFolderGroupHeader: View {
                     Text(summary)
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

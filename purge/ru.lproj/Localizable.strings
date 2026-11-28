@@ -1587,7 +1587,7 @@
 "Built from %@." = "Собрано из %@.";
 "That project is no longer on this Mac." = "Этого проекта больше нет на этом Mac.";
 "Xcode build folders" = "Папки сборки Xcode";
-"Built outside Xcode's own folder" = "Вне папки самого Xcode";
+"Built outside Xcode's own folder. %@" = "Вне папки самого Xcode. %@";
 "Select all Xcode build folders" = "Выбрать все папки сборки Xcode";
 "Show folders" = "Показать папки";
 "Hide folders" = "Скрыть папки";
