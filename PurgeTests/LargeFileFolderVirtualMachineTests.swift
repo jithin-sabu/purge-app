@@ -401,7 +401,7 @@ struct LargeFileFolderVirtualMachineTests {
     func virtualBoxMediaAndUUIDsAreRead() {
         let settings = """
             <HardDisk uuid="{AbC-1}" location="a.vdi" format="VDI"><HardDisk uuid="{d-2}" location="Snapshots/{d-2}.vdi"/></HardDisk>
-            <DVDImage uuid="{e-3}" location="/x.iso"/><Image uuid="{F-4}"/><HardDisk uuid="{g-5}"/>
+            <DVDImages><Image uuid="{e-3}" location="/x.iso"/></DVDImages><Image uuid="{F-4}"/><HardDisk uuid="{g-5}"/>
             """
         let media = LargeFileScanPolicy.virtualBoxMedia(in: settings)
         #expect(media.map(\.uuid) == ["abc-1", "d-2", "e-3"])
@@ -483,6 +483,112 @@ struct LargeFileFolderVirtualMachineTests {
         #expect(!isEligible(home.path("\(outer)/Inner"), home))
     }
 
+    /// VirtualBox records an ISO or floppy image as an `Image` under
+    /// `DVDImages` or `FloppyImages`. One inside a VM that another VM attaches
+    /// by `uuid` alone keeps the VM off the list.
+    @Test
+    func vmWhoseImageAnotherVMAttachesByUUIDIsRefused() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Base")
+        try home.write("VirtualBox VMs/Base/tools.iso", bytes: 8192)
+        try home.write("Library/VirtualBox/VirtualBox.xml", text: """
+            <VirtualBox><Global><MediaRegistry><DVDImages>
+            <Image uuid="{CCCC-3}" location="../../VirtualBox VMs/Base/tools.iso"/>
+            </DVDImages></MediaRegistry></Global></VirtualBox>
+            """)
+        try home.virtualBoxVM("Other", settings: "<AttachedDevice type=\"DVD\"><Image uuid=\"{cccc-3}\"/></AttachedDevice>")
+
+        #expect(Set(await scan(home).keys) == ["VirtualBox VMs/Other"])
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Base"), home))
+    }
+
+    /// A clone in a hidden group folder is never offered, but it still needs
+    /// its base, so its settings are read.
+    @Test
+    func cloneInAHiddenGroupStillProtectsItsBase() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Base")
+        let baseDisk = home.virtualBox.appendingPathComponent("Base/Base.vdi")
+        try home.write("VirtualBox VMs/.Archive/Clone/Clone.vbox", text: "<HardDisk uuid=\"{1}\" location=\"\(baseDisk.path)\"/>")
+
+        #expect(await scan(home).isEmpty)
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Base"), home))
+    }
+
+    /// `VBOX_USER_HOME` moves `VirtualBox.xml`. A clone registered only there
+    /// still protects its base, and a value that couldn't be read refuses.
+    @Test
+    func registryMovedByVBoxUserHomeIsRead() throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Base")
+        let base = home.virtualBox.appendingPathComponent("Base")
+        let baseDisk = base.appendingPathComponent("Base.vdi")
+        try home.write("Documents/VMs/Clone/Clone.vbox", text: "<HardDisk uuid=\"{1}\" location=\"\(baseDisk.path)\"/>")
+        let clone = home.path("Documents/VMs/Clone/Clone.vbox")
+        try home.write("vbox-home/VirtualBox.xml", text: "<MachineEntry uuid=\"{2}\" src=\"\(clone.path)\"/>")
+        let moved = home.path("vbox-home").path
+
+        #expect(!LargeFileScanPolicy.virtualBoxDiskIsShared(base, root: home.virtualBox, home: home.url, userHome: .unset))
+        #expect(LargeFileScanPolicy.virtualBoxDiskIsShared(base, root: home.virtualBox, home: home.url, userHome: .value(moved)))
+        #expect(LargeFileScanPolicy.virtualBoxDiskIsShared(base, root: home.virtualBox, home: home.url, userHome: .failed))
+        #expect(LargeFileScanPolicy.virtualBoxUserHome(environment: ["VBOX_USER_HOME": moved]) == .value(moved))
+    }
+
+    /// A registry in a folder Purge can't search is not read as missing:
+    /// `stat` says it can't reach it, and the VM is refused.
+    @Test
+    func registryBehindAnUnsearchableFolderRefusesTheVM() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Win")
+        try home.write("Library/VirtualBox/VirtualBox.xml", text: "<VirtualBox/>")
+        let folder = home.path("Library/VirtualBox")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: folder.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Win"), home))
+    }
+
+    /// A scan root reached through a link into a VM's `Snapshots` folder sits
+    /// inside the VM, though it holds no `.vbox` itself. It is not walked, and
+    /// its snapshot disks are refused.
+    @Test
+    func rootLinkedIntoAVMsSnapshotsIsNotWalkedOrTrashed() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Win")
+        try home.write("VirtualBox VMs/Win/Snapshots/{1}.vdi", bytes: 8192)
+        try FileManager.default.removeItem(at: home.documents)
+        try home.link("Documents", to: "VirtualBox VMs/Win/Snapshots")
+
+        let found = await scan(home)
+        #expect(Set(found.keys) == ["VirtualBox VMs/Win"])
+        #expect(!isEligible(home.path("Documents/{1}.vdi"), home))
+        #expect(!isEligible(home.path("VirtualBox VMs/Win/Snapshots/{1}.vdi"), home))
+    }
+
+    /// A folder named like a Parallels bundle that holds VirtualBox settings
+    /// is a VirtualBox VM. Only its own walk lists it, under VirtualBox, and
+    /// the ordinary walk never lists it as Parallels.
+    @Test
+    func bundleHoldingVirtualBoxSettingsIsListedAsVirtualBox() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Documents/VBox/Lab.pvm/Lab.pvm.vbox", text: "<VirtualBox/>")
+        try home.write("Documents/VBox/Lab.pvm/Lab.vdi", bytes: 8192)
+        try home.write("Documents/Stray.pvm/Stray.vbox", text: "<VirtualBox/>")
+        try home.link("VirtualBox VMs", to: "Documents/VBox")
+
+        let found = await scan(home, installedApps: [.parallels, .virtualBox])
+        #expect(Set(found.keys) == ["Documents/VBox/Lab.pvm"])
+        #expect(found["Documents/VBox/Lab.pvm"]?.kind == .virtualMachine(.virtualBox, appInstalled: true))
+        #expect(isEligible(home.path("Documents/VBox/Lab.pvm"), home))
+        #expect(!isEligible(home.path("Documents/Stray.pvm"), home))
+    }
+
     /// A `VirtualBox.xml` that names only the VM itself refuses nothing.
     @Test
     func registryNamingOnlyTheVMItselfRefusesNothing() async throws {
@@ -506,7 +612,9 @@ struct LargeFileFolderVirtualMachineTests {
         try home.write("Documents/tart-home/vms/mac/disk.img", bytes: 8192)
         try home.link(".tart", to: "Documents/tart-home")
 
-        #expect(!(await scan(home).keys.contains(".tart/vms/mac")))
+        // Empty, not just without `.tart/vms/mac`: a walk that followed the
+        // link would list the VM under `Documents/tart-home`.
+        #expect(await scan(home).isEmpty)
         #expect(!isEligible(home.path(".tart/vms/mac"), home))
     }
 

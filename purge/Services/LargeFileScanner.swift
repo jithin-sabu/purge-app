@@ -292,12 +292,16 @@ nonisolated final class LargeFileScanner {
                 continue
             }
             // A root that holds a VirtualBox or Tart VM's files, such as a VM
-            // folder added in Settings, is not walked: its files and folders
-            // are the VM's, and a disk trashed alone breaks it (#475). The
-            // gate refuses them too. A root that can't be listed goes on, so
-            // the walk reports it as before.
-            if let entries = DirectoryListing.entries(of: realFolder.path),
-               LargeFileScanPolicy.holdsVirtualMachineFiles(entries) {
+            // folder added in Settings, or sits inside a folder that does,
+            // such as a Desktop linked to a VM's `Snapshots`, is not walked:
+            // its files and folders are the VM's, and a disk trashed alone
+            // breaks it (#475). The gate refuses them too. A root that can't
+            // be listed goes on, so the walk reports it as before.
+            let rootHoldsVirtualMachineFiles = DirectoryListing.entries(of: realFolder.path)
+                .map(LargeFileScanPolicy.holdsVirtualMachineFiles) ?? false
+            if rootHoldsVirtualMachineFiles || LargeFileScanPolicy.folderOrAboveHoldsVirtualMachineFiles(
+                realFolder.deletingLastPathComponent(), home: home
+            ) {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
@@ -422,6 +426,12 @@ nonisolated final class LargeFileScanner {
                         // folders that would be rows, so the walk lists no
                         // other folder twice.
                         if AIModelScanPolicy.isOllamaStore(fileURL) { return ([], false) }
+                        // A bundle that holds VirtualBox or Tart files is that
+                        // VM, listed by its own walk if at all, never as the
+                        // app its extension names (#475).
+                        if isVirtualMachine, LargeFileScanPolicy.holdsVirtualMachineFiles(fileURL) {
+                            return ([], false)
+                        }
                         // A VM that may be running is left off the list; the
                         // delete check refuses it again in case it starts later.
                         if isVirtualMachine,

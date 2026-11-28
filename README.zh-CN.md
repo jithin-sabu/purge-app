@@ -120,7 +120,7 @@
 
 - **恢复映像**：macOS 的 `.ipsw` 文件，通常有 15 到 25 GB。只在设置 Mac、设备或虚拟机时需要。
 - **虚拟机**：Parallels（`.pvm`）、UTM（`.utm`）或 VMware Fusion（`.vmwarevm`）的虚拟机包。它只占一行，会整个移到废纸篓，绝不会单独移走其中的磁盘文件。如果对应应用仍已安装，标签会提示你在该应用中移除，因为应用自己维护着一份虚拟机列表。如果虚拟机的应用正在运行，或虚拟机中有锁定文件，它会暂不显示，直到你退出该应用。
-- **VirtualBox 和 Tart 虚拟机**：每个虚拟机是一个文件夹，而不是包。Purge 会列出 `~/VirtualBox VMs` 中（或其中的分组文件夹中）含有同名 `<名称>.vbox` 的文件夹，以及直接位于 `~/.tart/vms` 中、含有 `config.json` 和 `disk.img` 的文件夹。每个虚拟机只占一行，会整个移到废纸篓。当 VirtualBox 正在运行、有任何进程打开了该文件夹中的文件，或 Purge 无法确认这一点时，虚拟机不会显示。如果另一个虚拟机（例如链接克隆）仍在使用某个 VirtualBox 虚拟机的磁盘，它也不会显示。Tart 在 `~/.tart/cache` 中的镜像缓存永远不会被改动。
+- **VirtualBox 和 Tart 虚拟机**：每个虚拟机是一个文件夹，而不是包。Purge 会列出 `~/VirtualBox VMs` 中（或其中的分组文件夹中）含有同名 `<名称>.vbox` 的文件夹，以及直接位于 `~/.tart/vms` 中、含有 `config.json` 和 `disk.img` 的文件夹。每个虚拟机只占一行，会整个移到废纸篓。VirtualBox 正在运行时，VirtualBox 虚拟机不会显示。有任何进程打开了虚拟机文件夹中的文件，或 Purge 无法确认这一点时，这两类虚拟机都不会显示。如果另一个虚拟机（例如链接克隆）仍在使用某个 VirtualBox 虚拟机的磁盘，它也不会显示。Tart 在 `~/.tart/cache` 中的镜像缓存永远不会被改动。
 - **未完成的下载**：`.crdownload`、`.part` 和 Parallels 的 `.prlupd-part` 文件，以及直接位于“下载”文件夹中的 Safari `.download` 包。
 
 #### 本地 AI 模型
