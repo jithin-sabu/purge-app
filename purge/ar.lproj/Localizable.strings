@@ -1560,12 +1560,12 @@
 "Xcode Build Files in %@" = "ملفات بناء Xcode في %@";
 "Built from %@ on %@." = "بُنيت من %@ في %@.";
 "Built from %@." = "بُنيت من %@.";
-"That project is no longer on this Mac." = "لم يعد هذا المشروع على جهاز Mac هذا.";
+"That folder is no longer on this Mac." = "لم يعد هذا المجلد على جهاز Mac هذا.";
 "Xcode build folders" = "مجلدات بناء Xcode";
 "Built outside Xcode's own folder. %@" = "خارج مجلد Xcode نفسه. %@";
 "Select all Xcode build folders" = "تحديد كل مجلدات بناء Xcode";
 "Show folders" = "إظهار المجلدات";
 "Hide folders" = "إخفاء المجلدات";
-"Project no longer on this Mac" = "لم يعد المشروع على جهاز Mac هذا";
-"Project still on this Mac" = "لا يزال المشروع على جهاز Mac هذا";
+"Built from a folder that's gone" = "مبني من مجلد لم يعد موجودًا";
+"Built from a folder still here" = "مبني من مجلد لا يزال موجودًا";
 "Select %@" = "تحديد %@";

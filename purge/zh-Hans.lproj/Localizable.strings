@@ -1626,12 +1626,12 @@
 "Xcode Build Files in %@" = "%@ 中的 Xcode 构建文件";
 "Built from %@ on %@." = "由 %@ 构建于 %@。";
 "Built from %@." = "由 %@ 构建。";
-"That project is no longer on this Mac." = "该项目已不在这台 Mac 上。";
+"That folder is no longer on this Mac." = "该文件夹已不在这台 Mac 上。";
 "Xcode build folders" = "Xcode 构建文件夹";
 "Built outside Xcode's own folder. %@" = "位于 Xcode 自己的文件夹之外。%@";
 "Select all Xcode build folders" = "选择所有 Xcode 构建文件夹";
 "Show folders" = "显示文件夹";
 "Hide folders" = "隐藏文件夹";
-"Project no longer on this Mac" = "项目已不在这台 Mac 上";
-"Project still on this Mac" = "项目仍在这台 Mac 上";
+"Built from a folder that's gone" = "构建自已删除的文件夹";
+"Built from a folder still here" = "构建自仍存在的文件夹";
 "Select %@" = "选择%@";

@@ -1626,12 +1626,12 @@
 "Xcode Build Files in %@" = "%@ İçindeki Xcode Derleme Dosyaları";
 "Built from %@ on %@." = "%@ projesinden %@ tarihinde derlendi.";
 "Built from %@." = "%@ projesinden derlendi.";
-"That project is no longer on this Mac." = "Bu proje artık bu Mac'te değil.";
+"That folder is no longer on this Mac." = "Bu klasör artık bu Mac'te değil.";
 "Xcode build folders" = "Xcode derleme klasörleri";
 "Built outside Xcode's own folder. %@" = "Xcode'un kendi klasörü dışında. %@";
 "Select all Xcode build folders" = "Tüm Xcode derleme klasörlerini seç";
 "Show folders" = "Klasörleri göster";
 "Hide folders" = "Klasörleri gizle";
-"Project no longer on this Mac" = "Proje artık bu Mac'te değil";
-"Project still on this Mac" = "Proje hâlâ bu Mac'te";
+"Built from a folder that's gone" = "Artık olmayan bir klasörden derlendi";
+"Built from a folder still here" = "Hâlâ var olan bir klasörden derlendi";
 "Select %@" = "Seç: %@";

@@ -548,7 +548,7 @@ struct XcodeBuildFolderTests {
 
         let goneText = Policy.safetyInfo(forFolder: gone.path, home: home, access: .full).explanation
         #expect(goneText.hasPrefix("Built from purge-324 on "))
-        #expect(goneText.hasSuffix("That project is no longer on this Mac."))
+        #expect(goneText.hasSuffix("That folder is no longer on this Mac."))
 
         // The rows' text and the "project is gone" link read the same answer.
         #expect(Policy.isProjectGone(gone.path))

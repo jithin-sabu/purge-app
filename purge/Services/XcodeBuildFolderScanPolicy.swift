@@ -502,7 +502,7 @@ nonisolated enum XcodeBuildFolderScanPolicy {
             built = String(localized: "Built from \(project).")
         }
         if projectExists == false {
-            return built + " " + String(localized: "That project is no longer on this Mac.")
+            return built + " " + String(localized: "That folder is no longer on this Mac.")
         }
         return built + " " + rebuildNote
     }

@@ -253,8 +253,9 @@ struct XcodeBuildFolderGroupHeader: View {
     }
 }
 
-/// One part of the card: the folders whose project is gone, or the ones whose
-/// project is still on this Mac. Its checkbox ticks that part alone.
+/// One part of the card: the folders built from a folder that is gone, often
+/// a deleted checkout of a project still here, or the ones whose source
+/// folder is still here. Its checkbox ticks that part alone.
 struct XcodeBuildFolderPartHeader: View {
     let part: XcodeBuildFolderGroup.Part
     let folderCount: Int
@@ -268,8 +269,8 @@ struct XcodeBuildFolderPartHeader: View {
 
     private var title: String {
         switch part {
-        case .projectGone: String(localized: "Project no longer on this Mac")
-        case .projectHere: String(localized: "Project still on this Mac")
+        case .projectGone: String(localized: "Built from a folder that's gone")
+        case .projectHere: String(localized: "Built from a folder still here")
         }
     }
 

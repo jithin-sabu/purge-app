@@ -1,13 +1,15 @@
 import Foundation
 
 /// How Dev Tools shows the Xcode build folder rows (#480): one card that
-/// opens in place, holding the folders whose project is gone and the folders
-/// whose project is still on this Mac as two parts, each with its own
-/// checkbox. Display only: every folder stays its own Dev Tools row, picked
-/// and cleaned like any other, so nothing here reaches a deletion gate.
+/// opens in place, holding the folders whose source folder is gone and the
+/// folders whose source folder is still on this Mac as two parts, each with
+/// its own checkbox. Display only: every folder stays its own Dev Tools
+/// row, picked and cleaned like any other, so nothing here reaches a
+/// deletion gate.
 struct XcodeBuildFolderGroup: Equatable {
     enum Part: Hashable, CaseIterable {
-        /// The project the folder was built from is no longer on this Mac.
+        /// The folder holding the project file it was built from is gone. The
+        /// project itself may still be here, in another checkout.
         case projectGone
         /// The project is still here, or Purge may not look.
         case projectHere
