@@ -168,7 +168,7 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
             // only removes the folder, so the Trash keeps its list right
             // whether or not Tart is installed (probe for #475).
             if app == .tart {
-                return String(localized: "Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right.")
+                return String(localized: "Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does.")
             }
             guard appInstalled else {
                 return String(localized: "Virtual machine. Everything inside it goes with it.")
@@ -184,7 +184,7 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
             case .virtualBox:
                 return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right.")
             case .tart:
-                return String(localized: "Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right.")
+                return String(localized: "Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does.")
             }
         case .unfinishedDownload:
             return String(localized: "Unfinished download. It can't be opened as it is. Remove it unless the download is still running.")

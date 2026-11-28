@@ -720,7 +720,7 @@
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 UTM 中移除，以免应用里的虚拟机列表出错。";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 VMware Fusion 中移除，以免应用里的虚拟机列表出错。";
 "Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 VirtualBox 中移除，以免应用里的虚拟机列表出错。";
-"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right." = "虚拟机。其中的所有内容会一并移除。Tart 只列出其文件夹中的虚拟机，所以它的列表仍然正确。";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does." = "虚拟机。其中的所有内容会一并移除。Tart 只列出其文件夹中的虚拟机，所以移到废纸篓后它的列表仍然正确，与 tart delete 的效果相同。";
 "Virtual Machines" = "虚拟机";
 "Vite cache" = "Vite 缓存";
 "Waiting for App Caches and Dev Tools to finish scanning" = "等待应用缓存和开发工具扫描完成";
