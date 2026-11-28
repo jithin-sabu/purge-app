@@ -409,6 +409,46 @@ struct LargeFileFolderVirtualMachineTests {
         #expect(LargeFileScanPolicy.virtualBoxUUIDs(in: settings) == ["abc-1", "d-2", "e-3", "f-4", "g-5"])
     }
 
+    /// A `VirtualBox.xml` that exists but can't be read might register a
+    /// clone, so the VM is refused.
+    @Test
+    func unreadableRegistryRefusesTheVM() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Win")
+        try home.write("Library/VirtualBox/VirtualBox.xml", text: "<VirtualBox/>")
+        let registry = home.path("Library/VirtualBox/VirtualBox.xml")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: registry.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: registry.path) }
+
+        #expect(await scan(home).isEmpty)
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Win"), home))
+    }
+
+    /// `~/VirtualBox VMs` moved and left as a link follows the rule for every
+    /// other root: walked where it leads inside home, never into `~/Library`.
+    @Test(arguments: [true, false])
+    func linkedVirtualBoxRootFollowsTheRootRule(intoLibrary: Bool) async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let target = intoLibrary ? "Library/VBox" : "Documents/VBox"
+        try home.write("\(target)/Win/Win.vbox", text: "<VirtualBox/>")
+        try home.write("\(target)/Win/Win.vdi", bytes: 8192)
+        try home.link("VirtualBox VMs", to: target)
+
+        let found = await scan(home)
+        let real = home.path("\(target)/Win")
+        if intoLibrary {
+            #expect(found.isEmpty)
+            #expect(!isEligible(real, home))
+        } else {
+            #expect(Set(found.keys) == ["\(target)/Win"])
+            #expect(found["\(target)/Win"]?.kind == .virtualMachine(.virtualBox, appInstalled: false))
+            #expect(isEligible(real, home))
+            #expect(!isEligible(home.path("\(target)/Win/Win.vdi"), home))
+        }
+    }
+
     /// A `VirtualBox.xml` that names only the VM itself refuses nothing.
     @Test
     func registryNamingOnlyTheVMItselfRefusesNothing() async throws {
