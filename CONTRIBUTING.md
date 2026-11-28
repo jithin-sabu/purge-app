@@ -40,8 +40,8 @@ for good. Features that fit that model are more likely to land.
    obvious bugs). For larger changes, discuss the approach before writing
    code so you don't spend time on something that won't be merged.
 2. **Fork the repo** and create a branch off `main`.
-3. **Build and test locally** — see [Build from source](README.md#build-from-source)
-   in the README.
+3. **Build and test locally** — see [Building and testing](#building-and-testing)
+   below.
 4. **Keep changes focused.** One fix or feature per pull request. Avoid
    bundling unrelated refactors with a bug fix.
 5. **Follow the existing style.** Match the surrounding Swift/SwiftUI
@@ -65,6 +65,64 @@ Purge's core promise is that it never deletes something it shouldn't. Any
 change touching the safety allowlist, never-delete protections, or scanning
 logic will get extra scrutiny, and may take longer to review. That's by
 design — please don't take it personally.
+
+## Building and testing
+
+The [README](README.md#build-from-source) has the short version. Here is the full one.
+
+### Prerequisites
+
+- macOS 13.0 or later
+- **Xcode 26 or later** (from the Mac App Store). The project uses Swift 6.2 build settings (default actor isolation and approachable concurrency) and `@concurrent`, which need Xcode 26; earlier versions won't build it
+- [Node.js](https://nodejs.org) 18+ and npm, only needed if you want to regenerate brand icons
+
+Dependencies are resolved by Swift Package Manager when you first build. The only one is [Sparkle](https://github.com/sparkle-project/Sparkle), which handles in-app updates.
+
+### Step 1: Clone the repo
+
+```bash
+git clone https://github.com/jithin-sabu/purge-app.git
+cd purge-app
+```
+
+### Step 2: Build and run
+
+Open the project in Xcode and run:
+
+```bash
+open purge.xcodeproj
+```
+
+Then select the **purge** scheme and press **⌘R**.
+
+The project is set to sign with the developer's Developer ID certificate, which you won't have. In Xcode, open **Signing & Capabilities** for each target and choose your own team or **Sign to Run Locally**.
+
+Or build straight from the command line, with signing turned off:
+
+```bash
+# Build a Debug app
+xcodebuild -project purge.xcodeproj -scheme purge -configuration Debug build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+
+# Build a Release app
+xcodebuild -project purge.xcodeproj -scheme purge -configuration Release build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
+
+The built `Purge.app` is written under Xcode's DerivedData folder (the build output ends with its path). macOS treats each build without your signature as a new app, so Full Disk Access has to be granted again after a rebuild.
+
+### Optional: regenerate brand icons
+
+The app cache icons are generated from [simple-icons](https://simpleicons.org). To rebuild them:
+
+```bash
+npm install
+npm run generate:icons
+```
+
+### Running the tests
+
+```bash
+xcodebuild test -project purge.xcodeproj -scheme purge -destination 'platform=macOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
 
 ## Code of conduct
 
