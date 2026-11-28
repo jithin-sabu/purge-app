@@ -409,16 +409,26 @@ struct AndroidSDKVersionKeepTests {
         let roots: [(URL, [ProjectType])] = [
             (home.appendingPathComponent("native"), [.androidGradle]),
             (home.appendingPathComponent("rn"), [.androidGradle, .node]),
-            (home.appendingPathComponent("jvm"), [.gradleJVM])
+            // What `DevScanner.projectTypes` gives a root with its own
+            // `build.gradle` and no Android app. It stays in the ledger: an
+            // Android library with no app module looks the same.
+            (home.appendingPathComponent("jvm"), [.androidGradle, .gradleJVM]),
+            (home.appendingPathComponent("web"), [.node])
         ]
         let files = Set(AndroidSDKVersionPolicy.gradleFiles(inProjectRoots: roots, mayRead: { _ in true })
             .map { String($0.dropFirst(home.path.count + 1)) })
+        // A module folder with either spelling lists both.
         #expect(files == [
-            "native/build.gradle", "native/build.gradle.kts", "native/app/build.gradle.kts", "native/lib/build.gradle",
-            "native/feature/login/build.gradle.kts", "native/libs/core/data/build.gradle.kts",
+            "native/build.gradle", "native/build.gradle.kts",
+            "native/app/build.gradle", "native/app/build.gradle.kts",
+            "native/lib/build.gradle", "native/lib/build.gradle.kts",
+            "native/feature/login/build.gradle", "native/feature/login/build.gradle.kts",
+            "native/libs/core/data/build.gradle", "native/libs/core/data/build.gradle.kts",
             "native/android/build.gradle", "native/android/build.gradle.kts",
             "rn/build.gradle", "rn/build.gradle.kts", "rn/android/build.gradle", "rn/android/build.gradle.kts",
-            "rn/android/app/build.gradle"
+            "rn/android/app/build.gradle", "rn/android/app/build.gradle.kts",
+            "jvm/build.gradle", "jvm/build.gradle.kts", "jvm/server/build.gradle", "jvm/server/build.gradle.kts",
+            "jvm/android/build.gradle", "jvm/android/build.gradle.kts"
         ])
     }
 }
@@ -464,6 +474,52 @@ struct AndroidGradlePinsTests {
             platforms: ["android-28", "android-29", "android-30", "android-31", "android-32", "android-36"],
             buildTools: ["30.0.3", "31.0.0", "32.0.0"]
         ))
+    }
+
+    /// Kotlin and Groovy let a value start on the line after `=` or `(`.
+    @Test
+    func aValueOnTheNextLinePins() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let pins = try SDK.pins(home, [
+            "a/build.gradle.kts": "android {\n    compileSdk =\n        33\n    buildToolsVersion(\n        \"33.0.1\"\n    )\n}\n"
+        ])
+        #expect(pins == Pins(platforms: ["android-33"], buildTools: ["33.0.1"]))
+    }
+
+    /// Comment marks count in the order they appear, outside strings.
+    @Test
+    func commentsAreReadInOrder() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(try SDK.pins(home, [
+            "a/build.gradle.kts": "// old syntax: /*\nandroid { compileSdk = 33 }\n"
+        ]) == Pins(platforms: ["android-33"], buildTools: []))
+        #expect(try SDK.pins(home, [
+            "b/build.gradle.kts": """
+            /* the old line
+               compileSdk = 21
+            */ android {
+                compileSdk = 34 /* inline */ ; buildToolsVersion = "34.0.0" // done
+                namespace = "a/*b"
+                defaultConfig { minSdk = 24 }
+            }
+            """
+        ]) == Pins(platforms: ["android-34"], buildTools: ["34.0.0"]))
+    }
+
+    /// `gradle.properties` may separate a key from its value with a space.
+    /// A `\` continuation on the key's line keeps everything.
+    @Test
+    func propertiesReadLikeJavaProperties() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try SDK.write("android.compileSdk=35\n", home, "p/gradle.properties")
+        try SDK.write("# mine\nandroid.compileSdk 33\nother.key: x \\\n  y\n", home, ".gradle/gradle.properties")
+        let app = ["p/app/build.gradle.kts": "android { compileSdk = providers.gradleProperty(\"android.compileSdk\").get().toInt() }\n"]
+        #expect(try SDK.pins(home, app) == Pins(platforms: ["android-33", "android-35"], buildTools: []))
+        try SDK.write("android.compileSdk = 3\\\n  4\n", home, ".gradle/gradle.properties")
+        #expect(try SDK.pins(home, app) == Pins(platforms: nil, buildTools: []))
     }
 
     @Test

@@ -256,7 +256,7 @@ nonisolated enum AndroidSDKVersionPolicy {
     /// count. In each, the build files at its top and under `android/` (React
     /// Native and Flutter keep their Gradle build there, and the walk never
     /// enters it), listed whether they are there now or not, so one added after
-    /// the scan still counts at the move. Also the build file of each module
+    /// the scan still counts at the move. Also the build files of each module
     /// folder up to `moduleDepth` folders below either of them that has one
     /// now, such as `app/` or `feature/login/`.
     static func gradleFiles(inProjectRoots roots: [(URL, [ProjectType])], mayRead: (String) -> Bool) -> [String] {
@@ -280,15 +280,18 @@ nonisolated enum AndroidSDKVersionPolicy {
     static let nonModuleFolders: Set<String> = ["build", "node_modules", "src", "gradle", "ios", "Pods", "macos", "web"]
 
     /// The build files in the real, non-hidden folders below `folder`, down to
-    /// `depth` folders, that have one now.
+    /// `depth` folders, that have one now, both spellings each.
     private static func moduleBuildFiles(in folder: String, depth: Int = moduleDepth, mayRead: (String) -> Bool) -> [String] {
         guard depth > 0, mayRead(folder),
               let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { return [] }
         return names.filter { !$0.hasPrefix(".") && !nonModuleFolders.contains($0) }.sorted().flatMap { name -> [String] in
             let module = "\(folder)/\(name)"
             guard OldToolVersionScanPolicy.isRealFolder(module) else { return [] }
-            return gradleFileNames.map { "\(module)/\($0)" }.filter { OldToolVersionScanPolicy.isRegularFile($0) }
-                + moduleBuildFiles(in: module, depth: depth - 1, mayRead: mayRead)
+            // Both spellings once either is there, so a module moved from Groovy
+            // to Kotlin after the scan still counts at the move.
+            let files = gradleFileNames.map { "\(module)/\($0)" }
+            let found = files.contains { OldToolVersionScanPolicy.isRegularFile($0) } ? files : []
+            return found + moduleBuildFiles(in: module, depth: depth - 1, mayRead: mayRead)
         }
     }
 }
@@ -412,34 +415,67 @@ nonisolated enum AndroidGradlePins {
 
     // MARK: Statements
 
-    /// The lines of `text` with comments left out: whole-line `//`, `#` and
-    /// block comments, and a trailing `//` outside a string.
+    /// The lines of `text` with comments left out, `//` and block comments,
+    /// read in source order outside strings, and whole-line `#` comments. A line
+    /// that ends in `=` or `(` is joined with the next one, since Kotlin and
+    /// Groovy let a value start on the line after.
     static func codeLines(_ text: String) -> [String] {
         var lines: [String] = []
         var inBlock = false
         for raw in text.split(whereSeparator: \.isNewline) {
-            var line = String(raw)
-            if inBlock {
-                guard let end = line.range(of: "*/") else { continue }
-                line = String(line[end.upperBound...])
-                inBlock = false
-            }
-            while let start = line.range(of: "/*"), !isInsideString(line, at: start.lowerBound) {
-                if let end = line.range(of: "*/", range: start.upperBound..<line.endIndex) {
-                    line = String(line[..<start.lowerBound]) + " " + String(line[end.upperBound...])
-                } else {
-                    line = String(line[..<start.lowerBound])
-                    inBlock = true
+            let line = Array(String(raw))
+            var kept = ""
+            var quote: Character?
+            var index = 0
+            while index < line.count {
+                let character = line[index]
+                let next: Character? = index + 1 < line.count ? line[index + 1] : nil
+                if inBlock {
+                    if character == "*", next == "/" {
+                        inBlock = false
+                        kept.append(" ")
+                        index += 2
+                    } else {
+                        index += 1
+                    }
+                    continue
                 }
+                if let open = quote {
+                    kept.append(character)
+                    if character == open { quote = nil }
+                    index += 1
+                    continue
+                }
+                if character == "\"" || character == "'" {
+                    quote = character
+                } else if character == "/", next == "/" {
+                    break
+                } else if character == "/", next == "*" {
+                    inBlock = true
+                    index += 2
+                    continue
+                }
+                kept.append(character)
+                index += 1
             }
-            if let slashes = line.range(of: "//"), !isInsideString(line, at: slashes.lowerBound) {
-                line = String(line[..<slashes.lowerBound])
-            }
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let trimmed = kept.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            lines.append(trimmed)
+            if let last = lines.last, endsOpen(last) {
+                lines[lines.count - 1] = last + " " + trimmed
+            } else {
+                lines.append(trimmed)
+            }
         }
         return lines
+    }
+
+    /// Whether a statement goes on to the next line: it ends in `(`, or in an
+    /// `=` that is not part of `==`, `!=`, `<=` or `>=`.
+    static func endsOpen(_ line: String) -> Bool {
+        if line.hasSuffix("(") { return true }
+        guard line.hasSuffix("=") else { return false }
+        let before = line.dropLast().last
+        return before.map { !"=!<>".contains($0) } ?? true
     }
 
     /// Whether `index` sits inside a quoted string on its line.
@@ -803,16 +839,35 @@ nonisolated enum AndroidGradlePins {
     }
 
     /// The values `key` has in a `gradle.properties` file, each quoted so it
-    /// reads as a string.
-    static func propertyValues(_ text: String, key: String) -> [String] {
-        text.split(whereSeparator: \.isNewline).compactMap { raw in
+    /// reads as a string. A key ends at the first `=`, `:` or space, as Java
+    /// properties read it. Nil when a line for `key` is written in a way this
+    /// reader doesn't follow: a `\` continuation or escape, or no value.
+    static func propertyValues(_ text: String, key: String) -> [String]? {
+        var values: [String] = []
+        var continuing = false
+        for raw in text.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            guard !line.hasPrefix("#"), !line.hasPrefix("!"),
-                  let separator = line.firstIndex(where: { $0 == "=" || $0 == ":" }),
-                  line[..<separator].trimmingCharacters(in: .whitespaces) == key else { return nil }
-            let value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-            return value.isEmpty ? nil : "\"\(value)\""
+            // A line after a `\` belongs to the one before. That one was
+            // checked when it was read.
+            if continuing {
+                continuing = line.hasSuffix("\\")
+                continue
+            }
+            guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("!") else { continue }
+            continuing = line.hasSuffix("\\")
+            let keyEnd = line.firstIndex { $0 == "=" || $0 == ":" || $0 == " " || $0 == "\t" } ?? line.endIndex
+            let lineKey = String(line[..<keyEnd])
+            guard lineKey == key || (lineKey.contains("\\") && lineKey.replacingOccurrences(of: "\\", with: "") == key)
+            else { continue }
+            guard !lineKey.contains("\\"), !continuing else { return nil }
+            var rest = line[keyEnd...].trimmingCharacters(in: .whitespaces)
+            if let first = rest.first, first == "=" || first == ":" {
+                rest = String(rest.dropFirst()).trimmingCharacters(in: .whitespaces)
+            }
+            guard !rest.isEmpty, !rest.contains("\\") else { return nil }
+            values.append("\"\(rest)\"")
         }
+        return values
     }
 
     /// The values `key` is given in a build or settings script: `key = value`
