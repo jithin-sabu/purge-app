@@ -78,6 +78,7 @@ Scans `~/Library/Caches`, sandbox container caches (these need Full Disk Access)
 Five groups in one view:
 
 - **Global dev tool caches**: Xcode (Derived Data, Archives, DeviceSupport), Homebrew, npm, pnpm, Yarn, CocoaPods, Gradle, the Dart and Flutter pub cache, Docker Desktop, VS Code, Cursor, JetBrains, Cargo, Terraform, and more
+- **Xcode build folders elsewhere**: build files that `xcodebuild -derivedDataPath` put outside Xcode's own folder, found by Xcode's `info.plist` inside them, never by name. Each folder is its own Check First row naming the project it was built from. A folder holding anything Xcode doesn't make, one a running program has open, or one a LaunchAgent starts a program from is left alone
 - **iOS Simulators**: every simulator that is shut down, one row each. A running simulator is listed so its space is counted, but it can't be selected
 - **Simulator Runtimes**: one row per runtime that `simctl` reports as deletable
 - **Xcode Components**: Xcode's optional Metal Toolchain (about 900 MB), removed with `xcodebuild -deleteComponent` when a full Xcode lists it as installed

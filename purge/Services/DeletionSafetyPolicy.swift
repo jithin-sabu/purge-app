@@ -2029,6 +2029,13 @@ enum DeletionSafetyPolicy {
         if isWhitelistedProjectArtifactPath(standardized, home: home) {
             return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
         }
+        // An Xcode build folder outside DerivedData (#480), known by what is in
+        // it, not its name. Below the never-delete guards like project artifacts:
+        // it can be anywhere in home. Whether a process has it open, or a
+        // LaunchAgent starts a program from it, is checked right before the move.
+        if XcodeBuildFolderScanPolicy.isWhitelistedPath(path, home: home) {
+            return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
+        }
         // Claude Code's `<project>/.claude/worktrees/<name>`. Below the never-delete
         // guards for the same reason as project artifacts: the project can be anywhere.
         if AgentWorktreeScanPolicy.isWhitelistedProjectWorktreePath(path, home: home) {

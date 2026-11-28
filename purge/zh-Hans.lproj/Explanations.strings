@@ -1249,3 +1249,7 @@
 /* pyenv-python-version */
 "pyenv Python Version" = "pyenv Python 版本";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv 安装的 Python，90 天内没有运行过，也不是同一次版本号下最新的。Purge 找到的版本文件、虚拟环境或配置都没有使用它。用 pyenv install 可以装回来。";
+
+/* xcode-build-folder */
+"Xcode Build Files Elsewhere" = "其他位置的 Xcode 构建文件";
+"Xcode makes these files again the next time you build the project." = "下次构建该项目时，Xcode 会重新生成这些文件。";

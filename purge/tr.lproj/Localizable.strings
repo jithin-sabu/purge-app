@@ -1623,3 +1623,7 @@
 "Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "Yalnızca Purge'ün dilini değiştirir. Sistem Ayarları'nda Dil ve Bölge > Uygulamalar altındaki Purge kaydıyla aynı ayardır. Purge'ün arayüzü Arapça için yalnızca Mac'inizin kendi dili Arapça olduğunda sağdan sola döner.";
 "Relaunch Purge to switch to %@." = "%@ diline geçmek için Purge'ü yeniden başlatın.";
 "Relaunch Now" = "Şimdi Yeniden Başlat";
+"Xcode Build Files in %@" = "%@ İçindeki Xcode Derleme Dosyaları";
+"Built from %@ on %@." = "%@ projesinden %@ tarihinde derlendi.";
+"Built from %@." = "%@ projesinden derlendi.";
+"That project is no longer on this Mac." = "Bu proje artık bu Mac'te değil.";

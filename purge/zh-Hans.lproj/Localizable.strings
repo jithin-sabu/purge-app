@@ -1623,3 +1623,7 @@
 "Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "仅更改 Purge 的语言。这与系统设置中“语言与地区”>“应用程序”下 Purge 的设置相同。只有当 Mac 本身使用阿拉伯语时，Purge 的界面才会为阿拉伯语从右向左排列。";
 "Relaunch Purge to switch to %@." = "重新启动 Purge 以切换到%@。";
 "Relaunch Now" = "立即重新启动";
+"Xcode Build Files in %@" = "%@ 中的 Xcode 构建文件";
+"Built from %@ on %@." = "由 %@ 构建于 %@。";
+"Built from %@." = "由 %@ 构建。";
+"That project is no longer on this Mac." = "该项目已不在这台 Mac 上。";

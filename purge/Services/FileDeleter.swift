@@ -237,13 +237,15 @@ nonisolated final class FileDeleter: Sendable {
     /// can't afford on the main thread: for an nvm (#400) or Vite+ (#398) Node
     /// version, a rustup toolchain (#406), a uv Python version (#405) or a pyenv Python (#404),
     /// its configs, `bin` links and `lsof`; for an Android build-tools or platform version (#467),
-    /// its Gradle files, `bin` links and `lsof`; and `lsof` for an unfinished Vite+ install. True lets
+    /// its Gradle files, `bin` links and `lsof`; for an Xcode build folder outside DerivedData (#480),
+    /// `lsof` and the LaunchAgents; and `lsof` for an unfinished Vite+ install. True lets
     /// the move go. Tests hand in a fake, since the real one only knows the real home's `~/.nvm`.
     private let immediateMoveCheck: @Sendable (URL) -> Bool
 
     /// The move check every real clean uses: nvm's rules, then Vite+'s, then
     /// rustup's, then uv's, then pyenv's, then an Android build-tools or platform version's (#467),
-    /// then a browser cache's shape (#440). Tests pass a throwaway home and fake reads to prove each part runs.
+    /// then an Xcode build folder's (#480), then a browser cache's shape (#440). Tests pass a
+    /// throwaway home and fake reads to prove each part runs.
     static func defaultImmediateMoveCheck(
         home: String = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
         nvm: NvmNodeVersionPolicy.Context? = nil,
@@ -251,7 +253,8 @@ nonisolated final class FileDeleter: Sendable {
         rustup: RustupToolchainPolicy.Context? = nil,
         uv: UvPythonVersionPolicy.Context? = nil,
         pyenv: PyenvPythonVersionPolicy.Context? = nil,
-        androidSDKVersions: AndroidSDKVersionPolicy.Context? = nil
+        androidSDKVersions: AndroidSDKVersionPolicy.Context? = nil,
+        openFiles: @escaping OpenFileCheck.Lister = OpenFileCheck.liveListing
     ) -> @Sendable (URL) -> Bool {
         { url in
             NvmNodeVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: nvm)
@@ -260,6 +263,7 @@ nonisolated final class FileDeleter: Sendable {
                 && UvPythonVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: uv)
                 && PyenvPythonVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: pyenv)
                 && AndroidSDKVersionPolicy.passesImmediateTrashBoundary(url, home: home, context: androidSDKVersions)
+                && XcodeBuildFolderScanPolicy.passesImmediateTrashBoundary(url, home: home, lister: openFiles)
                 && SafetyTierList.passesChromiumShapeBoundary(url, home: home)
         }
     }

@@ -22,6 +22,7 @@ on:
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
       - purge/Services/AgentWorktreeScanPolicy.swift
       - purge/Services/GoModuleCacheScanPolicy.swift
+      - purge/Services/XcodeBuildFolderScanPolicy.swift
       - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
@@ -43,6 +44,7 @@ on:
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
       - purge/Services/AgentWorktreeScanPolicy.swift
       - purge/Services/GoModuleCacheScanPolicy.swift
+      - purge/Services/XcodeBuildFolderScanPolicy.swift
       - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
