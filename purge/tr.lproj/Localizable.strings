@@ -1616,3 +1616,8 @@
 "Double-click it, then click Install." = "Ona çift tıklayın, sonra Yükle'ye tıklayın.";
 "Confirm with Install, and your password if asked." = "Yükle ile ve istenirse parolanızla onaylayın.";
 "Select it, click the minus button, then Remove." = "Onu seçin, eksi düğmesine, sonra Kaldır'a tıklayın.";
+"Language" = "Dil";
+"System default" = "Sistem varsayılanı";
+"Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Arabic reads right to left in Purge only when your Mac itself uses Arabic." = "Yalnızca Purge'ün dilini değiştirir. Sistem Ayarları'nda Dil ve Bölge > Uygulamalar altındaki Purge kaydıyla aynı ayardır. Arapça, Purge'te yalnızca Mac'inizin kendi dili Arapça olduğunda sağdan sola gösterilir.";
+"Relaunch Purge to switch to %@." = "%@ diline geçmek için Purge'ü yeniden başlatın.";
+"Relaunch Now" = "Şimdi Yeniden Başlat";

@@ -97,6 +97,26 @@ struct LaunchContextTests {
         )
     }
 
+    /// The Language row's relaunch opens Purge from a shell that is never in
+    /// front, so macOS left the new copy inactive in on-demand mode (#465).
+    @Test(
+        "A relaunch from Settings brings its window forward with the Dock icon shown",
+        arguments: [
+            (false, false, true),
+            (true, false, true),
+            (false, true, false),
+        ]
+    )
+    func relaunchRevealsWindow(hidesDockIcon: Bool, startsWindowless: Bool, expected: Bool) {
+        #expect(
+            LaunchContext.shouldRevealInitialWindow(
+                hidesDockIcon: hidesDockIcon,
+                relaunchedByPurge: true,
+                startsWindowless: startsWindowless
+            ) == expected
+        )
+    }
+
     // MARK: Login-launch detection
 
     @Test("A login-item open event is recognised")

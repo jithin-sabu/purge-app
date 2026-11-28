@@ -49,10 +49,12 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
             InitialWindowSuppressor.suppressInitialWindow()
         } else if LaunchContext.shouldRevealInitialWindow(
             hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
+            relaunchedByPurge: AppRelauncher.launchedByRelaunch,
             startsWindowless: startsWindowless
         ) {
-            // With the Dock icon hidden, macOS leaves a new launch inactive and
-            // its window behind the front app or off screen (#428).
+            // With the Dock icon hidden, or after a relaunch from Settings
+            // (#465), macOS leaves a new launch inactive and its window behind
+            // the front app or off screen (#428).
             InitialWindowRevealer.revealInitialWindow()
         }
     }
@@ -69,6 +71,8 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         if !SelfUninstallState.clearsDefaultsOnQuit {
             AppEnvironment.store.flushLastScanWrites()
         }
+        // A Language change in Settings asked for Purge to open again (#465).
+        AppRelauncher.openAgainIfRequested()
         SelfUninstallState.finishQuit()
     }
 

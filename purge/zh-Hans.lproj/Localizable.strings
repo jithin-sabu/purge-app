@@ -1616,3 +1616,8 @@
 "Double-click it, then click Install." = "双击它，然后点按“安装”。";
 "Confirm with Install, and your password if asked." = "点按“安装”确认，如有要求请输入密码。";
 "Select it, click the minus button, then Remove." = "选择它，点按减号按钮，然后点按“移除”。";
+"Language" = "语言";
+"System default" = "跟随系统";
+"Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Arabic reads right to left in Purge only when your Mac itself uses Arabic." = "仅更改 Purge 的语言。这与系统设置中“语言与地区”>“应用程序”下 Purge 的设置相同。只有当 Mac 本身使用阿拉伯语时，Purge 中的阿拉伯语才会从右向左显示。";
+"Relaunch Purge to switch to %@." = "重新启动 Purge 以切换到%@。";
+"Relaunch Now" = "立即重新启动";
