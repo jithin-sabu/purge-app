@@ -18,11 +18,14 @@
 "Alfred Launcher" = "مشغّل Alfred";
 "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "كل الصور والحاويات ووحدات التخزين، وبعضها فيه قواعد بيانات. لإبقاء وحدات التخزين شغّل docker --context desktop-linux system prune وDocker يعمل، أو أنهِه.";
 "An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays." = "إصدار أقدم من Android NDK. ينزّله Gradle مجددًا حين يحتاجه مشروع. قد يفشل البناء بدون Gradle حتى تعيد تثبيته. يبقى الإصدار الأحدث.";
+"An older Android SDK platform. Gradle downloads it again when a project needs it, or reinstall it in the SDK Manager. The newest and those your projects name stay." = "منصة Android SDK أقدم. ينزّلها Gradle مجددًا حين يحتاجها مشروع، أو أعد تثبيتها من SDK Manager. يبقى الأحدث وما تسمّيه مشاريعك.";
 "An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back." = "إصدار أقدم من Node.js عبر nvm. لا يستخدمه اسم مستعار أو ملف .nvmrc وجده Purge أو حزمة عامة أو إعداد npm. يبقى أحدث إصدار لكل رئيسي. يعيده nvm install.";
 "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "نتائج تحليل يحفظها خادم لغة Dart وFlutter في ‎~/.dartServer لتُفتح المشاريع أسرع. حذفها آمن؛ يعيد المحلّل إنشاءها.";
 "Android Build Cache" = "ذاكرة بناء Android المؤقتة";
 "Android Build Output" = "مخرجات بناء Android";
 "Android NDK" = "Android NDK";
+"Android SDK Build-Tools" = "Android SDK Build-Tools";
+"Android SDK Platform" = "Android SDK Platform";
 "Android Studio" = "Android Studio";
 "Angular Build Cache" = "ذاكرة بناء Angular المؤقتة";
 "Antigravity Browser Cache" = "ذاكرة متصفح Antigravity المؤقتة";
@@ -282,6 +285,7 @@
 "Old Claude Code Downloads" = "تنزيلات Claude Code القديمة";
 "Old Editor Workspace Data" = "بيانات مساحات عمل قديمة للمحرّر";
 "Old Figma Profiles" = "ملفات تعريف Figma القديمة";
+"Older Android build tools. Gradle downloads one again when a project needs it, or reinstall it in the SDK Manager. The newest and those your projects name stay." = "أدوات بناء Android أقدم. ينزّلها Gradle مجددًا حين يحتاجها مشروع، أو أعد تثبيتها من SDK Manager. يبقى الأحدث وما تسمّيه مشاريعك.";
 "Ollama AI Models" = "نماذج Ollama للذكاء الاصطناعي";
 "OpenAI Codex" = "OpenAI Codex";
 "Opera Browser" = "متصفح Opera";

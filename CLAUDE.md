@@ -68,7 +68,7 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the three Linu
   - `purge/Services/DeletionSafetyPolicy.swift`, `SafetyTierList.swift`, `SafetyAllowlistSummary.swift`, `FileDeleter.swift`, `CacheDiscoveryPaths.swift`, `EditorWorkspaceStoragePolicy.swift`
   - the one-click candidate list (`PurgeStore.manualSafeCleanupCandidates`) and Dev Projects' stale and in-use checks (`purge/Services/ProjectActivityPolicy.swift`)
   - any `purge/Services/*ScanPolicy.swift` or `*Scanner.swift`
-  - the old-version rules `OldToolVersionScanPolicy` hands a path to (`purge/Services/NvmNodeVersionPolicy.swift`, `VitePlusNodeVersionPolicy.swift`, `RustupToolchainPolicy.swift`, `UvPythonVersionPolicy.swift`, `PyenvPythonVersionPolicy.swift`)
+  - the old-version rules `OldToolVersionScanPolicy` hands a path to (`purge/Services/NvmNodeVersionPolicy.swift`, `VitePlusNodeVersionPolicy.swift`, `RustupToolchainPolicy.swift`, `UvPythonVersionPolicy.swift`, `PyenvPythonVersionPolicy.swift`, `AndroidSDKVersionPolicy.swift`)
   - `purge/Resources/explanations.json` or `purge/Models/ProjectArtifactCatalog.swift`
   - simulator runtimes (`purge/Models/SimulatorRuntime.swift`), whose `deletable` filter is a deletion gate, and simulator devices (`purge/Models/SimulatorDevice.swift`), which set each device's safety level
   - scheduled cleaning (`purge/Services/ScheduledCleaning*.swift`)

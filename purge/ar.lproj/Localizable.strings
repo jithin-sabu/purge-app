@@ -195,6 +195,8 @@
 "An app manages this library and expects every file in it. Removing parts of it from outside the app can corrupt the library, so Purge only ever shows it." = "يدير تطبيق هذه المكتبة ويتوقع وجود كل ملف فيها. قد تؤدي إزالة أجزاء منها من خارج التطبيق إلى إتلاف المكتبة، لذا يكتفي Purge بعرضها دائمًا.";
 "An unused leftover Chromium framework in %@. Relaunch the browser to clean versions still loaded; relaunching also removes old ones." = "إطار عمل Chromium متبقٍّ وغير مستخدم في %@. أعد تشغيل المتصفح لتنظيف الإصدارات التي لا تزال محمّلة؛ وإعادة التشغيل تزيل الإصدارات القديمة أيضًا.";
 "Android NDK %@" = "Android NDK %@";
+"Android SDK Build-Tools %@" = "Android SDK Build-Tools %@";
+"Android SDK Platform %@" = "Android SDK Platform %@";
 "Blocked in Login Items" = "محظور في عناصر تسجيل الدخول";
 "Node.js %@ (nvm)" = "Node.js %@ (nvm)";
 "Node.js %@ (Vite+)" = "Node.js %@ (Vite+)";

@@ -126,7 +126,9 @@ struct OldToolVersionShapeTests {
         "Library/Android/sdk/ndk/27",
         "Library/Android/sdk/ndk/27.0.12077973/build",
         "Library/Android/sdk/ndk/.installer",
-        "Library/Android/sdk/platforms/android-36",
+        // Platform and build-tools versions have a shape since #467, but nothing inside one does.
+        "Library/Android/sdk/platforms/android-36/android.jar",
+        "Library/Android/sdk/build-tools/36.0.0/lib",
         "Library/Android/sdk/system-images/android-36",
         "Library/Android/sdk/system-images/android-36/google_apis",
         "Library/Android/sdk/system-images/android-36/google_apis/arm64-v8a/system.img",
