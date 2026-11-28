@@ -18,11 +18,14 @@
 "Alfred Launcher" = "Лаунчер Alfred";
 "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "Все образы, контейнеры, тома с базами. Тома сохранит docker --context desktop-linux system prune при открытом Docker. Или закройте Docker.";
 "An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays." = "Старый Android NDK. Gradle скачает его, когда нужно проекту; сборка без Gradle может падать, пока не переустановите. Новейший остаётся.";
+"An older Android SDK platform. Gradle downloads it again when a project needs it, or reinstall it in the SDK Manager. The newest and those your projects name stay." = "Старая платформа Android SDK. Gradle скачает её для проекта, или поставьте её в SDK Manager. Новейшая и названные в проектах остаются.";
 "An older Node.js from nvm. No alias, .nvmrc Purge found, global package or npm config uses it. The newest of each major stays. nvm install brings it back." = "Node.js из nvm, не новейшая в своей ветке. Её не используют алиасы, найденные .nvmrc, глобальные пакеты, конфиг npm. Вернёт nvm install.";
 "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "Результаты анализа сервера Dart и Flutter в ~/.dartServer для быстрого открытия проектов. Можно удалить: анализатор создаст их заново.";
 "Android Build Cache" = "Кэш сборки Android";
 "Android Build Output" = "Результаты сборки Android";
 "Android NDK" = "Android NDK";
+"Android SDK Build-Tools" = "Android SDK Build-Tools";
+"Android SDK Platform" = "Android SDK Platform";
 "Android Studio" = "Android Studio";
 "Angular Build Cache" = "Кэш сборки Angular";
 "Antigravity Browser Cache" = "Кэш браузера Antigravity";
@@ -282,6 +285,7 @@
 "Old Claude Code Downloads" = "Старые загрузки Claude Code";
 "Old Editor Workspace Data" = "Старые данные рабочей области редактора";
 "Old Figma Profiles" = "Старые профили Figma";
+"Older Android build tools. Gradle downloads one again when a project needs it, or reinstall it in the SDK Manager. The newest and those your projects name stay." = "Старые Android build tools. Gradle скачает нужную проекту версию, или поставьте её в SDK Manager. Новейшая и названные в проектах остаются.";
 "Ollama AI Models" = "ИИ-модели Ollama";
 "OpenAI Codex" = "OpenAI Codex";
 "Opera Browser" = "Браузер Opera";

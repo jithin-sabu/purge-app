@@ -120,6 +120,33 @@ nonisolated final class DevScanner {
                 reinstallCommand: base.reinstallCommand
             )
         }
+        // One row per build-tools and platform version, named like the NDK rows (#467).
+        if let version = AndroidSDKVersionPolicy.buildToolsVersion(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: AndroidSDKVersionPolicy.buildToolsExplanationKey,
+                friendlyFallback: toolLabel
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Android SDK Build-Tools \(version)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: base.reinstallCommand
+            )
+        }
+        if let level = AndroidSDKVersionPolicy.platformLevel(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: AndroidSDKVersionPolicy.platformExplanationKey,
+                friendlyFallback: toolLabel
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Android SDK Platform \(level)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: base.reinstallCommand
+            )
+        }
         // One row per nvm Node version, named like the NDK rows (#400).
         if let version = NvmNodeVersionPolicy.version(inLabel: toolLabel) {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -1326,6 +1353,14 @@ nonisolated final class DevScanner {
             }
             PyenvPythonVersionPolicy.ledger.record(
                 PyenvPythonVersionPolicy.recordedFiles(inProjectRoots: discoveredRoots.map(\.0), mayRead: mayRead),
+                home: home.standardizedFileURL.path,
+                fullAccess: access == .full,
+                mayRead: mayRead
+            )
+            // The Gradle build files of the Android projects this walk found keep
+            // the build-tools and platform versions they name (#467).
+            AndroidSDKVersionPolicy.ledger.record(
+                AndroidSDKVersionPolicy.gradleFiles(inProjectRoots: discoveredRoots, mayRead: mayRead),
                 home: home.standardizedFileURL.path,
                 fullAccess: access == .full,
                 mayRead: mayRead

@@ -3,6 +3,7 @@ import Foundation
 
 /// Old tool versions kept next to the one in use (#324): Cursor's unfinished
 /// agent-CLI installs, old Claude Code downloads, Android NDK versions, Android
+/// build-tools and SDK platform versions no project names (#467), Android
 /// system images no emulator uses, Figma profiles Figma has migrated away
 /// from, Node.js versions nvm (#400) or Vite+ (#398) keeps that nothing
 /// uses, with the folders an unfinished Vite+ install leaves, Rust
@@ -27,6 +28,10 @@ nonisolated enum OldToolVersionScanPolicy {
         case claudeCodeDownload
         /// `~/Library/Android/sdk/ndk/<version>`.
         case androidNDK
+        /// `~/Library/Android/sdk/build-tools/<version>` (#467), judged by `AndroidSDKVersionPolicy`.
+        case androidBuildTools
+        /// `~/Library/Android/sdk/platforms/android-<level>` (#467), judged by `AndroidSDKVersionPolicy`.
+        case androidPlatform
         /// `~/Library/Android/sdk/system-images/<api>/<tag>/<abi>`.
         case androidSystemImage
         /// `~/Library/Application Support/Figma/DesktopProfile/v<number>`.
@@ -105,6 +110,11 @@ nonisolated enum OldToolVersionScanPolicy {
         }
         if let name = onlyChild(path, of: "\(home)/\(androidSDK)/ndk"), isDottedVersion(name) {
             return .androidNDK
+        }
+        switch AndroidSDKVersionPolicy.folder(of: path, home: home) {
+        case .buildTools: return .androidBuildTools
+        case .platform: return .androidPlatform
+        case nil: break
         }
         let images = "\(home)/\(androidSDK)/system-images"
         if PathContainment.isInside(path, images) {
@@ -234,7 +244,8 @@ nonisolated enum OldToolVersionScanPolicy {
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
         uv: UvPythonVersionPolicy.Context? = nil,
-        pyenv: PyenvPythonVersionPolicy.Context? = nil
+        pyenv: PyenvPythonVersionPolicy.Context? = nil,
+        androidSDKVersions: AndroidSDKVersionPolicy.Context? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let kind = kind(of: path, home: home) else { return false }
@@ -246,11 +257,13 @@ nonisolated enum OldToolVersionScanPolicy {
             rustup: rustup,
             uv: uv,
             pyenv: pyenv,
+            androidSDKVersions: androidSDKVersions,
             nvmCheck: .quick
         )
     }
 
-    /// `nvmCheck` says how far an nvm, Vite+ (#398), rustup (#406), uv (#405) or pyenv (#404) entry is judged:
+    /// `nvmCheck` says how far an nvm, Vite+ (#398), rustup (#406), uv (#405), pyenv (#404) or
+    /// Android build-tools or platform (#467) entry is judged:
     /// `refusesDeletion` may run on the main thread, so it takes `.quick`, and
     /// `FileDeleter` runs the rest right before the move
     /// (`passesImmediateTrashBoundary` in each policy).
@@ -265,6 +278,7 @@ nonisolated enum OldToolVersionScanPolicy {
         rustup: RustupToolchainPolicy.Context? = nil,
         uv: UvPythonVersionPolicy.Context? = nil,
         pyenv: PyenvPythonVersionPolicy.Context? = nil,
+        androidSDKVersions: AndroidSDKVersionPolicy.Context? = nil,
         nvmCheck: NvmNodeVersionPolicy.Check = .scan
     ) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -287,12 +301,17 @@ nonisolated enum OldToolVersionScanPolicy {
         case .androidNDK:
             let root = url.deletingLastPathComponent().path
             let version = url.lastPathComponent
-            guard isCompleteNDK(path), let newest = newestCompleteNDK(in: root),
+            guard isCompleteSDKPackage(path), let newest = newestCompleteNDK(in: root),
                   let pinned = pinnedNDKVersions(
                     sdkRoot: "\(home)/\(androidSDK)",
                     environmentPaths: android.ndkEnvironmentPaths
                   ) else { return false }
             return isLower(version, than: newest) && !pinned.contains(version)
+        case .androidBuildTools, .androidPlatform:
+            // Built here, not before: it probes Full Disk Access, which most rows don't need.
+            return AndroidSDKVersionPolicy.isOffered(
+                path, home: home, context: androidSDKVersions ?? .current(home: home), check: nvmCheck
+            )
         case .androidSystemImage:
             guard isRealFolder(path),
                   let used = avdImageFolders(avdHomes: android.avdHomes, sdkRoot: "\(home)/\(androidSDK)", home: home)
@@ -356,10 +375,11 @@ nonisolated enum OldToolVersionScanPolicy {
         return names.allSatisfy { changedBefore("\(path)/\($0)") }
     }
 
-    /// A finished NDK install: a real folder with `source.properties` and no
-    /// `.installer`, which the SDK manager keeps while an install is under way
-    /// and leaves behind when one fails.
-    static func isCompleteNDK(_ path: String) -> Bool {
+    /// A finished SDK package install, such as an NDK, build-tools or platform
+    /// version: a real folder with `source.properties` and no `.installer`,
+    /// which the SDK manager keeps while an install is under way and leaves
+    /// behind when one fails.
+    static func isCompleteSDKPackage(_ path: String) -> Bool {
         var info = stat()
         return isRealFolder(path)
             && isRegularFile("\(path)/source.properties")
@@ -371,7 +391,7 @@ nonisolated enum OldToolVersionScanPolicy {
     static func newestCompleteNDK(in ndkRoot: String) -> String? {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: ndkRoot) else { return nil }
         return names
-            .filter { isDottedVersion($0) && isCompleteNDK("\(ndkRoot)/\($0)") }
+            .filter { isDottedVersion($0) && isCompleteSDKPackage("\(ndkRoot)/\($0)") }
             .max { isLower($0, than: $1) }
     }
 
@@ -707,7 +727,8 @@ nonisolated enum OldToolVersionScanPolicy {
         vitePlus: VitePlusNodeVersionPolicy.Context? = nil,
         rustup: RustupToolchainPolicy.Context? = nil,
         uv: UvPythonVersionPolicy.Context? = nil,
-        pyenv: PyenvPythonVersionPolicy.Context? = nil
+        pyenv: PyenvPythonVersionPolicy.Context? = nil,
+        androidSDKVersions: AndroidSDKVersionPolicy.Context? = nil
     ) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         let android = android ?? .current(home: homePath)
@@ -716,6 +737,7 @@ nonisolated enum OldToolVersionScanPolicy {
         let rustup = rustup ?? .current(home: homePath)
         let uv = uv ?? .current(home: homePath)
         let pyenv = pyenv ?? .current(home: homePath)
+        let androidSDKVersions = androidSDKVersions ?? .current(home: homePath)
 
         func offered(in root: String, depth: Int = 1, includeHidden: Bool = false) -> [String] {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited, home: home) else {
@@ -732,7 +754,8 @@ nonisolated enum OldToolVersionScanPolicy {
                 guard let kind = kind(of: path, home: homePath) else { return false }
                 return isOffered(
                     path, kind: kind, home: homePath, now: now,
-                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup, uv: uv, pyenv: pyenv
+                    android: android, nvm: nvm, vitePlus: vitePlus, rustup: rustup, uv: uv, pyenv: pyenv,
+                    androidSDKVersions: androidSDKVersions
                 )
             }
             .sorted { isLower($0, than: $1) }
@@ -749,6 +772,21 @@ nonisolated enum OldToolVersionScanPolicy {
         add(claudeDownloadLabel, offered(in: "\(homePath)/\(claudeDownloads)"))
         for version in offered(in: "\(homePath)/\(androidSDK)/ndk") {
             add(ndkLabelPrefix + URL(fileURLWithPath: version).lastPathComponent, [version])
+        }
+        // One row per build-tools and platform version, like the NDK rows
+        // (#467), from their own list so the Gradle files are read once.
+        let sdkRoot = URL(fileURLWithPath: AndroidSDKVersionPolicy.sdkRoot(home: homePath))
+        if ProtectedLocations.isReadable(sdkRoot, access: .limited, home: home) {
+            let sdk = AndroidSDKVersionPolicy.offeredFolders(home: homePath, context: androidSDKVersions)
+            for version in sdk.buildTools {
+                add(AndroidSDKVersionPolicy.buildToolsLabelPrefix + URL(fileURLWithPath: version).lastPathComponent, [version])
+            }
+            for platform in sdk.platforms {
+                let name = URL(fileURLWithPath: platform).lastPathComponent
+                if let level = AndroidSDKVersionPolicy.platformLevel(ofFolderName: name) {
+                    add(AndroidSDKVersionPolicy.platformLabelPrefix + String(level), [platform])
+                }
+            }
         }
         add(systemImagesLabel, offered(in: "\(homePath)/\(androidSDK)/system-images", depth: 3))
         add(figmaProfilesLabel, offered(in: "\(homePath)/\(figmaProfiles)"))

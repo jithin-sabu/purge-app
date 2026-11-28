@@ -3429,6 +3429,24 @@
     "kind": "devices"
   },
   {
+    "key": "android-build-tools-version",
+    "display_name": "Android SDK Build-Tools",
+    "tag": "medium",
+    "explanation": "Older Android build tools. Gradle downloads one again when a project needs it, or reinstall it in the SDK Manager. The newest and those your projects name stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "devices"
+  },
+  {
+    "key": "android-sdk-platform",
+    "display_name": "Android SDK Platform",
+    "tag": "medium",
+    "explanation": "An older Android SDK platform. Gradle downloads it again when a project needs it, or reinstall it in the SDK Manager. The newest and those your projects name stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "devices"
+  },
+  {
     "key": "android-system-images",
     "display_name": "Unused Android System Images",
     "tag": "medium",
