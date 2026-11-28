@@ -871,7 +871,7 @@
 ", syncs with iCloud" = ", iCloud ile eşitlenir";
 "1 simulator uses it. %@" = "1 simülatör bunu kullanıyor. %@";
 "Build %@" = "Yapı %@";
-"Build %@, plus %@ of cache" = "Yapı %@, artı %@ önbellek";
+"Build %@. The size leaves out %@ of cache." = "Yapı %@. Boyuta %@ önbellek dahil değil.";
 "Choose an app to uninstall" = "Kaldırılacak bir uygulama seçin";
 "Choose one app" = "Bir uygulama seçin";
 "Clean items marked Not Sure?" = "Emin Değil olarak işaretli öğeler temizlensin mi?";

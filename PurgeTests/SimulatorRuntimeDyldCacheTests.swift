@@ -4,8 +4,9 @@ import Testing
 
 /// Each runtime has a dyld shared cache that `simctl` leaves out of its size
 /// (#473). Purge measures it and shows it beside the size. Only the folder named
-/// exactly after the runtime, under this macOS build, counts, and it is never a
-/// delete candidate: CoreSimulator removes it with the runtime.
+/// exactly after the runtime, under this macOS build, counts. It is never a
+/// delete candidate or part of a size. Whether `simctl runtime delete` removes it
+/// is not yet confirmed by a live delete.
 @MainActor
 @Suite("Simulator runtime dyld cache")
 struct SimulatorRuntimeDyldCacheTests {
@@ -179,7 +180,7 @@ struct SimulatorRuntimeDyldCacheTests {
         #expect(runtime().detailCaption == "Build 23D8133")
         #expect(runtime(dyldCacheBytes: 0).detailCaption == "Build 23D8133")
         let bytes: Int64 = 3_778_000_000
-        #expect(runtime(dyldCacheBytes: bytes).detailCaption == "Build 23D8133, plus \(formatBytes(bytes)) of cache")
+        #expect(runtime(dyldCacheBytes: bytes).detailCaption == "Build 23D8133. The size leaves out \(formatBytes(bytes)) of cache.")
     }
 
     /// The cache shows on the sheet's line, but the candidate is still the runtime

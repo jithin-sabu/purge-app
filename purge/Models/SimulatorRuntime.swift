@@ -32,19 +32,23 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     let safetyInfo: SafetyInfo
     /// The runtime's dyld shared cache for this macOS build, from
     /// ``dyldCacheSizes(for:root:osBuild:)``. `simctl` leaves it out of `sizeBytes`.
-    /// CoreSimulator removes it with the runtime; Purge never deletes or offers it.
-    /// `nil` when there is none, or it could not be read.
+    /// Shown only, never added to a size, a total or history. Purge never deletes
+    /// or offers it. Not yet confirmed: that `simctl runtime delete` removes it
+    /// (#165 saw about this much more space come back on one delete, but no live
+    /// delete has checked the folder). `nil` when there is none, or it could not
+    /// be read.
     var dyldCacheBytes: Int64? = nil
 
     var formattedSize: String { formatBytes(sizeBytes) }
 
     /// The row's badge and the confirm sheet's line: the build, and the dyld cache
-    /// when there is one (#473).
+    /// when there is one (#473). It says only that the size leaves the cache out,
+    /// not that the cache goes with the runtime, which is unconfirmed.
     var detailCaption: String {
         guard let dyldCacheBytes, dyldCacheBytes > 0 else {
             return String(localized: "Build \(build)")
         }
-        return String(localized: "Build \(build), plus \(formatBytes(dyldCacheBytes)) of cache")
+        return String(localized: "Build \(build). The size leaves out \(formatBytes(dyldCacheBytes)) of cache.")
     }
 
     /// The pre-Xcode 16 layout.
@@ -252,8 +256,9 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     // MARK: - dyld shared cache
 
     /// Where CoreSimulator keeps each runtime's dyld shared cache, one folder per
-    /// macOS build. Owned by root. Purge only measures here: `simctl runtime delete`
-    /// removes a runtime's folder with it, and nothing else may.
+    /// macOS build. Owned by root. Purge only measures here and never deletes
+    /// anything in it. Whether `simctl runtime delete` removes a runtime's folder
+    /// is not yet confirmed by a live delete (#473).
     static let dyldCacheRoot = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Caches/dyld", isDirectory: true)
 
     /// This Mac's macOS build, like `26A428`. `nil` when it can't be read.

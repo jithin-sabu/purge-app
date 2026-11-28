@@ -444,8 +444,9 @@ nonisolated final class DevScanner {
         .filter { !ExcludedSimulatorRuntimesStore.isExcluded($0) }
 
         // Each runtime's dyld cache, which `simctl` leaves out of its size (#473).
-        // Shown beside the size only: the folder goes with the runtime through
-        // `simctl runtime delete` and is never a delete candidate of its own.
+        // Shown beside the size only, never counted in it, and never a delete
+        // candidate. Whether `simctl runtime delete` removes the folder is not
+        // yet confirmed by a live delete.
         let dyldCaches = SimulatorRuntime.dyldCacheSizes(for: runtimes)
         return runtimes.map { $0.withDyldCache(dyldCaches[$0.id]) }
     }
