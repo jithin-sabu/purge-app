@@ -321,7 +321,8 @@ nonisolated enum AndroidSDKVersionPolicy {
 /// `key = value`, `extra["key"] = value` or `set("key", value)` in the build
 /// and settings files there. Every value found pins its version. When none is
 /// found, when any of them can't be read, or when a file can't be read, every
-/// version of that kind is kept.
+/// version of that kind is kept. A file with a triple-quoted string counts as
+/// one that can't be read.
 ///
 /// A module that applies an Android plugin, or has an `android { }` block, and
 /// names no `compileSdk` keeps every platform: a convention plugin in
@@ -375,6 +376,8 @@ nonisolated enum AndroidGradlePins {
             case .absent:
                 continue
             case .unknown:
+                return .unknown
+            case .text(let text) where hasMultilineString(text):
                 return .unknown
             case .text(let text):
                 let lines = codeLines(text)
@@ -495,6 +498,13 @@ nonisolated enum AndroidGradlePins {
         guard line.hasSuffix("=") else { return false }
         let before = line.dropLast().last
         return before.map { !"=!<>".contains($0) } ?? true
+    }
+
+    /// Whether `text` holds a triple-quoted string. One may span lines, and in
+    /// Kotlin it takes no `\` escapes, so a line reader can't tell code from
+    /// text inside it. A file with one is treated as one Purge can't read.
+    static func hasMultilineString(_ text: String) -> Bool {
+        text.contains("\"\"\"") || text.contains("'''")
     }
 
     /// Whether `index` sits inside a quoted string on its line.
@@ -805,6 +815,7 @@ nonisolated enum AndroidGradlePins {
                     switch reader.read(catalog) {
                     case .absent: continue
                     case .unknown: return nil
+                    case .text(let text) where hasMultilineString(text): return nil
                     case .text(let text):
                         found += catalogVersions(text, path: path).map { Candidate(value: $0, folder: folder) }
                     }
@@ -822,6 +833,7 @@ nonisolated enum AndroidGradlePins {
                 switch reader.read(file) {
                 case .absent: continue
                 case .unknown: return nil
+                case .text(let text) where !isProperties && hasMultilineString(text): return nil
                 case .text(let text):
                     let fileFolder = (file as NSString).deletingLastPathComponent
                     guard let values = isProperties ? propertyValues(text, key: key) : scriptValues(text, key: key)

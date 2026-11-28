@@ -436,6 +436,38 @@ struct AndroidSDKVersionKeepTests {
         #expect(SDK.offered(home, "\(SDK.buildTools)/35.0.0", context))
     }
 
+    /// A triple-quoted string may span lines, and in Kotlin it takes no `\`
+    /// escapes, so a file with one counts as unreadable and keeps everything.
+    @Test
+    func aTripleQuotedStringKeepsEverything() throws {
+        let home = try SDK.typicalSDK()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try SDK.write(#"""
+        android {
+            val pattern = """\""/*"""
+            compileSdk = 33
+            buildToolsVersion = "34.0.0"
+        }
+
+        """#, home, "code/raw/app/build.gradle.kts")
+        let context = SDK.context(home, files: ["code/raw/app/build.gradle.kts"])
+        for version in ["\(SDK.platforms)/android-33", "\(SDK.platforms)/android-34",
+                        "\(SDK.buildTools)/34.0.0", "\(SDK.buildTools)/35.0.0"] {
+            #expect(!SDK.offered(home, version, context), "\(version)")
+        }
+        // The same in a file a reference is looked up in, or in a catalog.
+        try SDK.write(#"ext { tools = "35.0.0" }"# + "\n" + #"def note = '''x'''"# + "\n", home, "code/ref/build.gradle")
+        try SDK.write("android {\n compileSdk 34\n buildToolsVersion rootProject.ext.tools\n}\n", home, "code/ref/app/build.gradle")
+        #expect(AndroidGradlePins.pins(in: [home.appendingPathComponent("code/ref/app/build.gradle").path],
+                                       home: home.path, mayRead: { _ in true })
+            == AndroidGradlePins.Pins(platforms: ["android-34"], buildTools: nil))
+        try SDK.write("[versions]\ncompileSdk = \"34\"\nnote = \"\"\"x\"\"\"\n", home, "code/cat/gradle/libs.versions.toml")
+        try SDK.write("android { compileSdk = libs.versions.compileSdk.get().toInt() }\n", home, "code/cat/app/build.gradle.kts")
+        #expect(AndroidGradlePins.pins(in: [home.appendingPathComponent("code/cat/app/build.gradle.kts").path],
+                                       home: home.path, mayRead: { _ in true })
+            == AndroidGradlePins.Pins(platforms: nil, buildTools: []))
+    }
+
     @Test
     func theLedgerListsAndroidBuildFiles() throws {
         let home = try SDK.makeHome()
