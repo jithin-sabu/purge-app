@@ -394,6 +394,48 @@ struct AndroidSDKVersionKeepTests {
         #expect(SDK.offered(home, "\(SDK.platforms)/android-33", blocked), "platforms don't read links")
     }
 
+    /// A module's build file may be a link to a shared script. It is recorded,
+    /// and the script it leads to keeps what it names.
+    @Test
+    func aLinkedModuleScriptKeepsItsVersions() throws {
+        let home = try SDK.typicalSDK()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try SDK.write("android {\n    compileSdk = 33\n    buildToolsVersion = \"34.0.0\"\n}\n",
+                      home, "code/lnk/gradle/android-module.gradle.kts")
+        try SDK.link(home, "code/lnk/app/build.gradle.kts", to: "../gradle/android-module.gradle.kts")
+        let files = AndroidSDKVersionPolicy.gradleFiles(
+            inProjectRoots: [(home.appendingPathComponent("code/lnk"), [.androidGradle])], mayRead: { _ in true }
+        )
+        #expect(files.contains(home.appendingPathComponent("code/lnk/app/build.gradle.kts").path))
+        let relative = files.map { String($0.dropFirst(home.path.count + 1)) }
+        let context = SDK.context(home, files: relative)
+        #expect(!SDK.offered(home, "\(SDK.platforms)/android-33", context))
+        #expect(SDK.offered(home, "\(SDK.platforms)/android-34", context))
+        #expect(!SDK.offered(home, "\(SDK.buildTools)/34.0.0", context))
+        #expect(SDK.offered(home, "\(SDK.buildTools)/35.0.0", context))
+    }
+
+    /// An escaped quote stays inside its string, so a `/*` in that string
+    /// starts no comment.
+    @Test
+    func anEscapedQuoteStaysInItsString() throws {
+        let home = try SDK.typicalSDK()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try SDK.write(#"""
+        android {
+            val pattern = "\"/*\""
+            compileSdk = 33
+            buildToolsVersion = "34.0.0"
+        }
+
+        """#, home, "code/esc/app/build.gradle.kts")
+        let context = SDK.context(home, files: ["code/esc/app/build.gradle.kts"])
+        #expect(!SDK.offered(home, "\(SDK.platforms)/android-33", context))
+        #expect(SDK.offered(home, "\(SDK.platforms)/android-34", context))
+        #expect(!SDK.offered(home, "\(SDK.buildTools)/34.0.0", context))
+        #expect(SDK.offered(home, "\(SDK.buildTools)/35.0.0", context))
+    }
+
     @Test
     func theLedgerListsAndroidBuildFiles() throws {
         let home = try SDK.makeHome()

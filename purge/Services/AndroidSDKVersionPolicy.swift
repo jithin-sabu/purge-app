@@ -272,6 +272,14 @@ nonisolated enum AndroidSDKVersionPolicy {
         return paths.filter { seen.insert($0).inserted }
     }
 
+    /// A regular file or a link, by `lstat`.
+    static func isFileOrLink(_ path: String) -> Bool {
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return false }
+        let type = info.st_mode & S_IFMT
+        return type == S_IFREG || type == S_IFLNK
+    }
+
     /// How many folders below a Gradle root a module may sit: `app`, `feature/login`,
     /// `libs/core/data`.
     static let moduleDepth = 3
@@ -289,8 +297,9 @@ nonisolated enum AndroidSDKVersionPolicy {
             guard OldToolVersionScanPolicy.isRealFolder(module) else { return [] }
             // Both spellings once either is there, so a module moved from Groovy
             // to Kotlin after the scan still counts at the move.
+            // A link counts too: the reader follows it to a target it may read.
             let files = gradleFileNames.map { "\(module)/\($0)" }
-            let found = files.contains { OldToolVersionScanPolicy.isRegularFile($0) } ? files : []
+            let found = files.contains { isFileOrLink($0) } ? files : []
             return found + moduleBuildFiles(in: module, depth: depth - 1, mayRead: mayRead)
         }
     }
@@ -446,6 +455,12 @@ nonisolated enum AndroidGradlePins {
                 }
                 if let open = quote {
                     kept.append(character)
+                    if character == "\\", let next {
+                        // An escaped character, such as `\"`, never ends the string.
+                        kept.append(next)
+                        index += 2
+                        continue
+                    }
                     if character == open { quote = nil }
                     index += 1
                     continue
@@ -485,9 +500,16 @@ nonisolated enum AndroidGradlePins {
     /// Whether `index` sits inside a quoted string on its line.
     static func isInsideString(_ line: String, at index: String.Index) -> Bool {
         var quote: Character?
+        var escaped = false
         for character in line[..<index] {
             if let open = quote {
-                if character == open { quote = nil }
+                if escaped {
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else if character == open {
+                    quote = nil
+                }
             } else if character == "\"" || character == "'" {
                 quote = character
             }
