@@ -316,7 +316,8 @@ nonisolated enum AndroidSDKVersionPolicy {
 ///
 /// A module that applies an Android plugin, or has an `android { }` block, and
 /// names no `compileSdk` keeps every platform: a convention plugin in
-/// `buildSrc` or `build-logic` sets it, and Purge doesn't read those.
+/// `buildSrc` or `build-logic` sets it, and Purge doesn't read those. A
+/// preview doesn't count as naming one.
 nonisolated enum AndroidGradlePins {
 
     /// The versions recorded build files name, by folder name. Nil keeps every
@@ -356,7 +357,7 @@ nonisolated enum AndroidGradlePins {
 
     static func pins(in files: [String], home: String, mayRead: @escaping (String) -> Bool) -> Pins {
         // The patterns are fixed, so they compile. If one ever didn't, no pin could be read.
-        guard compileSdkPattern != nil, releasePattern != nil, buildToolsPattern != nil, previewPattern != nil,
+        guard compileSdkPattern != nil, releasePattern != nil, buildToolsPattern != nil,
               androidBlockPattern != nil, androidPluginPattern != nil else { return .unknown }
         var result = Pins(platforms: [], buildTools: [])
         var reader = Reader(home: home, mayRead: mayRead)
@@ -369,16 +370,19 @@ nonisolated enum AndroidGradlePins {
             case .text(let text):
                 let lines = codeLines(text)
                 let folder = (file as NSString).deletingLastPathComponent
-                let platforms = platformValues(lines)
-                if platforms.isEmpty, isAndroidModule(lines), !namesPreview(lines) {
-                    result.add(.unknown, for: .platform)
-                }
-                for (kind, values) in [(AndroidSDKVersionPolicy.Folder.platform, platforms),
+                // A preview names no platform: it may sit in an `if`, with a
+                // convention plugin's `compileSdk` used the rest of the time.
+                var namesPlatform = false
+                for (kind, values) in [(AndroidSDKVersionPolicy.Folder.platform, platformValues(lines)),
                                        (.buildTools, buildToolsValues(lines))] {
                     for value in values {
                         let outcome = evaluate(value, as: kind, near: folder, reader: &reader, depth: 0)
+                        if kind == .platform, outcome != .ignored { namesPlatform = true }
                         result.add(outcome, for: kind)
                     }
+                }
+                if !namesPlatform, isAndroidModule(lines) {
+                    result.add(.unknown, for: .platform)
                 }
             }
             if result == .unknown { return result }
@@ -516,7 +520,6 @@ nonisolated enum AndroidGradlePins {
     // setter spellings older Kotlin scripts use.
     static let compileSdkPattern = assignmentPattern("(?:setC|c)ompileSdk(?:Version)?")
     static let buildToolsPattern = assignmentPattern("(?:setB|b)uildToolsVersion")
-    static let previewPattern = assignmentPattern("(?:setC|c)ompileSdkPreview")
     /// `android {` at a word start, as a block opens it.
     static let androidBlockPattern = try? NSRegularExpression(pattern: #"(?<![A-Za-z0-9_.$])android\s*\{"#)
     /// An Android plugin by id, `com.android.library`, or by catalog alias,
@@ -538,10 +541,6 @@ nonisolated enum AndroidGradlePins {
         }
     }
 
-    /// Whether a build file compiles against a preview, which is never offered.
-    static func namesPreview(_ lines: [String]) -> Bool {
-        lines.contains { !values(of: previewPattern, in: $0).isEmpty }
-    }
     /// `compileSdk { version = release(36) { minorApiLevel = 1 } }`.
     static let releasePattern = try? NSRegularExpression(
         pattern: #"(?<![A-Za-z0-9_$])version\s*=\s*release\s*\(\s*([^)]*)\)"#
@@ -711,6 +710,10 @@ nonisolated enum AndroidGradlePins {
             if parts.count > 2, let versions = parts.firstIndex(of: "versions"), versions > 0, versions < parts.count - 1 {
                 return .catalog(parts[(versions + 1)...].joined(separator: "."))
             }
+            // A bare name, or one on the project's own properties. Anything
+            // else, such as `Versions.tools` from `buildSrc` or
+            // `flutter.compileSdkVersion`, is a value Purge doesn't read.
+            guard nameReceivers.contains(Array(parts.dropLast())) else { return nil }
             return .name(parts[parts.count - 1])
         }
         // One quoted name inside a call or a subscript.
@@ -719,13 +722,28 @@ nonisolated enum AndroidGradlePins {
                   let close = expression.lastIndex(where: { $0 == "\"" || $0 == "'" }), open < close else { return nil }
             let name = String(expression[expression.index(after: open)..<close])
             let outside = String(expression[..<open]) + String(expression[expression.index(after: close)...])
-            guard isKey(name),
-                  outside.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || "._()[] ".contains($0)) })
-            else { return nil }
+            // Only Gradle's own lookups. Any other call, such as
+            // `chooseTools("tools")`, computes a value Purge doesn't read.
+            guard isKey(name), quotedAccessors.contains(outside.filter { $0 != " " }) else { return nil }
             return .name(name)
         }
         return nil
     }
+
+    /// What may come before a bare name: nothing, or the project's properties.
+    static let nameReceivers: Set<[String]> = [
+        [], ["ext"], ["extra"], ["project"], ["rootProject"],
+        ["project", "ext"], ["project", "extra"], ["rootProject", "ext"], ["rootProject", "extra"]
+    ]
+
+    /// The lookups by quoted name Purge follows, with the name taken out:
+    /// `property("x")`, `findProperty("x")`, `providers.gradleProperty("x")`,
+    /// `ext["x"]`, `extra["x"]` and `ext.get("x")`, on the project or the root project.
+    static let quotedAccessors: Set<String> = {
+        let calls = ["property()", "findProperty()", "providers.gradleProperty()",
+                     "ext[]", "extra[]", "ext.get()", "extra.get()"]
+        return Set(["", "project.", "rootProject."].flatMap { prefix in calls.map { prefix + $0 } })
+    }()
 
     static func isIdentifier(_ text: String) -> Bool {
         guard let first = text.first, first.isASCII, first.isLetter || first == "_" else { return false }
@@ -839,32 +857,54 @@ nonisolated enum AndroidGradlePins {
     }
 
     /// The values `key` has in a `gradle.properties` file, each quoted so it
-    /// reads as a string. A key ends at the first `=`, `:` or space, as Java
-    /// properties read it. Nil when a line for `key` is written in a way this
-    /// reader doesn't follow: a `\` continuation or escape, or no value.
+    /// reads as a string. It reads the file the way Java properties do: a line
+    /// ending in an odd number of `\` goes on with the next one, its leading
+    /// spaces dropped, and a key ends at the first `=`, `:` or space not
+    /// escaped with `\`. Nil when the line for `key` holds another escape,
+    /// such as `\u0033`, or has no value.
     static func propertyValues(_ text: String, key: String) -> [String]? {
-        var values: [String] = []
-        var continuing = false
-        for raw in text.split(whereSeparator: \.isNewline) {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            // A line after a `\` belongs to the one before. That one was
-            // checked when it was read.
-            if continuing {
-                continuing = line.hasSuffix("\\")
-                continue
+        var logicalLines: [String] = []
+        var pending: String?
+        for raw in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            let line = String(raw.drop { $0 == " " || $0 == "\t" || $0 == "\u{0C}" })
+            if pending == nil, line.isEmpty || line.hasPrefix("#") || line.hasPrefix("!") { continue }
+            let slashes = line.reversed().prefix { $0 == "\\" }.count
+            if slashes % 2 == 1 {
+                pending = (pending ?? "") + String(line.dropLast())
+            } else {
+                logicalLines.append((pending ?? "") + line)
+                pending = nil
             }
-            guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("!") else { continue }
-            continuing = line.hasSuffix("\\")
-            let keyEnd = line.firstIndex { $0 == "=" || $0 == ":" || $0 == " " || $0 == "\t" } ?? line.endIndex
-            let lineKey = String(line[..<keyEnd])
-            guard lineKey == key || (lineKey.contains("\\") && lineKey.replacingOccurrences(of: "\\", with: "") == key)
-            else { continue }
-            guard !lineKey.contains("\\"), !continuing else { return nil }
-            var rest = line[keyEnd...].trimmingCharacters(in: .whitespaces)
+        }
+        if let pending { logicalLines.append(pending) }
+
+        var values: [String] = []
+        for line in logicalLines {
+            var lineKey = ""
+            var index = line.startIndex
+            var escaped = false
+            var otherEscape = false
+            while index < line.endIndex {
+                let character = line[index]
+                if escaped {
+                    if !"=: #!\\".contains(character) { otherEscape = true }
+                    lineKey.append(character)
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else if "=: \t".contains(character) {
+                    break
+                } else {
+                    lineKey.append(character)
+                }
+                index = line.index(after: index)
+            }
+            guard lineKey == key else { continue }
+            var rest = line[index...].trimmingCharacters(in: .whitespaces)
             if let first = rest.first, first == "=" || first == ":" {
                 rest = String(rest.dropFirst()).trimmingCharacters(in: .whitespaces)
             }
-            guard !rest.isEmpty, !rest.contains("\\") else { return nil }
+            guard !otherEscape, !rest.isEmpty, !rest.contains("\\") else { return nil }
             values.append("\"\(rest)\"")
         }
         return values

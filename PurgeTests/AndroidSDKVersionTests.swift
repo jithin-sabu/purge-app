@@ -459,16 +459,7 @@ struct AndroidGradlePinsTests {
                 }
             }
             """,
-            "e/build.gradle": "android {\n    compileSdkVersion \"Google Inc.:Google APIs:29\"\n    compileSdk(28)\n}\n",
-            "f/build.gradle.kts": """
-            android {
-                // compileSdk = 21
-                /* buildToolsVersion = "21.0.0" */
-                compileSdkPreview = "UpsideDownCake"
-                compileSdkExtension = 10
-                defaultConfig { targetSdk = 22; minSdk = 23 }
-            }
-            """
+            "e/build.gradle": "android {\n    compileSdkVersion \"Google Inc.:Google APIs:29\"\n    compileSdk(28)\n}\n"
         ])
         #expect(pins == Pins(
             platforms: ["android-28", "android-29", "android-30", "android-31", "android-32", "android-36"],
@@ -508,8 +499,8 @@ struct AndroidGradlePinsTests {
         ]) == Pins(platforms: ["android-34"], buildTools: ["34.0.0"]))
     }
 
-    /// `gradle.properties` may separate a key from its value with a space.
-    /// A `\` continuation on the key's line keeps everything.
+    /// `gradle.properties` is read as Java reads it: a space may separate a key
+    /// from its value, and a `\` at the end of a line continues it.
     @Test
     func propertiesReadLikeJavaProperties() throws {
         let home = try SDK.makeHome()
@@ -518,7 +509,13 @@ struct AndroidGradlePinsTests {
         try SDK.write("# mine\nandroid.compileSdk 33\nother.key: x \\\n  y\n", home, ".gradle/gradle.properties")
         let app = ["p/app/build.gradle.kts": "android { compileSdk = providers.gradleProperty(\"android.compileSdk\").get().toInt() }\n"]
         #expect(try SDK.pins(home, app) == Pins(platforms: ["android-33", "android-35"], buildTools: []))
+        // A continued value or key reads as Java joins it.
         try SDK.write("android.compileSdk = 3\\\n  4\n", home, ".gradle/gradle.properties")
+        #expect(try SDK.pins(home, app) == Pins(platforms: ["android-34", "android-35"], buildTools: []))
+        try SDK.write("android.compile\\\n  Sdk 32\n", home, ".gradle/gradle.properties")
+        #expect(try SDK.pins(home, app) == Pins(platforms: ["android-32", "android-35"], buildTools: []))
+        // An escape this reader doesn't follow keeps everything.
+        try SDK.write("android.compileSdk = \\u0033\\u0031\n", home, ".gradle/gradle.properties")
         #expect(try SDK.pins(home, app) == Pins(platforms: nil, buildTools: []))
     }
 
@@ -583,12 +580,53 @@ struct AndroidGradlePinsTests {
         ], read: ["n/app/build.gradle"]) == Pins(platforms: ["android-34"], buildTools: nil))
     }
 
+    /// Comments, previews, extensions and `targetSdk` name nothing. A module
+    /// whose only platform is a preview keeps every platform: the preview may
+    /// sit in an `if`, with a convention plugin's `compileSdk` used otherwise.
     @Test
-    func aPreviewPinsNothingAndKeepsNothing() throws {
+    func aPreviewNamesNoPlatform() throws {
         let home = try SDK.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        let pins = try SDK.pins(home, ["a/build.gradle": "android { compileSdkVersion \"android-UpsideDownCake\" }\n"])
-        #expect(pins == Pins(platforms: [], buildTools: []))
+        #expect(try SDK.pins(home, ["a/build.gradle": "android { compileSdkVersion \"android-UpsideDownCake\" }\n"])
+            == Pins(platforms: nil, buildTools: []))
+        #expect(try SDK.pins(home, [
+            "b/build.gradle.kts": """
+            android {
+                // compileSdk = 21
+                /* buildToolsVersion = "21.0.0" */
+                if (usePreview) { compileSdkPreview = "UpsideDownCake" }
+                compileSdkExtension = 10
+                defaultConfig { targetSdk = 22; minSdk = 23 }
+            }
+            """
+        ]) == Pins(platforms: nil, buildTools: []))
+        // A preview next to a real level adds nothing to it.
+        #expect(try SDK.pins(home, [
+            "c/build.gradle": "android {\n compileSdkVersion 34\n compileSdkVersion \"android-UpsideDownCake\"\n}\n"
+        ]) == Pins(platforms: ["android-34"], buildTools: []))
+    }
+
+    /// Only Gradle's own lookups are followed. A value from any other call, or
+    /// from an object in `buildSrc`, keeps its kind.
+    @Test
+    func onlyGradleLookupsAreFollowed() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(try SDK.pins(home, [
+            "t/build.gradle.kts": """
+            val tools = "35.0.0"
+            android {
+                compileSdk = 34
+                buildToolsVersion = chooseTools("tools")
+            }
+            """
+        ]) == Pins(platforms: ["android-34"], buildTools: nil))
+        #expect(try SDK.pins(home, [
+            "v/build.gradle.kts": "val tools = \"35.0.0\"\nandroid {\n compileSdk = 34\n buildToolsVersion = Versions.tools\n}\n"
+        ]) == Pins(platforms: ["android-34"], buildTools: nil))
+        #expect(try SDK.pins(home, [
+            "w/build.gradle": "ext { tools = '35.0.0' }\nandroid {\n compileSdk 34\n buildToolsVersion project.ext.get('tools')\n}\n"
+        ]) == Pins(platforms: ["android-34"], buildTools: ["35.0.0"]))
     }
 
     @Test
