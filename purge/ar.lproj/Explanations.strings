@@ -626,5 +626,7 @@
 "An older uv Python patch. No environment, .python-version or setting Purge found uses it. Tools that call it by path break until uv python install restores it." = "إصدار تصحيحي أقدم من Python في uv. لا تستخدمه بيئة أو ملف .python-version أو إعداد وجده Purge. تتعطل الأدوات التي تستدعيه بمساره حتى يستعيده uv python install.";
 "pyenv Python Version" = "إصدار Python من pyenv";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "إصدار Python من pyenv لم يُشغَّل منذ 90 يومًا وليس الأحدث في إصداره الفرعي. لا يستخدمه أي تثبيت أو venv أو إعداد وجده Purge. يعيده pyenv install.";
+"Xcode Build Files Elsewhere" = "ملفات بناء Xcode في مواقع أخرى";
+"Xcode makes these files again the next time you build the project." = "يعيد Xcode إنشاء هذه الملفات في المرة القادمة التي تبني فيها المشروع.";
 "Claude Cowork VM Disk" = "قرص آلة Claude Cowork الافتراضية";
 "The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "قرص الآلة الافتراضية لـ Cowork في Claude، يظهر حين يكون Claude مغلقًا. يعيد Claude بناءه من نسخة محلية عند تشغيل Cowork التالي، فلا يفيد إلا إن كنت نادرًا ما تستخدم Cowork.";

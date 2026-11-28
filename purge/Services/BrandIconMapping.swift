@@ -328,6 +328,10 @@ enum BrandIconMapping {
         if let slug = devToolDefinitionKeyToSlug[lower] ?? devToolDefinitionKeyToSlug[key] {
             return slug
         }
+        // Each Xcode build folder row's key is its label, with the folder's path (#480).
+        if XcodeBuildFolderScanPolicy.folderPath(inLabel: key) != nil {
+            return "xcode"
+        }
         // Each NDK row's key is its label, `Android NDK <version>` (#324).
         if OldToolVersionScanPolicy.ndkVersion(inLabel: key) != nil {
             return "androidstudio"

@@ -1304,6 +1304,8 @@
 "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "Виртуальная машина. Всё внутри удаляется вместе с ней. Удалите её в Parallels Desktop, чтобы список виртуальных машин в приложении оставался верным.";
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "Виртуальная машина. Всё содержимое уйдёт вместе с ней. Удалите её в UTM, чтобы список виртуальных машин в приложении остался верным.";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "Виртуальная машина. Всё внутри удалится вместе с ней. Удалите её в VMware Fusion, чтобы список виртуальных машин в приложении оставался верным.";
+"Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "Виртуальная машина. Всё внутри удалится вместе с ней. Удалите её в VirtualBox, чтобы список виртуальных машин в приложении оставался верным.";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does." = "Виртуальная машина. Всё внутри удалится вместе с ней. Tart показывает только виртуальные машины из своей папки, поэтому перенос в Корзину сохраняет его список верным, как и tart delete.";
 "Visual Intelligence, Photos Clean Up and Spatial Photos" = "Visual Intelligence, «Очистка» в «Фото» и пространственные фото";
 "Vite cache" = "Кэш Vite";
 "Waiting for %@" = "Ожидание «%@»";
@@ -1582,3 +1584,15 @@
 "Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "Меняет язык только для Purge. Это та же настройка, что и строка Purge в разделе «Язык и регион» > «Приложения» Системных настроек. Интерфейс Purge отражается справа налево для арабского, только когда арабский выбран языком самого Mac.";
 "Relaunch Purge to switch to %@." = "Перезапустите Purge, чтобы переключиться на %@.";
 "Relaunch Now" = "Перезапустить";
+"Xcode Build Files in %@" = "Файлы сборки Xcode в %@";
+"Built from %@ on %@." = "Собрано из %@, дата: %@.";
+"Built from %@." = "Собрано из %@.";
+"That folder is no longer on this Mac." = "Этой папки больше нет на этом Mac.";
+"Xcode build folders" = "Папки сборки Xcode";
+"Built outside Xcode's own folder. %@" = "Вне папки самого Xcode. %@";
+"Select all Xcode build folders" = "Выбрать все папки сборки Xcode";
+"Show folders" = "Показать папки";
+"Hide folders" = "Скрыть папки";
+"Built from a folder that's gone" = "Собрано из папки, которой больше нет";
+"Built from a folder still here" = "Собрано из папки, которая ещё есть";
+"Select %@" = "Выбрать: %@";

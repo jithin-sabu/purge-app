@@ -517,6 +517,9 @@ enum DeletionSafetyPolicy {
         // The Go module cache is moved whole only while it still holds nothing
         // but modules. Same split as Playwright: a move reads the folder again.
         if GoModuleCacheScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // An Xcode build folder a scan offered must still have Xcode's mark
+        // (#480): a file saved at its top since then keeps it. Same split.
+        if XcodeBuildFolderScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         // An allowlisted folder, or a folder above the row, can become a link after
         // the scan (#420, #422). Same split as Playwright: the on-screen filter may
         // reuse a read from the last few seconds, and a move reads the disk again.
@@ -2035,6 +2038,13 @@ enum DeletionSafetyPolicy {
         // above it: this matches on a name plus nearby evidence, not on an audited
         // absolute path, so the protections for Pictures, Music, Mail and the rest win.
         if isWhitelistedProjectArtifactPath(standardized, home: home) {
+            return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
+        }
+        // An Xcode build folder outside DerivedData (#480), known by what is in
+        // it, not its name. Below the never-delete guards like project artifacts:
+        // it can be anywhere in home. Whether a process has it open, or a
+        // LaunchAgent starts a program from it, is checked right before the move.
+        if XcodeBuildFolderScanPolicy.isWhitelistedPath(path, home: home) {
             return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
         }
         // Claude Code's `<project>/.claude/worktrees/<name>`. Below the never-delete

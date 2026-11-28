@@ -493,16 +493,45 @@ enum ScanListRingPlacement {
 }
 
 /// Draws the highlight ring on the current row.
+///
+/// Each ring keeps its own on or off state and redraws only when that changes.
+/// Observing `highlight` directly redrew every row's ring whenever the current
+/// row moved, which in the uninstaller is hundreds of rows per click (#457).
 private struct ScanListHighlightRing: View {
-    @ObservedObject var highlight: ScanHighlight
+    let highlight: ScanHighlight
     let id: AnyHashable
     let cornerRadius: CGFloat
     let placement: ScanListRingPlacement
 
+    @State private var isOn: Bool
+
+    init(highlight: ScanHighlight, id: AnyHashable, cornerRadius: CGFloat, placement: ScanListRingPlacement) {
+        self.highlight = highlight
+        self.id = id
+        self.cornerRadius = cornerRadius
+        self.placement = placement
+        _isOn = State(initialValue: highlight.id == id && highlight.showsRing)
+    }
+
     private static var gap: CGFloat { AppStyle.Spacing.xxxSmall }
 
     var body: some View {
-        if highlight.id == id, highlight.showsRing {
+        ring
+            // `@Published` sends new values before it stores them, so this
+            // uses what it is sent, not `highlight` itself.
+            .onReceive(highlight.$id.combineLatest(highlight.$showsRing)) { current, showsRing in
+                let on = current == id && showsRing
+                if on != isOn { isOn = on }
+            }
+            .onChange(of: id) { newID in
+                let on = highlight.id == newID && highlight.showsRing
+                if on != isOn { isOn = on }
+            }
+    }
+
+    @ViewBuilder
+    private var ring: some View {
+        if isOn {
             switch placement {
             case .outside:
                 RoundedRectangle(cornerRadius: cornerRadius + Self.gap, style: .continuous)

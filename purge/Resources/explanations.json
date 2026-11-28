@@ -1030,6 +1030,15 @@
     "kind": "build"
   },
   {
+    "key": "xcode-build-folder",
+    "display_name": "Xcode Build Files Elsewhere",
+    "tag": "medium",
+    "explanation": "Xcode makes these files again the next time you build the project.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "build"
+  },
+  {
     "key": "swiftpm",
     "display_name": "Swift Package Manager",
     "tag": "safe",

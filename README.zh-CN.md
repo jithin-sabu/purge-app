@@ -82,6 +82,7 @@
 一个视图中包含五个部分：
 
 - **全局开发工具缓存**：Xcode（Derived Data、Archives、DeviceSupport）、Homebrew、npm、pnpm、Yarn、CocoaPods、Gradle、Dart 和 Flutter 的 pub 缓存、Docker Desktop、VS Code、Cursor、JetBrains、Cargo、Terraform 等
+- **其他位置的 Xcode 构建文件夹**：`xcodebuild -derivedDataPath` 放在 Xcode 自己文件夹之外的构建文件。Purge 靠文件夹里 Xcode 的 `info.plist` 认出它们，从不靠名称。每个文件夹单独一行，标为“先检查”，并写明它是从哪个项目构建的。文件夹顶层有 Xcode 不会创建的东西、正被运行中的程序打开，或有 LaunchAgent 从中启动程序时，Purge 不会动它
 - **iOS 模拟器**：每个已关闭的模拟器各占一行。正在运行的模拟器也会列出，以便计入它占用的空间，但无法选中
 - **模拟器运行时**：`simctl` 标记为可删除的运行时，每个一行
 - **Xcode 组件**：Xcode 可选的 Metal 工具链（约 900 MB），在完整的 Xcode 列出它已安装时，通过 `xcodebuild -deleteComponent` 移除
@@ -99,7 +100,7 @@
 
 不用逐个翻文件夹，就能找到占用空间的个人文件：
 
-- 扫描 **文稿**、**桌面**、**下载**、**影片**、**音乐** 和 **图片**，另外只在 `~/Parallels` 和 `~/Virtual Machines.localized` 中查找虚拟机，并在 iCloud 云盘自己的文件夹中查找可以只保留在 iCloud 中的文件
+- 扫描 **文稿**、**桌面**、**下载**、**影片**、**音乐** 和 **图片**，另外只在 `~/Parallels`、`~/Virtual Machines.localized`、`~/VirtualBox VMs` 和 `~/.tart/vms` 中查找虚拟机，并在 iCloud 云盘自己的文件夹中查找可以只保留在 iCloud 中的文件
 - 也会扫描你在 **设置 → 要扫描的其他文件夹** 中添加的文件夹和磁盘，但只限连接到这台 Mac 的磁盘，绝不扫描网络共享或云盘。所在磁盘已拔出的文件夹会被跳过并注明，不会显示为空。其中的 Mac 或个人文件夹副本、时间机器备份、应用包，以及由 Dropbox、Syncthing、Resilio Sync、ownCloud、Nextcloud 或旧版 OneDrive 管理的文件夹都不会被扫描。Purge 通过这些服务的标记文件识别它们，因此其他服务同步的文件夹仍可能被扫描。其中的文件会移到该磁盘的废纸篓
 - 你移走并换成链接的文件夹（例如指向另一块磁盘的 `~/Documents`），如果链接指向你的个人文件夹内，或指向 `/Volumes` 下连接到这台 Mac 的磁盘，Purge 会扫描链接指向的位置。其中的文件按真实路径列出，并移到该磁盘的废纸篓。指向其他位置的链接（例如 `~/Library/CloudStorage`、网络共享、整块磁盘或 Mac 的副本）不会被跟随，扫描会说明它指向哪里。文件夹内部的链接一律不会跟随
 - 跳过受管理的资源库（照片、iMovie、音乐等）、隐藏文件夹，以及 `node_modules`、`Pods`、`DerivedData` 和构建产物这类项目文件夹。从依赖目录中单独删除一个文件只会破坏安装，所以这些内容应归开发工具处理，它会按文件夹整个移除
@@ -120,6 +121,7 @@
 
 - **恢复映像**：macOS 的 `.ipsw` 文件，通常有 15 到 25 GB。只在设置 Mac、设备或虚拟机时需要。
 - **虚拟机**：Parallels（`.pvm`）、UTM（`.utm`）或 VMware Fusion（`.vmwarevm`）的虚拟机包。它只占一行，会整个移到废纸篓，绝不会单独移走其中的磁盘文件。如果对应应用仍已安装，标签会提示你在该应用中移除，因为应用自己维护着一份虚拟机列表。如果虚拟机的应用正在运行，或虚拟机中有锁定文件，它会暂不显示，直到你退出该应用。
+- **VirtualBox 和 Tart 虚拟机**：每个虚拟机是一个文件夹，而不是包。Purge 会列出 `~/VirtualBox VMs` 中（或其中的分组文件夹中）含有同名 `<名称>.vbox` 的文件夹，以及直接位于 `~/.tart/vms` 中、含有 `config.json` 和 `disk.img` 的文件夹。每个虚拟机只占一行，会整个移到废纸篓。VirtualBox 正在运行时，VirtualBox 虚拟机不会显示。有任何进程打开了虚拟机文件夹中的文件，或 Purge 无法确认这一点时，这两类虚拟机都不会显示。如果另一个虚拟机（例如链接克隆）仍在使用某个 VirtualBox 虚拟机的磁盘，它也不会显示。Tart 在 `~/.tart/cache` 中的镜像缓存永远不会被改动。
 - **未完成的下载**：`.crdownload`、`.part` 和 Parallels 的 `.prlupd-part` 文件，以及直接位于“下载”文件夹中的 Safari `.download` 包。
 
 #### 本地 AI 模型

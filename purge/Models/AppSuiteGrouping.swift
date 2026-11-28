@@ -21,7 +21,7 @@ nonisolated struct AppSuiteGroup: Identifiable, Hashable, Sendable {
 
 /// One entry in the uninstaller's app list: an app on its own, or a group with
 /// its member apps.
-nonisolated enum AppListEntry: Identifiable {
+nonisolated enum AppListEntry: Identifiable, Equatable {
     case app(InstalledApp)
     case group(AppSuiteGroup, [InstalledApp])
 

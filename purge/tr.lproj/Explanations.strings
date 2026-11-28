@@ -935,6 +935,10 @@
 "pyenv Python Version" = "pyenv Python Sürümü";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv'den bir Python: 90 gündür çalışmadı, ara sürümünün en yenisi değil. Purge onu kullanan bir sabitleme, venv ya da ayar bulamadı. pyenv install geri getirir.";
 
+/* xcode-build-folder */
+"Xcode Build Files Elsewhere" = "Başka Yerdeki Xcode Derleme Dosyaları";
+"Xcode makes these files again the next time you build the project." = "Projeyi bir sonraki derlemenizde Xcode bu dosyaları yeniden oluşturur.";
+
 /* claude-cowork-vm-image */
 "Claude Cowork VM Disk" = "Claude Cowork VM Diski";
 "The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "Claude'un Cowork VM diski, Claude kapalıyken listelenir. Cowork açılınca yerel kopyadan yeniden kurulur; Cowork'ü az kullanıyorsanız işe yarar.";

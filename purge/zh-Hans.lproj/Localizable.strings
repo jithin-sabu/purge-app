@@ -719,6 +719,8 @@
 "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 Parallels Desktop 中移除，以免应用里的虚拟机列表出错。";
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 UTM 中移除，以免应用里的虚拟机列表出错。";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 VMware Fusion 中移除，以免应用里的虚拟机列表出错。";
+"Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 VirtualBox 中移除，以免应用里的虚拟机列表出错。";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does." = "虚拟机。其中的所有内容会一并移除。Tart 只列出其文件夹中的虚拟机，所以移到废纸篓后它的列表仍然正确，与 tart delete 的效果相同。";
 "Virtual Machines" = "虚拟机";
 "Vite cache" = "Vite 缓存";
 "Waiting for App Caches and Dev Tools to finish scanning" = "等待应用缓存和开发工具扫描完成";
@@ -1623,3 +1625,15 @@
 "Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "仅更改 Purge 的语言。这与系统设置中“语言与地区”>“应用程序”下 Purge 的设置相同。只有当 Mac 本身使用阿拉伯语时，Purge 的界面才会为阿拉伯语从右向左排列。";
 "Relaunch Purge to switch to %@." = "重新启动 Purge 以切换到%@。";
 "Relaunch Now" = "立即重新启动";
+"Xcode Build Files in %@" = "%@ 中的 Xcode 构建文件";
+"Built from %@ on %@." = "由 %@ 构建于 %@。";
+"Built from %@." = "由 %@ 构建。";
+"That folder is no longer on this Mac." = "该文件夹已不在这台 Mac 上。";
+"Xcode build folders" = "Xcode 构建文件夹";
+"Built outside Xcode's own folder. %@" = "位于 Xcode 自己的文件夹之外。%@";
+"Select all Xcode build folders" = "选择所有 Xcode 构建文件夹";
+"Show folders" = "显示文件夹";
+"Hide folders" = "隐藏文件夹";
+"Built from a folder that's gone" = "构建自已删除的文件夹";
+"Built from a folder still here" = "构建自仍存在的文件夹";
+"Select %@" = "选择%@";

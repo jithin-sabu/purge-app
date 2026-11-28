@@ -78,6 +78,7 @@ Scans `~/Library/Caches`, sandbox container caches (these need Full Disk Access)
 Five groups in one view:
 
 - **Global dev tool caches**: Xcode (Derived Data, Archives, DeviceSupport), Homebrew, npm, pnpm, Yarn, CocoaPods, Gradle, the Dart and Flutter pub cache, Docker Desktop, VS Code, Cursor, JetBrains, Cargo, Terraform, and more
+- **Xcode build folders elsewhere**: build files that `xcodebuild -derivedDataPath` put outside Xcode's own folder, found by Xcode's `info.plist` inside them, never by name. Each folder is its own Check First row naming the project it was built from. A folder holding anything at its top that Xcode doesn't make, one a running program has open, or one a LaunchAgent starts a program from is left alone
 - **iOS Simulators**: every simulator that is shut down, one row each. A running simulator is listed so its space is counted, but it can't be selected
 - **Simulator Runtimes**: one row per runtime that `simctl` reports as deletable
 - **Xcode Components**: Xcode's optional Metal Toolchain (about 900 MB), removed with `xcodebuild -deleteComponent` when a full Xcode lists it as installed
@@ -95,7 +96,7 @@ Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Cl
 
 Find space-hogging personal files without digging through folders:
 
-- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**, plus `~/Parallels` and `~/Virtual Machines.localized` for virtual machines only, and iCloud Drive's own folder for files you can keep only in iCloud
+- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**, plus `~/Parallels`, `~/Virtual Machines.localized`, `~/VirtualBox VMs` and `~/.tart/vms` for virtual machines only, and iCloud Drive's own folder for files you can keep only in iCloud
 - Also scans the folders and drives you add under **Settings → Other folders to scan**, on disks attached to your Mac only, never a network share or a cloud drive. A folder whose drive is unplugged is skipped and named, not shown as empty. Copies of a Mac or a home folder, Time Machine backups, app bundles and folders kept by Dropbox, Syncthing, Resilio Sync, ownCloud, Nextcloud or older OneDrive are never scanned there. Purge recognises those services by their marker files, so a folder another service syncs may still be scanned. Files there go to that drive's Trash
 - A folder you moved and replaced with a link, such as `~/Documents` pointing to another drive, is scanned where the link leads when that is inside your home folder or on a drive under `/Volumes`, on a disk attached to your Mac. Its files are listed by their real path and go to that drive's Trash. A link anywhere else, such as into `~/Library/CloudStorage`, to a network share, or to a whole drive or a copy of a Mac, is not followed, and the scan says where it leads. Links inside the folders are never followed
 - Skips managed libraries (Photos, iMovie, Music, and similar), hidden folders, and project folders like `node_modules`, `Pods`, `DerivedData` and build output. Deleting a single file out of a dependency tree only breaks the install, so those belong in Dev Tools, which removes them a folder at a time
@@ -116,6 +117,7 @@ Some big files carry a label that says what they are. Hover it for the full expl
 
 - **Restore image**: a macOS `.ipsw`, often 15 to 25 GB. It's only needed to set up a Mac, a device, or a virtual machine.
 - **Virtual machine**: a Parallels (`.pvm`), UTM (`.utm`), or VMware Fusion (`.vmwarevm`) bundle. It's one row and goes to the Trash whole, never a disk file from inside it. If the app is still installed, the label says to remove the VM there, since the app keeps its own list. A VM whose app is open, or that holds a lock file, stays off the list until you quit the app.
+- **VirtualBox and Tart VMs**: each VM is a folder, not a bundle. Purge lists a folder in `~/VirtualBox VMs`, or in a group folder there, that holds its own `<name>.vbox`, and a folder directly in `~/.tart/vms` that holds `config.json` and `disk.img`. Each is one row and goes to the Trash whole. A VirtualBox VM stays off the list while VirtualBox is open. Any of these VMs stays off the list while a process has a file open in its folder, or when Purge can't check that. A VirtualBox VM whose disk another VM still uses, such as a linked clone, stays off the list too. Tart's image cache in `~/.tart/cache` is never touched.
 - **Unfinished download**: `.crdownload`, `.part`, and Parallels' `.prlupd-part` files, and Safari's `.download` bundle when it sits directly in Downloads.
 
 #### Local AI models

@@ -410,21 +410,190 @@ struct ScanRowAccessibilityActions: ViewModifier {
 extension View {
     /// Same Show in Finder / Copy Path overlay App Caches and Dev Tools use.
     /// `locations` is evaluated on right-click, never during `body`.
+    ///
+    /// With a `rowID`, inside a list that set `scanRowMenuCenter`, the row
+    /// hands its menu to that list's one shared menu view instead of carrying
+    /// its own (#457).
     func finderRevealMenu(
         isMenuActive: Binding<Bool>,
+        rowID: AnyHashable? = nil,
         locations: @escaping () -> [ScanRowLocation]
     ) -> some View {
-        overlay {
-            ScanRowContextMenu(isMenuActive: isMenuActive, entries: {
-                FinderReveal.menuEntries(for: locations())
-            })
-        }
-        .modifier(
-            ScanRowAccessibilityActions(
-                onExcludeFromScans: nil,
-                revealLocations: locations
+        modifier(FinderRevealMenuModifier(isMenuActive: isMenuActive, rowID: rowID, locations: locations))
+            .modifier(
+                ScanRowAccessibilityActions(
+                    onExcludeFromScans: nil,
+                    revealLocations: locations
+                )
             )
-        )
+    }
+}
+
+private struct FinderRevealMenuModifier: ViewModifier {
+    let isMenuActive: Binding<Bool>
+    let rowID: AnyHashable?
+    let locations: () -> [ScanRowLocation]
+
+    @Environment(\.scanRowMenuCenter) private var center
+    @State private var owner = ScanRowMenuOwner()
+
+    func body(content: Content) -> some View {
+        if let center, let rowID {
+            let entries = locations
+            let owner = owner
+            // Not observed state: read only when the row is right-clicked.
+            let _ = center.register(rowID, owner: owner, isMenuActive: isMenuActive) {
+                FinderReveal.menuEntries(for: entries())
+            }
+            content
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named(ScanRowMenuCenter.coordinateSpace))
+                } action: { frame in
+                    center.setFrame(frame, for: rowID, owner: owner)
+                }
+                .onDisappear { center.remove(rowID, owner: owner) }
+        } else {
+            content.overlay {
+                ScanRowContextMenu(isMenuActive: isMenuActive, entries: {
+                    FinderReveal.menuEntries(for: locations())
+                })
+            }
+        }
+    }
+}
+
+// MARK: - Shared row menu (#457)
+
+/// The right-click menus of a long list, served by one AppKit view.
+///
+/// Each row used to carry its own `ScanRowContextMenu` view. With hundreds
+/// of rows, SwiftUI updated hundreds of AppKit views whenever one row changed,
+/// which made each change in the uninstaller several times slower (#457).
+/// Rows here register their menu and report their frame; one
+/// `ScanRowMenuCenterLayer` over the list claims the same clicks a row's own
+/// view would and shows that row's menu.
+@MainActor
+final class ScanRowMenuCenter {
+    /// The coordinate space rows report their frames in. The layer sits on
+    /// the view that names it.
+    static let coordinateSpace = "ScanRowMenuCenter"
+
+    struct Menu {
+        let isMenuActive: Binding<Bool>
+        let entries: () -> [ScanRowMenuEntry]
+    }
+
+    /// The row's view that registered it, and its menu and frame. A row's
+    /// view can be replaced by a new one for the same app, as when a sort
+    /// moves a tile to another grid row. The new view registers before the old
+    /// one disappears, so the old one may only clear or move what it owns.
+    private struct Row {
+        weak var owner: AnyObject?
+        var menu: Menu
+        var frame: CGRect?
+    }
+
+    private var rows: [AnyHashable: Row] = [:]
+
+    func register(_ id: AnyHashable, owner: AnyObject, isMenuActive: Binding<Bool>, entries: @escaping () -> [ScanRowMenuEntry]) {
+        let menu = Menu(isMenuActive: isMenuActive, entries: entries)
+        if let row = rows[id], row.owner === owner {
+            rows[id]?.menu = menu
+        } else {
+            rows[id] = Row(owner: owner, menu: menu, frame: nil)
+        }
+    }
+
+    func setFrame(_ frame: CGRect, for id: AnyHashable, owner: AnyObject) {
+        guard let row = rows[id], row.owner === owner else { return }
+        rows[id]?.frame = frame
+    }
+
+    func remove(_ id: AnyHashable, owner: AnyObject) {
+        guard let row = rows[id], row.owner === owner else { return }
+        rows[id] = nil
+    }
+
+    /// The menu of the row at `point`, in the layer's coordinates.
+    func menu(at point: CGPoint) -> Menu? {
+        for row in rows.values {
+            if let frame = row.frame, frame.contains(point) { return row.menu }
+        }
+        return nil
+    }
+}
+
+/// Stands for one row view in `ScanRowMenuCenter`.
+final class ScanRowMenuOwner {}
+
+private nonisolated struct ScanRowMenuCenterKey: EnvironmentKey {
+    static let defaultValue: ScanRowMenuCenter? = nil
+}
+
+extension EnvironmentValues {
+    nonisolated var scanRowMenuCenter: ScanRowMenuCenter? {
+        get { self[ScanRowMenuCenterKey.self] }
+        set { self[ScanRowMenuCenterKey.self] = newValue }
+    }
+}
+
+/// The one AppKit view that shows the rows' menus. Put it in an overlay of the
+/// view that names `ScanRowMenuCenter.coordinateSpace`, so both share
+/// coordinates.
+struct ScanRowMenuCenterLayer: NSViewRepresentable {
+    let center: ScanRowMenuCenter
+
+    func makeNSView(context: Context) -> LayerView {
+        let view = LayerView()
+        view.center = center
+        return view
+    }
+
+    func updateNSView(_ nsView: LayerView, context: Context) {
+        nsView.center = center
+    }
+
+    final class LayerView: NSView {
+        var center: ScanRowMenuCenter?
+        private let menuHost = ScanRowContextMenu.MenuHostView()
+        private let menuDelegate = ScanRowContextMenu.Coordinator()
+
+        override var isFlipped: Bool { true }
+
+        /// Claims what a row's own menu view claimed, over a row only.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let view = super.hitTest(point), let event = NSApp.currentEvent else { return nil }
+            let claims: Bool
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp:
+                claims = true
+            case .leftMouseDown, .leftMouseUp:
+                claims = event.modifierFlags.contains(.control)
+            default:
+                claims = false
+            }
+            guard claims, center?.menu(at: convert(point, from: superview)) != nil else { return nil }
+            return view
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            showMenu(for: event)
+        }
+
+        /// Control-click arrives as a left click with the control modifier.
+        override func mouseDown(with event: NSEvent) {
+            showMenu(for: event)
+        }
+
+        private func showMenu(for event: NSEvent) {
+            guard let menu = center?.menu(at: convert(event.locationInWindow, from: nil)) else { return }
+            let isMenuActive = menu.isMenuActive
+            menuHost.entries = menu.entries
+            menuHost.menuDelegate = menuDelegate
+            menuHost.onMenuOpened = { isMenuActive.wrappedValue = true }
+            menuDelegate.onMenuClosed = { isMenuActive.wrappedValue = false }
+            menuHost.showMenu(for: event, in: self)
+        }
     }
 }
 
@@ -465,8 +634,11 @@ struct ScanRowContextMenu: NSViewRepresentable {
         var onMenuClosed: (() -> Void)?
 
         func menuDidClose(_ menu: NSMenu) {
-            DispatchQueue.main.async { [weak self] in
-                self?.onMenuClosed?()
+            // Taken now: by the time the block runs, another row's menu may
+            // have opened and replaced it.
+            let onMenuClosed = onMenuClosed
+            DispatchQueue.main.async {
+                onMenuClosed?()
             }
         }
     }
@@ -480,15 +652,17 @@ struct ScanRowContextMenu: NSViewRepresentable {
         private var actionTargets: [ScanRowMenuActionTarget] = []
 
         override func rightMouseDown(with event: NSEvent) {
-            showMenu(for: event)
+            showMenu(for: event, in: self)
         }
 
         /// Control-click arrives as a left click with the control modifier.
         override func mouseDown(with event: NSEvent) {
-            showMenu(for: event)
+            showMenu(for: event, in: self)
         }
 
-        private func showMenu(for event: NSEvent) {
+        /// Shows the menu at the click, in `view`: this view, or a
+        /// `ScanRowMenuCenterLayer` that serves many rows.
+        func showMenu(for event: NSEvent, in view: NSView) {
             let entries = entries()
             guard !entries.isEmpty else { return }
             onMenuOpened?()
@@ -499,7 +673,7 @@ struct ScanRowContextMenu: NSViewRepresentable {
             menu.autoenablesItems = false
             populate(menu, with: entries)
             menu.delegate = menuDelegate
-            menu.popUp(positioning: nil, at: convert(event.locationInWindow, from: nil), in: self)
+            menu.popUp(positioning: nil, at: view.convert(event.locationInWindow, from: nil), in: view)
         }
 
         private func populate(_ menu: NSMenu, with entries: [ScanRowMenuEntry]) {

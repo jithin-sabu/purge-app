@@ -1250,6 +1250,10 @@
 "pyenv Python Version" = "pyenv Python 版本";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv 安装的 Python，90 天内没有运行过，也不是同一次版本号下最新的。Purge 找到的版本文件、虚拟环境或配置都没有使用它。用 pyenv install 可以装回来。";
 
+/* xcode-build-folder */
+"Xcode Build Files Elsewhere" = "其他位置的 Xcode 构建文件";
+"Xcode makes these files again the next time you build the project." = "下次构建该项目时，Xcode 会重新生成这些文件。";
+
 /* claude-cowork-vm-image */
 "Claude Cowork VM Disk" = "Claude Cowork 虚拟机磁盘";
 "The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "Claude 的 Cowork 虚拟机磁盘，仅在 Claude 退出时列出。下次启动 Cowork 时，Claude 会用本地副本重建它，所以只有在你很少用 Cowork 时才有帮助。";

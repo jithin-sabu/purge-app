@@ -239,6 +239,8 @@ struct ContentView: View {
         .frame(width: AppWindowLayout.width)
         .frame(minHeight: AppWindowLayout.minHeight)
         .fixedAppWindowWidth()
+        // The uninstaller's app collection sets this tint again in its own
+        // hosting view (`AppCollectionHost`); change both together.
         .tint(AppColors.textPrimary)
         .modifier(DiskSummaryRefreshModifier())
     }

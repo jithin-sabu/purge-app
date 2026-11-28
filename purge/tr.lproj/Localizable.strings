@@ -718,6 +718,8 @@
 "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için Parallels Desktop'ta kaldırın.";
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için UTM'de kaldırın.";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için VMware Fusion'da kaldırın.";
+"Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için VirtualBox'ta kaldırın.";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does." = "Sanal makine. İçindeki her şey onunla birlikte gider. Tart yalnızca kendi klasöründeki sanal makineleri listeler, bu yüzden Çöp Sepeti'ne taşımak listesini tart delete gibi doğru tutar.";
 "Virtual Machines" = "Sanal Makineler";
 "Vite cache" = "Vite önbelleği";
 "Waiting for App Caches and Dev Tools to finish scanning" = "Uygulama Önbellekleri ve Geliştirici Araçları'nın taramayı bitirmesi bekleniyor";
@@ -1623,3 +1625,15 @@
 "Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "Yalnızca Purge'ün dilini değiştirir. Sistem Ayarları'nda Dil ve Bölge > Uygulamalar altındaki Purge kaydıyla aynı ayardır. Purge'ün arayüzü Arapça için yalnızca Mac'inizin kendi dili Arapça olduğunda sağdan sola döner.";
 "Relaunch Purge to switch to %@." = "%@ diline geçmek için Purge'ü yeniden başlatın.";
 "Relaunch Now" = "Şimdi Yeniden Başlat";
+"Xcode Build Files in %@" = "%@ İçindeki Xcode Derleme Dosyaları";
+"Built from %@ on %@." = "%@ projesinden %@ tarihinde derlendi.";
+"Built from %@." = "%@ projesinden derlendi.";
+"That folder is no longer on this Mac." = "Bu klasör artık bu Mac'te değil.";
+"Xcode build folders" = "Xcode derleme klasörleri";
+"Built outside Xcode's own folder. %@" = "Xcode'un kendi klasörü dışında. %@";
+"Select all Xcode build folders" = "Tüm Xcode derleme klasörlerini seç";
+"Show folders" = "Klasörleri göster";
+"Hide folders" = "Klasörleri gizle";
+"Built from a folder that's gone" = "Artık olmayan bir klasörden derlendi";
+"Built from a folder still here" = "Hâlâ var olan bir klasörden derlendi";
+"Select %@" = "Seç: %@";
