@@ -627,6 +627,12 @@ struct AndroidGradlePinsTests {
         #expect(try SDK.pins(home, [
             "w/build.gradle": "ext { tools = '35.0.0' }\nandroid {\n compileSdk 34\n buildToolsVersion project.ext.get('tools')\n}\n"
         ]) == Pins(platforms: ["android-34"], buildTools: ["35.0.0"]))
+        // A name given both a written-out value and a computed one keeps its kind:
+        // the computed one is not a cycle back to the name.
+        #expect(try SDK.pins(home, [
+            "m/build.gradle": "ext { tools = \"35.0.0\" }\next.tools = chooseTools(\"tools\")\n",
+            "m/app/build.gradle": "android {\n compileSdk 34\n buildToolsVersion rootProject.ext.tools\n}\n"
+        ], read: ["m/app/build.gradle"]) == Pins(platforms: ["android-34"], buildTools: nil))
     }
 
     @Test
