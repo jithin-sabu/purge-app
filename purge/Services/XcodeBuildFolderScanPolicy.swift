@@ -311,7 +311,7 @@ nonisolated enum XcodeBuildFolderScanPolicy {
     /// without Full Disk Access.
     static func safetyInfo(forFolder path: String, home: URL, access: ScanAccess) -> SafetyInfo {
         let base = SafetyInfo.fromExplanationDatabase(key: explanationKey, friendlyFallback: labelPrefix + path)
-        let name = URL(fileURLWithPath: path).lastPathComponent
+        let name = displayName(ofFolder: path, home: home)
         guard let mark = readInfoPlist(at: "\(path)/info.plist") else {
             return SafetyInfo(
                 level: base.level,
@@ -337,6 +337,17 @@ nonisolated enum XcodeBuildFolderScanPolicy {
             recoverySteps: base.recoverySteps,
             reinstallCommand: nil
         )
+    }
+
+    /// The folder's name, with its parent's in front when the parent is not
+    /// one of the folders the walk starts from: a build folder inside a
+    /// release folder reads `release-1.18.1/dd`, not a bare `dd`.
+    static func displayName(ofFolder path: String, home: URL) -> String {
+        let url = URL(fileURLWithPath: path)
+        let parent = url.deletingLastPathComponent()
+        let roots = Set((searchRoots(home: home) + [home]).map { $0.standardizedFileURL.path })
+        guard !roots.contains(parent.path) else { return url.lastPathComponent }
+        return "\(parent.lastPathComponent)/\(url.lastPathComponent)"
     }
 
     /// One or two sentences on what was built and when. A project that is gone

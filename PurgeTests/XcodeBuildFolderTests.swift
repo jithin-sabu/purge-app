@@ -367,6 +367,19 @@ struct XcodeBuildFolderTests {
         #expect(base.level == .medium)
     }
 
+    @Test("a nested build folder's headline names its parent too")
+    func nestedHeadlineNamesParent() throws {
+        let home = try Fixture.makeHome()
+        let top = try Fixture.buildFolder(home, "Developer/dd-460.noindex")
+        let nested = try Fixture.buildFolder(home, "Developer/release-1.18.1.noindex/dd")
+        let homeChild = try Fixture.buildFolder(home, "builds.noindex")
+        #expect(Policy.displayName(ofFolder: top.path, home: home) == "dd-460.noindex")
+        #expect(Policy.displayName(ofFolder: nested.path, home: home) == "release-1.18.1.noindex/dd")
+        #expect(Policy.displayName(ofFolder: homeChild.path, home: home) == "builds.noindex")
+        let info = Policy.safetyInfo(forFolder: nested.path, home: home, access: .full)
+        #expect(info.headline == "Xcode Build Files in release-1.18.1.noindex/dd")
+    }
+
     @Test("the explanation names the project and says when it is gone")
     func explanationText() throws {
         let home = try Fixture.makeHome()
