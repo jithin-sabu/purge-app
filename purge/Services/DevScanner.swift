@@ -88,6 +88,7 @@ nonisolated final class DevScanner {
         "Dart Analysis Cache": "dart-analysis-cache",
         "Hermes Agent Cache": "hermes-agent-cache",
         "opencode Cache": "opencode-cache",
+        CoworkVMImageScanPolicy.label: CoworkVMImageScanPolicy.explanationKey,
         "Antigravity Browser Cache": "antigravity-browser-cache",
         "Bun Cache": "bun-cache",
         "nvm Download Cache": "nvm-download-cache",
@@ -1039,6 +1040,7 @@ nonisolated final class DevScanner {
             + OldToolVersionScanPolicy.definitions(home: home)
             + PlaywrightBuildScanPolicy.definitions(home: home, access: access)
             + XcodeBuildFolderScanPolicy.definitions(home: home, access: access)
+            + CoworkVMImageScanPolicy.definitions(home: home.standardizedFileURL.path, context: .current())
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,

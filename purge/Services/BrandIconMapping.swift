@@ -129,6 +129,7 @@ enum BrandIconMapping {
         "cursor-agent-install-leftovers": "cursor",
         "vite-plus-node-install-leftovers": "vite",
         "claude-code-downloads": "anthropic",
+        "claude-cowork-vm-image": "anthropic",
         "android-system-images": "androidstudio",
         "old-figma-profiles": "figma",
         "orphaned-git-worktree": "git",

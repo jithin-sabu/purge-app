@@ -537,6 +537,9 @@ struct AllowlistAdditionTests {
         "Downloads/movie.mkv.part",
         "Downloads/archive.zip.download",
         "Downloads/ParallelsDesktop.dmg.prlupd-part",
+        // By shape only; the files are checked before every move (#468).
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle/rootfs.img",
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle/.rootfs.img.origin",
     ])
     func newCachesAreOffered(relative: String) {
         #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
@@ -568,6 +571,14 @@ struct AllowlistAdditionTests {
         // Gradle's own folder, which a stray `~/settings.gradle` made a project
         // artifact (#190). Its caches are separate rows.
         ".gradle",
+        // Claude's Cowork VM: session data, the compressed cache that rebuilds the
+        // disk, and the folders themselves (#468).
+        "Library/Application Support/Claude/vm_bundles",
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle",
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle/sessiondata.img",
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle/.cowork-adopted",
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle/rootfs.img.zst",
+        "Library/Application Support/Claude/vm_bundles/claudevm.bundle/.rootfs.img.zst.origin",
     ])
     func neighboursStayOut(relative: String) {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")

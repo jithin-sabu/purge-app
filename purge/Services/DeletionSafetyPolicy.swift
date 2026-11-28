@@ -528,6 +528,8 @@ enum DeletionSafetyPolicy {
         if shapeLinkRefusesDeletion(standardizedPath: key, reuseRecentRead: Thread.isMainThread) { return false }
         if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
+        // Claude can start Cowork at any time, and then the VM has its disk open (#468).
+        if CoworkVMImageScanPolicy.refusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }
 
@@ -1976,6 +1978,12 @@ enum DeletionSafetyPolicy {
         // Shape only. Whether a link still names the build is checked by
         // `PlaywrightBuildScanPolicy.refusesDeletion` before every move.
         if PlaywrightBuildScanPolicy.isWhitelistedPath(path, home: home) {
+            return .allow
+        }
+        // Shape only. Whether the cache can rebuild the image, and whether Claude
+        // or anything else is using it, is checked by `CoworkVMImageScanPolicy`
+        // before every move (#468).
+        if CoworkVMImageScanPolicy.isWhitelistedPath(path, home: home) {
             return .allow
         }
         if gradleLeftover(at: path, home: home) != nil {

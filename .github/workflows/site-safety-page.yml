@@ -17,6 +17,7 @@ on:
       - purge/Services/UvPythonVersionPolicy.swift
       - purge/Services/PyenvPythonVersionPolicy.swift
       - purge/Services/AndroidSDKVersionPolicy.swift
+      - purge/Services/CoworkVMImageScanPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift
@@ -39,6 +40,7 @@ on:
       - purge/Services/UvPythonVersionPolicy.swift
       - purge/Services/PyenvPythonVersionPolicy.swift
       - purge/Services/AndroidSDKVersionPolicy.swift
+      - purge/Services/CoworkVMImageScanPolicy.swift
       - purge/Services/CacheDiscoveryPaths.swift
       - purge/Services/EditorWorkspaceStoragePolicy.swift
       - purge/Services/CursorAgentLeftoverScanPolicy.swift

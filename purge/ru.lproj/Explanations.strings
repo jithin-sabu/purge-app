@@ -628,3 +628,5 @@
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "Python из pyenv: 90 дней без запуска, не новейший в минорной ветке. Не нужен найденным закреплениям, venv, конфигам. Вернёт pyenv install.";
 "Xcode Build Files Elsewhere" = "Файлы сборки Xcode в других папках";
 "Xcode makes these files again the next time you build the project." = "Xcode создаст эти файлы снова при следующей сборке проекта.";
+"Claude Cowork VM Disk" = "Диск ВМ Claude Cowork";
+"The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "Диск ВМ Cowork, виден при закрытом Claude. Claude соберёт его из локальной копии при запуске Cowork. Полезно, если Cowork нужен редко.";
