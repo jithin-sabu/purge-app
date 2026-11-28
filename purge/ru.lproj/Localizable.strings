@@ -274,6 +274,7 @@
 "Browser caches" = "Кэши браузеров";
 "Browser caches per profile" = "Кэши браузеров по профилям";
 "Build %@" = "Сборка %@";
+"Build %@. The size leaves out %@ of cache." = "Сборка %@. Размер не включает %@ кэша.";
 "Built in" = "Встроено";
 "Busy right now, so it can't be removed. Scan again in a moment." = "Сейчас занято, удалить нельзя. Просканируйте снова чуть позже.";
 "Buy me a coffee" = "Угостите кофе";

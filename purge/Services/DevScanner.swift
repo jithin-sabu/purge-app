@@ -433,7 +433,7 @@ nonisolated final class DevScanner {
         // failed read is "unknown" and leaves every older-format one out (#165).
         let downloadBuilds = SimulatorRuntime.downloads().map { Set($0.map(\.build)) }
 
-        return SimulatorRuntime.parseRuntimeList(
+        let runtimes = SimulatorRuntime.parseRuntimeList(
             listing.stdout,
             deviceCountsByRuntimeIdentifier: deviceCounts,
             xcodeRuntimeBuilds: xcodeBuilds,
@@ -443,6 +443,13 @@ nonisolated final class DevScanner {
         )
         .filter { $0.safetyInfo.level.canSurfaceInScanResults }
         .filter { !ExcludedSimulatorRuntimesStore.isExcluded($0) }
+
+        // Each runtime's dyld cache, which `simctl` leaves out of its size (#473).
+        // Shown beside the size only, never counted in it, and never a delete
+        // candidate. Whether `simctl runtime delete` removes the folder is not
+        // yet confirmed by a live delete.
+        let dyldCaches = SimulatorRuntime.dyldCacheSizes(for: runtimes)
+        return runtimes.map { $0.withDyldCache(dyldCaches[$0.id]) }
     }
 
     // MARK: - Xcode components

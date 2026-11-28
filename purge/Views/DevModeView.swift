@@ -1324,7 +1324,7 @@ struct DevToolsView: View {
                                     formattedSize: runtime.formattedSize,
                                     safetyInfo: runtime.safetyInfo,
                                     brandIcon: .sfSymbol("internaldrive"),
-                                    detailCaption: String(localized: "Build \(runtime.build)"),
+                                    detailCaption: runtime.detailCaption,
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
                                     onExcludeFromScans: { store.excludeFromScans(runtime) },
@@ -1348,7 +1348,7 @@ struct DevToolsView: View {
                                 formattedSize: runtime.formattedSize,
                                 safetyInfo: runtime.safetyInfo,
                                 brandIcon: .sfSymbol("internaldrive"),
-                                detailCaption: String(localized: "Build \(runtime.build)"),
+                                detailCaption: runtime.detailCaption,
                                 revealLocations: {
                                     [ScanRowLocation(url: runtime.locationURL, sizeBytes: runtime.sizeBytes)]
                                 },

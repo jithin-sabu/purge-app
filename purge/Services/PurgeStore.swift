@@ -6199,7 +6199,7 @@ final class PurgeStore: ObservableObject {
             sizeBytes: runtime.sizeBytes,
             safetyInfo: runtime.safetyInfo,
             reinstallCommand: nil,
-            subtitle: String(localized: "Build \(runtime.build)"),
+            subtitle: runtime.detailCaption,
             reinstallSafety: .notApplicable,
             gitStatus: .clean,
             simulatorRuntime: SimulatorRuntimeHandle(imageID: runtime.id, build: runtime.build)
