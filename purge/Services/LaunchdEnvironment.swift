@@ -9,8 +9,9 @@ import os
 /// launch before the `setenv` never sees it. This reads it again.
 ///
 /// Reading runs `launchctl`, so it happens only in `refresh()`, off the main
-/// thread, at the start of each AI model scan, command-line tool scan and
-/// user-picked delete. Every other read takes the value from then.
+/// thread, at the start of each Large Files scan, AI model scan,
+/// command-line tool scan and user-picked delete. Every other read takes the
+/// value from then.
 nonisolated enum LaunchdEnvironment {
     typealias Runner = @Sendable (_ executablePath: String, _ arguments: [String]) -> ProcessRunner.Output?
 

@@ -89,6 +89,9 @@ nonisolated final class LargeFileScanner {
     ) -> AsyncStream<LargeFileScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
+                // `VBOX_USER_HOME` may have been set since Purge started; the
+                // VirtualBox clone check reads it from here (#475).
+                LaunchdEnvironment.refresh()
                 let home = home ?? FileManager.default.homeDirectoryForCurrentUser
                 var walks = (roots ?? LargeFileScanPolicy.scanRoots(home: home))
                     .map { Walk(root: $0, bundlesOnly: false, downloadOnly: false) }
@@ -426,10 +429,10 @@ nonisolated final class LargeFileScanner {
                         // folders that would be rows, so the walk lists no
                         // other folder twice.
                         if AIModelScanPolicy.isOllamaStore(fileURL) { return ([], false) }
-                        // A bundle that holds VirtualBox or Tart files is that
-                        // VM, listed by its own walk if at all, never as the
-                        // app its extension names (#475).
-                        if isVirtualMachine, LargeFileScanPolicy.holdsVirtualMachineFiles(fileURL) {
+                        // A bundle or Safari download that holds VirtualBox
+                        // or Tart files is that VM, listed by its own walk if
+                        // at all, never as what its name says (#475).
+                        if LargeFileScanPolicy.holdsVirtualMachineFiles(fileURL) {
                             return ([], false)
                         }
                         // A VM that may be running is left off the list; the

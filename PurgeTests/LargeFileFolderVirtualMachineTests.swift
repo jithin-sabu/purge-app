@@ -70,6 +70,7 @@ struct LargeFileFolderVirtualMachineTests {
 
     private func scan(
         _ home: Home,
+        roots: [String] = ["Documents"],
         installedApps: Set<VirtualMachineApp> = [],
         runningApps: Set<String> = [],
         openFiles: @escaping OpenFileCheck.Lister = noOpenFiles
@@ -77,7 +78,7 @@ struct LargeFileFolderVirtualMachineTests {
         let stream = LargeFileScanner().scanStream(
             minBytes: 1,
             staleDays: 0,
-            roots: [home.documents],
+            roots: roots.map { home.path($0) },
             virtualMachineRoots: [],
             folderVirtualMachineRoots: LargeFileScanPolicy.folderVirtualMachineRoots(home: home.url),
             iCloudDriveRoots: [],
@@ -94,7 +95,9 @@ struct LargeFileFolderVirtualMachineTests {
         for await file in stream {
             let path = file.path.path
             guard let range = path.range(of: marker) else { continue }
-            found[String(path[range.upperBound...])] = file
+            // Each VM is one row: a second row for the same path is a bug.
+            let previous = found.updateValue(file, forKey: String(path[range.upperBound...]))
+            #expect(previous == nil, "listed twice: \(path)")
         }
         return found
     }
@@ -589,6 +592,71 @@ struct LargeFileFolderVirtualMachineTests {
         #expect(!isEligible(home.path("Documents/Stray.pvm"), home))
     }
 
+    /// The gate refuses any path with a `Library` folder in it, so a VM in a
+    /// group named that is never listed either.
+    @Test
+    func vmInAGroupNamedLibraryIsNotListed() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Library/Win")
+        try home.virtualBoxVM("Work/Deb")
+
+        #expect(Set(await scan(home).keys) == ["VirtualBox VMs/Work/Deb"])
+        #expect(!isEligible(home.path("VirtualBox VMs/Library/Win"), home))
+    }
+
+    /// A VM folder that can be searched but not listed still shows its
+    /// `<name>.vbox` to `stat`, so a root linked into its `Snapshots` is
+    /// not walked and the snapshot disk is refused.
+    @Test
+    func vmFolderThatCantBeListedStillMarksItsSnapshots() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Win")
+        try home.write("VirtualBox VMs/Win/Snapshots/{1}.vdi", bytes: 8192)
+        try FileManager.default.removeItem(at: home.documents)
+        try home.link("Documents", to: "VirtualBox VMs/Win/Snapshots")
+        let vm = home.virtualBox.appendingPathComponent("Win")
+        try FileManager.default.setAttributes([.posixPermissions: 0o111], ofItemAtPath: vm.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: vm.path) }
+
+        #expect(await scan(home).isEmpty)
+        #expect(!isEligible(home.path("Documents/{1}.vdi"), home))
+    }
+
+    /// A VirtualBox VM that starts while the clone search runs is caught by
+    /// a second open-file check before the gate says yes.
+    @Test
+    func vmThatStartsDuringTheCloneSearchIsRefused() throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Win")
+        let vm = home.virtualBox.appendingPathComponent("Win")
+        let calls = CallCount()
+        let listing = "p4242\ncVBoxHeadless\nn\(vm.appendingPathComponent("Win.vdi").path)\n"
+        let startsLater: OpenFileCheck.Lister = { calls.next() == 1 ? "" : listing }
+
+        #expect(!isEligible(vm, home, openFiles: startsLater))
+        #expect(calls.count == 2)
+    }
+
+    /// A Safari download folder that holds a VM's files is that VM: never
+    /// listed as a download, never trashed as one.
+    @Test
+    func safariDownloadHoldingVMFilesIsRefused() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Downloads/Win.download/Info.plist", text: "<plist/>")
+        try home.write("Downloads/Win.download/Win.vbox", text: "<VirtualBox/>")
+        try home.write("Downloads/Win.download/Win.vdi", bytes: 8192)
+        try home.write("Downloads/Real.download/Info.plist", text: "<plist/>")
+        try home.write("Downloads/Real.download/file.zip", bytes: 8192)
+
+        #expect(Set(await scan(home, roots: ["Downloads"]).keys) == ["Downloads/Real.download"])
+        #expect(!isEligible(home.path("Downloads/Win.download"), home))
+        #expect(isEligible(home.path("Downloads/Real.download"), home))
+    }
+
     /// A `VirtualBox.xml` that names only the VM itself refuses nothing.
     @Test
     func registryNamingOnlyTheVMItselfRefusesNothing() async throws {
@@ -699,4 +767,12 @@ struct LargeFileFolderVirtualMachineTests {
         #expect(installed.contains("VirtualBox"))
         #expect(!missing.contains("VirtualBox"))
     }
+}
+
+/// Counts calls from a `@Sendable` closure.
+private final class CallCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func next() -> Int { lock.withLock { value += 1; return value } }
 }
