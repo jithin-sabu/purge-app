@@ -291,6 +291,16 @@ nonisolated final class LargeFileScanner {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
+            // A root that holds a VirtualBox or Tart VM's files, such as a VM
+            // folder added in Settings, is not walked: its files and folders
+            // are the VM's, and a disk trashed alone breaks it (#475). The
+            // gate refuses them too. A root that can't be listed goes on, so
+            // the walk reports it as before.
+            if let entries = DirectoryListing.entries(of: realFolder.path),
+               LargeFileScanPolicy.holdsVirtualMachineFiles(entries) {
+                if !bundlesOnly { summary.checkedRoots.append(root) }
+                continue
+            }
             // Below an added folder the walk stays on the folder's own disk, or
             // another one attached to this Mac: a network share or macFUSE
             // mount inside it is never read (#318 review).

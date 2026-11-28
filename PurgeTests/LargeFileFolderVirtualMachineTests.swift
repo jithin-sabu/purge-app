@@ -449,6 +449,40 @@ struct LargeFileFolderVirtualMachineTests {
         }
     }
 
+    /// A root that holds a VM's files, such as a VM folder added in Settings,
+    /// is not walked: its disks, and its snapshots below it, are the VM's. The
+    /// gate refuses everything in it too.
+    @Test
+    func rootHoldingVMFilesIsNotWalkedOrTrashed() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Documents/Old.vbox", text: "<VirtualBox/>")
+        try home.write("Documents/Old.vdi", bytes: 8192)
+        try home.write("Documents/Snapshots/{1}.vdi", bytes: 8192)
+
+        #expect(await scan(home).isEmpty)
+        for refused in ["Documents/Old.vdi", "Documents/Snapshots/{1}.vdi"] {
+            #expect(!isEligible(home.path(refused), home), "\(refused)")
+        }
+    }
+
+    /// A VirtualBox VM inside a folder that holds Tart's files, or under a
+    /// VirtualBox root that holds a VM's files itself, is inside another VM
+    /// and is never offered.
+    @Test(arguments: [false, true])
+    func vmInsideAnotherVMsFilesIsRefused(atRoot: Bool) async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let outer = atRoot ? "VirtualBox VMs" : "VirtualBox VMs/Outer"
+        try home.write("\(outer)/config.json", text: "{}")
+        try home.write("\(outer)/disk.img", bytes: 8192)
+        try home.write("\(outer)/Inner/Inner.vbox", text: "<VirtualBox/>")
+        try home.write("\(outer)/Inner/Inner.vdi", bytes: 8192)
+
+        #expect(await scan(home).isEmpty)
+        #expect(!isEligible(home.path("\(outer)/Inner"), home))
+    }
+
     /// A `VirtualBox.xml` that names only the VM itself refuses nothing.
     @Test
     func registryNamingOnlyTheVMItselfRefusesNothing() async throws {

@@ -155,6 +155,9 @@ enum LargeFileScanPolicy {
             ) else { continue }
             let rootPath = walked.resolvingSymlinksInPath().standardizedFileURL.path
             guard PathContainment.isInside(real.path, rootPath) else { continue }
+            // A root that holds a VM's files is not walked, so nothing in it
+            // is a VM to offer.
+            if holdsVirtualMachineFiles(URL(fileURLWithPath: rootPath, isDirectory: true)) { return nil }
             let between = real.path.dropFirst(rootPath.count).split(separator: "/").dropLast()
             switch root.app {
             case .tart:
@@ -173,12 +176,13 @@ enum LargeFileScanPolicy {
         return nil
     }
 
-    /// Whether any folder between `root` and `url`, `root` left out, holds a
-    /// VM's files. The walk checks the same folders, those below the root it
-    /// lists from, so the gate refuses exactly what the walk leaves out.
+    /// Whether `root`, or any folder between it and `url`, holds a VM's
+    /// files. The walk checks the same folders: it skips a root that holds
+    /// them and every folder below it that does, so the gate refuses exactly
+    /// what the walk leaves out.
     nonisolated static func isInsideFolderHoldingVirtualMachineFiles(_ url: URL, below root: String) -> Bool {
         var folder = url.standardizedFileURL.deletingLastPathComponent()
-        while PathContainment.isInside(folder.path, root) {
+        while PathContainment.isSameOrInside(folder.path, root) {
             if holdsVirtualMachineFiles(folder) { return true }
             folder = folder.deletingLastPathComponent()
         }
@@ -692,8 +696,8 @@ enum LargeFileScanPolicy {
         }
 
         // Nor anything inside a folder holding a VirtualBox or Tart VM's
-        // files: a disk trashed alone breaks the VM (#475). Asked of the
-        // folders below the root the item is under, the ones the walk checks.
+        // files: a disk trashed alone breaks the VM (#475). Asked of the root
+        // the item is under and the folders below it, the ones the walk checks.
         let walkedRoots = scanRoots(home: home).compactMap { walkedPath($0).map { String($0.dropLast()) } }
             + added.map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
         if let holding = walkedRoots.filter({ PathContainment.isInside(realPath, $0) }).max(by: { $0.count < $1.count }),
