@@ -630,3 +630,11 @@
 "Xcode makes these files again the next time you build the project." = "يعيد Xcode إنشاء هذه الملفات في المرة القادمة التي تبني فيها المشروع.";
 "Claude Cowork VM Disk" = "قرص آلة Claude Cowork الافتراضية";
 "The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "قرص الآلة الافتراضية لـ Cowork في Claude، يظهر حين يكون Claude مغلقًا. يعيد Claude بناءه من نسخة محلية عند تشغيل Cowork التالي، فلا يفيد إلا إن كنت نادرًا ما تستخدم Cowork.";
+
+/* unity-package-cache */
+"Unity Package Cache" = "ذاكرة حزم Unity المؤقتة";
+"Packages Unity's Package Manager downloaded. Clean while Unity is closed. Unity downloads them again when a project needs them, which needs a connection." = "حزم نزّلها Package Manager في Unity. نظّف حين يكون Unity مغلقًا. ينزّلها Unity مجددًا حين يحتاجها مشروع، وهذا يتطلب اتصالًا.";
+
+/* unity-asset-store */
+"Unity Asset Store Downloads" = "تنزيلات Unity Asset Store";
+"Asset Store packages Unity downloaded. Imported assets stay in your projects. Download them again from My Assets. A package taken off the store may not return." = "حزم Asset Store التي نزّلها Unity. تبقى الأصول المستوردة في مشاريعك. نزّلها مجددًا من My Assets. قد لا تعود حزمة أُزيلت من المتجر.";

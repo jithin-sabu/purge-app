@@ -94,6 +94,8 @@ nonisolated final class DevScanner {
         "nvm Download Cache": "nvm-download-cache",
         "giget Template Cache": "giget-cache",
         "Firebase Emulators": "firebase-emulators",
+        "Unity Package Cache": "unity-package-cache",
+        "Unity Asset Store Downloads": "unity-asset-store",
         "Gradle Logs and Temp Files": "gradle-leftovers",
         "Clang Module Cache": "clang-module-cache",
         "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
@@ -771,6 +773,20 @@ nonisolated final class DevScanner {
         return paths
     }
 
+    /// Each Asset Store download folder in `~/Library/Unity`, such as
+    /// `Asset Store-5.x` (#474). The policy allows the same names, and nothing
+    /// else in the folder.
+    nonisolated static func unityAssetStorePaths(home: URL) -> [URL] {
+        let unity = home.appendingPathComponent(DeletionSafetyPolicy.unityFolderRelative, isDirectory: true)
+        // Listing follows a link, so a `~/Library/Unity` linked into Documents is skipped.
+        guard ProtectedLocations.isReadable(unity, access: .limited, home: home) else { return [] }
+        // Built from the names, so each path keeps the spelling of `home`.
+        return ((try? FileManager.default.contentsOfDirectory(atPath: unity.path)) ?? [])
+            .filter(DeletionSafetyPolicy.isUnityAssetStoreFolderName)
+            .sorted()
+            .map { unity.appendingPathComponent($0, isDirectory: true) }
+    }
+
     /// Each `~/.gradle/daemon/<version>` folder and `~/.gradle/.tmp`. Which of them
     /// may go is the policy's call, made again at delete time.
     nonisolated static func gradleLeftoverPaths(home: URL) -> [URL] {
@@ -905,6 +921,17 @@ nonisolated final class DevScanner {
             ("nvm Download Cache", [home.appendingPathComponent(".nvm/.cache", isDirectory: true)]),
             ("giget Template Cache", [home.appendingPathComponent(".cache/giget", isDirectory: true)]),
             ("Firebase Emulators", [home.appendingPathComponent(".cache/firebase/emulators", isDirectory: true)]),
+            // Check First (#474): a project whose `Library` folder is gone fetches its
+            // packages again, which needs a connection. Editors up to 2023.2 keep the
+            // cache in `~/Library/Unity/cache`, Unity 6 in `~/Library/Caches/Unity/upm`.
+            // A cache moved with `UPM_CACHE_ROOT` or Preferences is not listed.
+            ("Unity Package Cache", [
+                home.appendingPathComponent("Library/Unity/cache", isDirectory: true),
+                home.appendingPathComponent("Library/Caches/Unity/upm", isDirectory: true)
+            ]),
+            // Check First: these download again only from My Assets, with the Unity
+            // account. Nothing else in `~/Library/Unity` is listed.
+            ("Unity Asset Store Downloads", unityAssetStorePaths(home: home)),
             // In the per-user cache folder under /var/folders, not the home folder.
             ("Clang Module Cache", DeletionSafetyPolicy.clangModuleCachePaths.prefix(1).map {
                 URL(fileURLWithPath: $0, isDirectory: true)

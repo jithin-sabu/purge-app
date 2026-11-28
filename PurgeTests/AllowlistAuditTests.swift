@@ -1819,6 +1819,9 @@ struct ShapeLinkTests {
         (".grok/downloads/grok-1.0.13", ".grok/downloads/grok-1.0.13", false),
         (".gradle/daemon/8.10.2", ".gradle/daemon/8.10.2", false),
         (".gradle/.tmp", ".gradle/.tmp", false),
+        ("Library/Unity/Asset Store-5.x", "Library/Unity/Asset Store-5.x", false),
+        ("Library/Unity/Asset Store-5.x/Publisher/Pack.unitypackage", "Library/Unity/Asset Store-5.x", false),
+        ("Library/Unity/Asset Store", "Library/Unity/Asset Store", false),
     ]
 
     /// A temporary home, with a `Developer` folder beside it for links to point at.
@@ -1861,6 +1864,7 @@ struct ShapeLinkTests {
         DeletionSafetyPolicy.isWhitelistedContainerCachePath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedTelegramMediaCachePath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedGemDownloadCachePath(path, home: home)
+            || DeletionSafetyPolicy.isWhitelistedUnityAssetStorePath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedUnfinishedDownloadPath(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedEditorWorkspaceStorageEntry(path, home: home)
             || DeletionSafetyPolicy.isWhitelistedOldCLIVersionPath(path, home: home)

@@ -3690,6 +3690,24 @@
     "kind": "packages"
   },
   {
+    "key": "unity-package-cache",
+    "display_name": "Unity Package Cache",
+    "tag": "medium",
+    "explanation": "Packages Unity's Package Manager downloaded. Clean while Unity is closed. Unity downloads them again when a project needs them, which needs a connection.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "unity-asset-store",
+    "display_name": "Unity Asset Store Downloads",
+    "tag": "medium",
+    "explanation": "Asset Store packages Unity downloaded. Imported assets stay in your projects. Download them again from My Assets. A package taken off the store may not return.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
     "key": "gradle-leftovers",
     "display_name": "Gradle Logs and Temp Files",
     "tag": "safe",

@@ -942,3 +942,11 @@
 /* claude-cowork-vm-image */
 "Claude Cowork VM Disk" = "Claude Cowork VM Diski";
 "The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "Claude'un Cowork VM diski, Claude kapalıyken listelenir. Cowork açılınca yerel kopyadan yeniden kurulur; Cowork'ü az kullanıyorsanız işe yarar.";
+
+/* unity-package-cache */
+"Unity Package Cache" = "Unity Paket Önbelleği";
+"Packages Unity's Package Manager downloaded. Clean while Unity is closed. Unity downloads them again when a project needs them, which needs a connection." = "Unity Package Manager'ın indirdiği paketler. Unity kapalıyken temizleyin. Bir proje ihtiyaç duyunca Unity bunları yeniden indirir; bağlantı gerekir.";
+
+/* unity-asset-store */
+"Unity Asset Store Downloads" = "Unity Asset Store İndirmeleri";
+"Asset Store packages Unity downloaded. Imported assets stay in your projects. Download them again from My Assets. A package taken off the store may not return." = "Unity'nin indirdiği Asset Store paketleri. İçe aktarılan varlıklar projelerinizde kalır. My Assets'ten yeniden indirin. Mağazadan kaldırılan paket geri gelmeyebilir.";

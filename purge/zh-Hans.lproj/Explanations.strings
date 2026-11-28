@@ -1206,6 +1206,14 @@
 "Firebase Emulators" = "Firebase 模拟器";
 "Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators." = "Firebase CLI 下载的模拟器文件。可以安全删除，下次启动模拟器时 Firebase CLI 会重新下载。";
 
+/* unity-package-cache */
+"Unity Package Cache" = "Unity 软件包缓存";
+"Packages Unity's Package Manager downloaded. Clean while Unity is closed. Unity downloads them again when a project needs them, which needs a connection." = "Unity Package Manager 下载的软件包。请在 Unity 关闭时清理。项目需要时 Unity 会重新下载，这需要联网。";
+
+/* unity-asset-store */
+"Unity Asset Store Downloads" = "Unity Asset Store 下载";
+"Asset Store packages Unity downloaded. Imported assets stay in your projects. Download them again from My Assets. A package taken off the store may not return." = "Unity 下载的 Asset Store 软件包。已导入的资源会留在项目中。可在 My Assets 中重新下载。已从商店下架的软件包可能无法找回。";
+
 /* gradle-leftovers */
 "Gradle Logs and Temp Files" = "Gradle 日志与临时文件";
 "Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete." = "已停止的 Gradle 守护进程留下的日志，以及在没有构建运行时、已超过一周的 Gradle 临时文件。Gradle 需要时会重新生成。可以安全删除。";
