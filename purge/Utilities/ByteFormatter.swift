@@ -15,6 +15,23 @@ nonisolated func formatBytes(_ bytes: Int64) -> String {
     return byteCountFormatter.string(fromByteCount: bytes)
 }
 
+/// Writes a figure with zero or one fraction digit and no grouping, in the locale's own
+/// digits and decimal separator. A `NumberFormatter`, not a `FormatStyle`: only the
+/// formatter follows a separator the user picked in System Settings, the way
+/// `formatBytes` does (#460).
+nonisolated private func makeOneDecimalFormatter(_ locale: Locale) -> NumberFormatter {
+    let formatter = NumberFormatter()
+    formatter.locale = locale
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = 1
+    formatter.usesGroupingSeparator = false
+    return formatter
+}
+
+/// Made once, like `byteCountFormatter`: storage figures run per row per render.
+nonisolated(unsafe) private let oneDecimalFormatter = makeOneDecimalFormatter(.autoupdatingCurrent)
+
 /// Formats volume figures for the storage sidebar — one decimal at most (e.g. "313.4 GB").
 func formatStorageBytes(_ bytes: Int64) -> String {
     formatOneDecimal(bytes, roundingDown: false)
@@ -30,12 +47,12 @@ nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
 }
 
 /// Decimal units with one decimal at most, rounded to nearest or truncated.
-/// `decimalSeparator` is injected so the tests can check both ways of writing a
-/// fraction without touching the process-wide locale.
+/// `locale` is injected so the tests can check other regions and digit settings
+/// without touching the process-wide locale; `nil` means the user's own.
 nonisolated func formatOneDecimal(
     _ bytes: Int64,
     roundingDown: Bool,
-    decimalSeparator: String = Locale.current.decimalSeparator ?? "."
+    locale: Locale? = nil
 ) -> String {
     guard bytes > 0 else { return String(localized: "0 bytes") }
 
@@ -49,11 +66,15 @@ nonisolated func formatOneDecimal(
     ]
 
     for unit in units where bytes >= unit.threshold {
+        // The rounding is done here in whole tenths, so the formatter below never
+        // rounds again and a ceiling stays rounded down.
         let tenths = (bytes * 10 + (roundingDown ? 0 : unit.threshold / 2)) / unit.threshold
-        let whole = tenths / 10
-        let fraction = tenths % 10
-        guard fraction > 0 else { return "\(whole) \(unit.suffix)" }
-        return "\(whole)\(decimalSeparator)\(fraction) \(unit.suffix)"
+        let value = NSDecimalNumber(mantissa: UInt64(tenths), exponent: -1, isNegative: false)
+        // The locale writes the digits and the separator, so an Arabic or Persian Mac
+        // gets its own digits here, the same as `formatBytes` and the counts (#460).
+        let formatter = locale.map(makeOneDecimalFormatter) ?? oneDecimalFormatter
+        let figure = formatter.string(from: value) ?? "\(value)"
+        return "\(figure) \(unit.suffix)"
     }
 
     return String(localized: "\(bytes) bytes")
