@@ -285,13 +285,19 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
         let keySet = Set(keys)
 
+        /// The checks home itself must pass too: not on or below a share,
+        /// and not excluded from scans.
+        func isLocalAndIncluded(_ path: String) -> Bool {
+            // A root added in Settings may sit below a share, not only on it.
+            guard !foreignMounts.contains(where: { PathContainment.isSameOrInside(path, $0) }) else { return false }
+            return !ExcludedPathsStore.isExcluded(URL(fileURLWithPath: path, isDirectory: true))
+        }
+
         func mayEnter(_ path: String) -> Bool {
             guard PathContainment.isInside(path, homePath),
-                  !PathContainment.isSameOrInside(path, libraryPath),
-                  // A root added in Settings may sit below a share, not only on it.
-                  !foreignMounts.contains(where: { PathContainment.isSameOrInside(path, $0) }) else { return false }
+                  !PathContainment.isSameOrInside(path, libraryPath) else { return false }
             guard access == .full || !ProtectedLocations.isPath(path, inAnyOf: protectedRoots) else { return false }
-            return !ExcludedPathsStore.isExcluded(URL(fileURLWithPath: path, isDirectory: true))
+            return isLocalAndIncluded(path)
         }
 
         // (folder, how many more levels below it may be looked at). Roots are
@@ -302,7 +308,7 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         for root in roots {
             let path = root.standardizedFileURL.path
             let isHome = path == homePath
-            guard isHome || mayEnter(path), isRealFolder(path),
+            guard isHome ? isLocalAndIncluded(path) : mayEnter(path), isRealFolder(path),
                   let identity = FolderIdentity(path), seenRoots.insert(identity).inserted else { continue }
             level.append((path, isHome ? 1 : depth))
         }

@@ -433,6 +433,12 @@ struct XcodeBuildFolderTests {
             addedRoots: [], nonLocalMounts: [share]
         )
         #expect(belowShare.isEmpty)
+        // Home itself on a share, as a network home folder is, is not listed.
+        try Fixture.buildFolder(home, "homechild.noindex")
+        let homeOnShare = Policy.walk([home], home: home, access: .full, addedRoots: [], nonLocalMounts: [home.path])
+        #expect(homeOnShare.isEmpty)
+        let homeLocal = Policy.walk([home], home: home, access: .full, addedRoots: [], nonLocalMounts: [])
+        #expect(homeLocal.map(\.lastPathComponent) == ["homechild.noindex"])
         #expect(!Policy.passesImmediateTrashBoundary(
             onShare, home: home.path, lister: Fixture.noOpenFiles, nonLocalMounts: [share]
         ))
