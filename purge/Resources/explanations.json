@@ -3420,6 +3420,15 @@
     "kind": "ai"
   },
   {
+    "key": "claude-cowork-vm-image",
+    "display_name": "Claude Cowork VM Disk",
+    "tag": "medium",
+    "explanation": "The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "ai"
+  },
+  {
     "key": "android-ndk-version",
     "display_name": "Android NDK",
     "tag": "medium",

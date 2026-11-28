@@ -626,3 +626,5 @@
 "An older uv Python patch. No environment, .python-version or setting Purge found uses it. Tools that call it by path break until uv python install restores it." = "Старый патч Python от uv; найденные окружения, .python-version, настройки его не берут. Вызовы по пути сломаются до uv python install.";
 "pyenv Python Version" = "Версия Python в pyenv";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "Python из pyenv: 90 дней без запуска, не новейший в минорной ветке. Не нужен найденным закреплениям, venv, конфигам. Вернёт pyenv install.";
+"Claude Cowork VM Disk" = "Диск ВМ Claude Cowork";
+"The disk of Claude's Cowork VM, listed while Claude is quit. Claude rebuilds it from a local copy when Cowork next starts, so it only helps if you rarely use Cowork." = "Диск ВМ Cowork, виден при закрытом Claude. Claude соберёт его из локальной копии при запуске Cowork. Полезно, если Cowork нужен редко.";
