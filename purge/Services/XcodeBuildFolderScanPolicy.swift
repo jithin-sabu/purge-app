@@ -361,7 +361,14 @@ nonisolated enum XcodeBuildFolderScanPolicy {
                 level += read.next.filter { FolderIdentity($0.0).map { visited.insert($0).inserted } ?? false }
             }
         }
-        return found.sorted().map { URL(fileURLWithPath: $0, isDirectory: true) }
+        // A folder added in Settings can sit inside a build folder another root
+        // found. Only the outer one is listed: moving it takes the inner one too.
+        // Compared by real path, so two spellings of one folder still match.
+        let real = Dictionary(found.map { ($0, realPath($0) ?? $0) }, uniquingKeysWith: { first, _ in first })
+        let outermost = found.filter { path in
+            !found.contains { other in other != path && PathContainment.isInside(real[path]!, real[other]!) }
+        }
+        return outermost.sorted().map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
     /// A folder's device and inode, from `lstat`.

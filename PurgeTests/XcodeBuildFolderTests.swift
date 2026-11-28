@@ -236,6 +236,18 @@ struct XcodeBuildFolderTests {
         #expect(Fixture.walk(home) == [outer.path])
     }
 
+    @Test("a root inside a listed build folder adds no nested row")
+    func nestedRootIsDropped() throws {
+        let home = try Fixture.makeHome()
+        let outer = try Fixture.buildFolder(home, "Developer/outer")
+        try Fixture.buildFolder(home, "Developer/outer/Logs/nested")
+        let found = Policy.walk(
+            [home.appendingPathComponent("Developer"), home.appendingPathComponent("Developer/outer/Logs")],
+            home: home, access: .full, addedRoots: [], nonLocalMounts: []
+        )
+        #expect(found.map(\.path) == [outer.path])
+    }
+
     @Test("a case-insensitive second spelling of a root is walked once")
     func rootsAreWalkedOnce() throws {
         let home = try Fixture.makeHome()
