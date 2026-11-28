@@ -306,6 +306,109 @@ struct LargeFileFolderVirtualMachineTests {
         #expect(!isEligible(home.virtualBox.appendingPathComponent("Base"), home))
     }
 
+    /// Since VirtualBox 4.0 a disk sits in one media registry. A VM that
+    /// attaches an existing or shareable disk names it by `uuid` alone, and
+    /// the `location` stays in the owning VM's settings or in the global
+    /// registry in `VirtualBox.xml`. Either way the owning VM is refused.
+    @Test(arguments: [false, true])
+    func vmWhoseDiskAnotherVMAttachesByUUIDIsRefused(inGlobalRegistry: Bool) async throws {
+        let home = try Home()
+        defer { home.remove() }
+        if inGlobalRegistry {
+            try home.virtualBoxVM("Base", settings: "<VirtualBox><Machine name=\"Base\"/></VirtualBox>")
+            try home.write("Library/VirtualBox/VirtualBox.xml", text: """
+                <VirtualBox><Global><MediaRegistry><HardDisks>
+                <HardDisk uuid="{AAAA-1}" location="../../VirtualBox VMs/Base/data.vdi" format="VDI" type="Shareable"/>
+                </HardDisks></MediaRegistry></Global></VirtualBox>
+                """)
+        } else {
+            try home.virtualBoxVM("Base", settings: """
+                <VirtualBox><Machine name="Base"><MediaRegistry><HardDisks>
+                <HardDisk uuid="{AAAA-1}" location="data.vdi" format="VDI" type="Shareable"/>
+                </HardDisks></MediaRegistry></Machine></VirtualBox>
+                """)
+        }
+        try home.write("VirtualBox VMs/Base/data.vdi", bytes: 8192)
+        try home.virtualBoxVM("Other", settings: """
+            <VirtualBox><Machine uuid="{bbbb-2}" name="Other"><StorageControllers><StorageController name="SATA">
+            <AttachedDevice type="HardDisk" port="1"><Image uuid="{aaaa-1}"/></AttachedDevice>
+            </StorageController></StorageControllers></Machine></VirtualBox>
+            """)
+
+        let found = await scan(home)
+        #expect(Set(found.keys) == ["VirtualBox VMs/Other"])
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Base"), home))
+        #expect(isEligible(home.virtualBox.appendingPathComponent("Other"), home))
+    }
+
+    /// A VM folder renamed in Finder still holds its `.vbox` under the old
+    /// name. Its settings are read anyway, so the base it is a linked clone of
+    /// is refused. The renamed folder is not offered and not walked.
+    @Test
+    func renamedCloneFolderStillProtectsItsBase() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Base")
+        let baseDisk = home.virtualBox.appendingPathComponent("Base/Base.vdi")
+        try home.write("VirtualBox VMs/Clone-old/Clone.vbox", text: "<HardDisk uuid=\"{1}\" location=\"\(baseDisk.path)\"/>")
+        try home.write("VirtualBox VMs/Clone-old/Snapshots/diff.vdi", bytes: 8192)
+
+        let found = await scan(home)
+        #expect(found.isEmpty)
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Base"), home))
+        #expect(!isEligible(home.path("VirtualBox VMs/Clone-old"), home))
+    }
+
+    /// A group folder that can't be listed might hold a clone, so every VM
+    /// is refused rather than read as if the folder were empty.
+    @Test
+    func unreadableGroupFolderRefusesTheVM() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.virtualBoxVM("Win")
+        let locked = home.virtualBox.appendingPathComponent("Locked")
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+
+        #expect(!isEligible(home.virtualBox.appendingPathComponent("Win"), home))
+    }
+
+    /// The walk and the gate read a VM's files the same way: without case, as
+    /// the default APFS volume does, and only in folders below the root the
+    /// walk lists from. A disk in `ubuntu/Ubuntu.vbox`'s folder is neither
+    /// listed nor trashed; a movie under a home that holds Tart's files is both.
+    @Test
+    func walkAndGateAgreeOnFoldersHoldingVMFiles() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Documents/ubuntu/Ubuntu.vbox", text: "<VirtualBox/>")
+        try home.write("Documents/ubuntu/disk.vdi", bytes: 8192)
+        try home.write("Documents/Renamed/Old Name.vbox", text: "<VirtualBox/>")
+        try home.write("Documents/Renamed/Old Name.vdi", bytes: 8192)
+        try home.write("config.json", text: "{}")
+        try home.write("disk.img", bytes: 8192)
+        try home.write("Documents/movie.mov", bytes: 8192)
+
+        let found = await scan(home)
+        #expect(Set(found.keys) == ["Documents/movie.mov"])
+        #expect(!isEligible(home.path("Documents/ubuntu/disk.vdi"), home))
+        #expect(!isEligible(home.path("Documents/Renamed/Old Name.vdi"), home))
+        #expect(isEligible(home.path("Documents/movie.mov"), home))
+    }
+
+    @Test
+    func virtualBoxMediaAndUUIDsAreRead() {
+        let settings = """
+            <HardDisk uuid="{AbC-1}" location="a.vdi" format="VDI"><HardDisk uuid="{d-2}" location="Snapshots/{d-2}.vdi"/></HardDisk>
+            <DVDImage uuid="{e-3}" location="/x.iso"/><Image uuid="{F-4}"/><HardDisk uuid="{g-5}"/>
+            """
+        let media = LargeFileScanPolicy.virtualBoxMedia(in: settings)
+        #expect(media.map(\.uuid) == ["abc-1", "d-2", "e-3"])
+        #expect(media.map(\.location) == ["a.vdi", "Snapshots/{d-2}.vdi", "/x.iso"])
+        #expect(LargeFileScanPolicy.virtualBoxUUIDs(in: settings) == ["abc-1", "d-2", "e-3", "f-4", "g-5"])
+    }
+
     /// A `VirtualBox.xml` that names only the VM itself refuses nothing.
     @Test
     func registryNamingOnlyTheVMItselfRefusesNothing() async throws {

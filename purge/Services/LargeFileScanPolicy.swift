@@ -55,45 +55,61 @@ enum LargeFileScanPolicy {
         ]
     }
 
-    /// Whether `folder` holds the files a VM of `app` has: `<name>.vbox` for
+    /// Whether a folder is a VM of `app` to offer: it holds `<name>.vbox` for
     /// VirtualBox, `config.json` and `disk.img` for Tart, each a regular file,
-    /// not a link. The shape alone, wherever the folder is. Only a folder in
-    /// one of `folderVirtualMachineRoots` is ever offered, and a folder of this
-    /// shape anywhere else is never walked for loose files.
-    nonisolated static func hasVirtualMachineShape(_ folder: URL, app: VirtualMachineApp) -> Bool {
+    /// not a link. Names are compared without case, as the default APFS
+    /// volume compares them. The shape alone, wherever the folder is: only a
+    /// folder in one of `folderVirtualMachineRoots` is ever offered.
+    nonisolated static func isVirtualMachineFolder(named folderName: String, entries: [ListingEntry], app: VirtualMachineApp) -> Bool {
         switch app {
         case .virtualBox:
-            return isRegularFile(folder.appendingPathComponent(folder.lastPathComponent + ".vbox"))
+            let settings = folderName + ".vbox"
+            return entries.contains { $0.isRegularFile && $0.name.caseInsensitiveCompare(settings) == .orderedSame }
         case .tart:
-            return isRegularFile(folder.appendingPathComponent("config.json"))
-                && isRegularFile(folder.appendingPathComponent("disk.img"))
+            return hasRegularFile("config.json", in: entries) && hasRegularFile("disk.img", in: entries)
         case .parallels, .utm, .vmwareFusion:
             return false
         }
     }
 
-    /// The same shapes, read from the names a walk just listed, so a walk
-    /// costs no call to skip such a folder.
-    nonisolated static func hasVirtualMachineShape(folderName: String, entries: [ListingEntry]) -> Bool {
-        let settings = folderName + ".vbox"
-        var hasConfig = false
-        var hasDisk = false
-        for entry in entries where entry.isRegularFile {
-            if entry.name == settings { return true }
-            if entry.name == "config.json" { hasConfig = true }
-            if entry.name == "disk.img" { hasDisk = true }
+    /// Whether a folder holds a VM's files: any regular `.vbox`, whatever the
+    /// folder is called (a VM folder renamed in Finder still holds its disks),
+    /// or Tart's `config.json` and `disk.img`. Such a folder is never walked
+    /// for loose files and is never a VirtualBox group folder, so a disk in it
+    /// is never listed or trashed alone.
+    nonisolated static func holdsVirtualMachineFiles(_ entries: [ListingEntry]) -> Bool {
+        if entries.contains(where: { $0.isRegularFile && ($0.name as NSString).pathExtension.lowercased() == "vbox" }) {
+            return true
         }
-        return hasConfig && hasDisk
+        return hasRegularFile("config.json", in: entries) && hasRegularFile("disk.img", in: entries)
+    }
+
+    /// `isVirtualMachineFolder` for a folder on disk. False when it can't be listed.
+    nonisolated static func hasVirtualMachineShape(_ folder: URL, app: VirtualMachineApp) -> Bool {
+        guard let entries = DirectoryListing.entries(of: folder.path) else { return false }
+        return isVirtualMachineFolder(named: folder.lastPathComponent, entries: entries, app: app)
+    }
+
+    /// `holdsVirtualMachineFiles` for a folder on disk. True when it can't be
+    /// listed: what it holds is unknown.
+    nonisolated static func holdsVirtualMachineFiles(_ folder: URL) -> Bool {
+        guard let entries = DirectoryListing.entries(of: folder.path) else { return true }
+        return holdsVirtualMachineFiles(entries)
+    }
+
+    private nonisolated static func hasRegularFile(_ name: String, in entries: [ListingEntry]) -> Bool {
+        entries.contains { $0.isRegularFile && $0.name.caseInsensitiveCompare(name) == .orderedSame }
     }
 
     /// A folder a VirtualBox walk goes into looking for VMs: a group folder.
-    /// Never a hidden one, a bundle, a VM bundle or a VirtualBox VM itself.
+    /// Never a hidden one, a bundle, a VM bundle, or one that holds a VM's
+    /// files (`holdsVirtualMachineFiles`).
     nonisolated static func isVirtualBoxGroupFolder(_ folder: URL) -> Bool {
         let name = folder.lastPathComponent
         if name.hasPrefix(".") { return false }
         let ext = folder.pathExtension.lowercased()
         if excludedBundleExtensions.contains(ext) || LargeFileKind.virtualMachineExtensions.contains(ext) { return false }
-        return !hasVirtualMachineShape(folder, app: .virtualBox)
+        return !holdsVirtualMachineFiles(folder)
     }
 
     /// The folder a VirtualBox or Tart root is walked at: `walkedFolder` for
@@ -157,22 +173,16 @@ enum LargeFileScanPolicy {
         return nil
     }
 
-    /// Whether any folder above `url` has a VM's shape. A file inside a VM is
-    /// part of it, so the gate refuses it wherever the VM is.
-    nonisolated static func isInsideFolderVirtualMachineShape(_ url: URL) -> Bool {
+    /// Whether any folder between `root` and `url`, `root` left out, holds a
+    /// VM's files. The walk checks the same folders, those below the root it
+    /// lists from, so the gate refuses exactly what the walk leaves out.
+    nonisolated static func isInsideFolderHoldingVirtualMachineFiles(_ url: URL, below root: String) -> Bool {
         var folder = url.standardizedFileURL.deletingLastPathComponent()
-        while folder.path != "/" {
-            if hasVirtualMachineShape(folder, app: .virtualBox) || hasVirtualMachineShape(folder, app: .tart) {
-                return true
-            }
+        while PathContainment.isInside(folder.path, root) {
+            if holdsVirtualMachineFiles(folder) { return true }
             folder = folder.deletingLastPathComponent()
         }
         return false
-    }
-
-    private nonisolated static func isRegularFile(_ url: URL) -> Bool {
-        var info = stat()
-        return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
     }
 
     /// Managed libraries and bundles we never descend into or offer for deletion.
@@ -400,66 +410,127 @@ enum LargeFileScanPolicy {
         return OpenFileCheck.check(folders: [folder], lister: openFiles) != .free
     }
 
-    /// Whether another VirtualBox VM uses a disk inside `vm`. A linked clone
-    /// keeps its base disk in the folder of the VM it was cloned from, so
-    /// trashing that VM breaks the clone. Read are every other VM's `.vbox` in
-    /// the root, at any group depth and through links, and every VM VirtualBox
-    /// has registered in `~/Library/VirtualBox/VirtualBox.xml`, wherever it
-    /// is. Each `location` in them is resolved against the `.vbox`'s folder.
-    /// A `.vbox`, or a `VirtualBox.xml` that exists, that can't be read counts
-    /// as using the disk.
+    /// Whether another VirtualBox VM uses a disk inside `vm`. Trashing the VM
+    /// would leave that VM with a missing disk. Two ways count:
+    ///
+    /// - A `location` in another VM's settings resolves inside `vm`. A linked
+    ///   clone names its base disk this way.
+    /// - Another VM's settings name, by `uuid`, a disk whose `location` is
+    ///   inside `vm`. Since VirtualBox 4.0 a disk sits in one media registry,
+    ///   so a VM that attaches an existing disk, or a shareable one, names it
+    ///   by `uuid` alone. The locations come from `vm`'s own settings and from
+    ///   the global registry in `~/Library/VirtualBox/VirtualBox.xml`.
+    ///
+    /// Another VM's settings are every regular `.vbox` in a folder in the
+    /// root, at any group depth and through links, whatever the folder is
+    /// called, and every VM `VirtualBox.xml` registers, wherever it is. A
+    /// folder that can't be listed, or settings that can't be read, count as
+    /// using the disk.
     nonisolated static func virtualBoxDiskIsShared(_ vm: URL, root: URL, home: URL) -> Bool {
+        let fm = FileManager.default
         let vmPath = vm.resolvingSymlinksInPath().standardizedFileURL.path.lowercased()
-        let own = FileIdentity(path: vm.path)
-        var settingsFiles: [URL] = []
+        // Without case: on the default volume a `.vbox` may spell the folder
+        // differently.
+        func isInsideVM(_ url: URL) -> Bool {
+            let path = url.standardizedFileURL.resolvingSymlinksInPath().path.lowercased()
+            return path == vmPath || path.hasPrefix(vmPath + "/")
+        }
+        func resolve(_ location: String, against folder: URL) -> URL {
+            location.hasPrefix("/") ? URL(fileURLWithPath: location) : folder.appendingPathComponent(location)
+        }
+        // Read where a link leads: this only reads, and a clone may be kept
+        // elsewhere behind a link in the root.
+        func settingsFiles(in folder: URL) -> [URL]? {
+            let folder = folder.resolvingSymlinksInPath()
+            guard let entries = DirectoryListing.entries(of: folder.path) else { return nil }
+            return entries
+                .filter { $0.isRegularFile && ($0.name as NSString).pathExtension.lowercased() == "vbox" }
+                .map { folder.appendingPathComponent($0.name) }
+        }
 
-        // The root, read by identity so a link can't lead the walk in a circle.
+        // The VM's own settings, then the other VMs' settings in the root,
+        // read by identity so a link can't lead the walk in a circle.
+        guard let ownSettings = settingsFiles(in: vm) else { return true }
+        let own = FileIdentity(path: vm.path)
+        var otherSettings: [URL] = []
         var visited = Set<FileIdentity>()
-        func visit(_ folder: URL) {
-            guard let identity = FileIdentity(path: folder.path), visited.insert(identity).inserted,
-                  let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return }
+        func visit(_ folder: URL) -> Bool {
+            guard let identity = FileIdentity(path: folder.path) else { return false }
+            guard visited.insert(identity).inserted else { return true }
+            guard let names = try? fm.contentsOfDirectory(atPath: folder.path) else { return false }
             for name in names where !name.hasPrefix(".") {
                 let child = folder.appendingPathComponent(name, isDirectory: true)
                 var isDirectory: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: child.path, isDirectory: &isDirectory),
-                      isDirectory.boolValue else { continue }
-                let settings = child.appendingPathComponent(name + ".vbox")
-                if FileManager.default.fileExists(atPath: settings.path) {
-                    if FileIdentity(path: child.path) != own { settingsFiles.append(settings) }
-                } else if isVirtualBoxGroupFolder(child) {
-                    visit(child)
+                guard fm.fileExists(atPath: child.path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
+                if let identity = FileIdentity(path: child.path), identity == own { continue }
+                guard let files = settingsFiles(in: child) else { return false }
+                if !files.isEmpty {
+                    otherSettings += files
+                    continue
                 }
+                let ext = child.pathExtension.lowercased()
+                if excludedBundleExtensions.contains(ext) || LargeFileKind.virtualMachineExtensions.contains(ext) { continue }
+                guard visit(child) else { return false }
             }
+            return true
         }
-        visit(root)
+        guard visit(root) else { return true }
 
-        // VirtualBox's own list of registered VMs, which can sit anywhere.
+        // VirtualBox's own list of VMs and its global media registry.
         let virtualBoxHome = home.appendingPathComponent("Library/VirtualBox", isDirectory: true)
-        let registry = virtualBoxHome.appendingPathComponent("VirtualBox.xml")
-        if FileManager.default.fileExists(atPath: registry.path) {
-            guard let text = try? String(contentsOf: registry, encoding: .utf8) else { return true }
+        let registryURL = virtualBoxHome.appendingPathComponent("VirtualBox.xml")
+        var registry: String?
+        if fm.fileExists(atPath: registryURL.path) {
+            guard let text = try? String(contentsOf: registryURL, encoding: .utf8) else { return true }
+            registry = text
             for source in virtualBoxRegisteredSettings(in: text) {
-                let settings = source.hasPrefix("/")
-                    ? URL(fileURLWithPath: source)
-                    : virtualBoxHome.appendingPathComponent(source)
-                guard FileManager.default.fileExists(atPath: settings.path) else { continue }
-                if FileIdentity(path: settings.deletingLastPathComponent().path) == own { continue }
-                settingsFiles.append(settings)
+                let settings = resolve(source, against: virtualBoxHome)
+                guard fm.fileExists(atPath: settings.path), !isInsideVM(settings) else { continue }
+                otherSettings.append(settings)
             }
         }
 
-        for settings in settingsFiles {
+        // The disks inside the VM, by `uuid`.
+        var diskIDs = Set<String>()
+        func collectDiskIDs(_ text: String, against folder: URL) {
+            for medium in virtualBoxMedia(in: text) where isInsideVM(resolve(medium.location, against: folder)) {
+                diskIDs.insert(medium.uuid)
+            }
+        }
+        for settings in ownSettings {
+            guard let text = try? String(contentsOf: settings, encoding: .utf8) else { return true }
+            collectDiskIDs(text, against: vm)
+        }
+        if let registry { collectDiskIDs(registry, against: virtualBoxHome) }
+
+        for settings in otherSettings {
             guard let text = try? String(contentsOf: settings, encoding: .utf8) else { return true }
             let folder = settings.deletingLastPathComponent()
-            for location in virtualBoxLocations(in: text) {
-                let disk = location.hasPrefix("/") ? URL(fileURLWithPath: location) : folder.appendingPathComponent(location)
-                // Without case: on the default volume a `.vbox` may spell the
-                // folder differently.
-                let diskPath = disk.standardizedFileURL.resolvingSymlinksInPath().path.lowercased()
-                if diskPath == vmPath || diskPath.hasPrefix(vmPath + "/") { return true }
+            if virtualBoxLocations(in: text).contains(where: { isInsideVM(resolve($0, against: folder)) }) {
+                return true
             }
+            if !diskIDs.isDisjoint(with: virtualBoxUUIDs(in: text)) { return true }
         }
         return false
+    }
+
+    /// Each disk or image tag in VirtualBox's XML that has both a `uuid` and
+    /// a `location`, with the `uuid` in `virtualBoxUUIDs`'s form.
+    nonisolated static func virtualBoxMedia(in text: String) -> [(uuid: String, location: String)] {
+        text.matches(of: /<(?:HardDisk|DVDImage|FloppyImage)\b[^>]*>/).compactMap { match in
+            let tag = String(match.0)
+            guard let uuid = virtualBoxUUIDs(in: tag).first, let location = virtualBoxLocations(in: tag).first
+            else { return nil }
+            return (uuid, location)
+        }
+    }
+
+    /// Every `uuid="…"` in VirtualBox's XML, lowercased and without braces, as
+    /// a disk is named wherever it is attached.
+    nonisolated static func virtualBoxUUIDs(in text: String) -> Set<String> {
+        Set(text.matches(of: /\suuid="([^"]*)"/).map {
+            String($0.1).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "{}"))
+        }.filter { !$0.isEmpty })
     }
 
     /// Every `location="…"` in a `.vbox` file, the disks and images it names,
@@ -576,10 +647,6 @@ enum LargeFileScanPolicy {
         if isDir.boolValue, AIModelScanPolicy.isOllamaStore(std) || AIModelScanPolicy.isOllamaStore(real) {
             return false
         }
-        // Nor anything inside a folder shaped like a VirtualBox or Tart VM,
-        // wherever it is: a disk trashed alone breaks the VM (#475).
-        if isInsideFolderVirtualMachineShape(std) || isInsideFolderVirtualMachineShape(real) { return false }
-
         func walkedPath(_ root: URL) -> String? {
             walkedFolder(for: root, home: home, volumes: volumes, isLocalDisk: isLocalDisk).map {
                 $0.resolvingSymlinksInPath().standardizedFileURL.path + "/"
@@ -605,8 +672,8 @@ enum LargeFileScanPolicy {
         // path is where it is walked. Nothing the walk skips below it passes:
         // a copy of a Mac, a home folder or a backup, or another sync
         // service's folder.
+        let added = addedRoots ?? ScanFolders.roots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
         func isUnderAddedFolder() -> Bool {
-            let added = addedRoots ?? ScanFolders.roots(home: home, volumes: volumes, isLocalDisk: isLocalDisk)
             let holding = added.first { root in
                 realPath.hasPrefix(root.resolvingSymlinksInPath().standardizedFileURL.path + "/")
             }
@@ -622,6 +689,16 @@ enum LargeFileScanPolicy {
             // A bundle is judged itself too: it may hold a copied Mac by now.
             if isDir.boolValue, ScanFolders.isOffLimits(real) { return false }
             return !ScanFolders.crossesOffLimits(from: rootPath, to: real.deletingLastPathComponent())
+        }
+
+        // Nor anything inside a folder holding a VirtualBox or Tart VM's
+        // files: a disk trashed alone breaks the VM (#475). Asked of the
+        // folders below the root the item is under, the ones the walk checks.
+        let walkedRoots = scanRoots(home: home).compactMap { walkedPath($0).map { String($0.dropLast()) } }
+            + added.map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+        if let holding = walkedRoots.filter({ PathContainment.isInside(realPath, $0) }).max(by: { $0.count < $1.count }),
+           isInsideFolderHoldingVirtualMachineFiles(real, below: holding) {
+            return false
         }
 
         guard isDir.boolValue else { return isUnder(scanRoots(home: home)) || isUnderAddedFolder() }

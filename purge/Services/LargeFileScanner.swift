@@ -554,10 +554,12 @@ nonisolated final class LargeFileScanner {
                     ) {
                         return []
                     }
-                    // Nor is a folder shaped like a VirtualBox or Tart VM ever
-                    // walked for loose files, wherever it is: a disk trashed
-                    // alone breaks the VM. Only the VM walk lists it (#475).
-                    if LargeFileScanPolicy.hasVirtualMachineShape(folderName: folderURL.lastPathComponent, entries: children) {
+                    // Nor is a folder holding a VirtualBox or Tart VM's files
+                    // (any `.vbox`, or `config.json` and `disk.img`) ever
+                    // walked for loose files: a disk trashed alone breaks the
+                    // VM. Only the VM walk lists a VM (#475). The gate asks
+                    // the same of the same folders.
+                    if LargeFileScanPolicy.holdsVirtualMachineFiles(children) {
                         return []
                     }
                     var steps: [TreeStep<[Finding], WalkFolder>] = []
