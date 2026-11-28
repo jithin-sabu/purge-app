@@ -279,6 +279,34 @@ struct AndroidSDKVersionNewestTests {
         ))
     }
 
+    /// The Gradle files are read only when an old finished version could be offered.
+    @Test
+    func gradleFilesAreReadOnlyWhenSomethingCouldBeOffered() throws {
+        final class Count: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = 0
+            func add() { lock.lock(); value += 1; lock.unlock() }
+            var calls: Int { lock.lock(); defer { lock.unlock() }; return value }
+        }
+        func context(_ count: Count) -> AndroidSDKVersionPolicy.Context {
+            AndroidSDKVersionPolicy.Context(
+                gradleFiles: { count.add(); return [] }, mayRead: { _ in true }, openFiles: { "" }, linkFolders: []
+            )
+        }
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let none = Count()
+        #expect(AndroidSDKVersionPolicy.offeredFolders(home: home.path, context: context(none)) == ([], []))
+        try SDK.install(home, in: SDK.buildTools, complete: ["36.0.0"], partial: ["35.0.0"])
+        try SDK.install(home, in: SDK.platforms, complete: ["android-35"])
+        #expect(AndroidSDKVersionPolicy.offeredFolders(home: home.path, context: context(none)) == ([], []))
+        #expect(none.calls == 0)
+        try SDK.install(home, in: SDK.platforms, complete: ["android-34"])
+        let some = Count()
+        #expect(AndroidSDKVersionPolicy.offeredFolders(home: home.path, context: context(some)).platforms.count == 1)
+        #expect(some.calls >= 1)
+    }
+
     @Test
     func rowsListOneVersionEach() throws {
         let home = try SDK.typicalSDK()
@@ -371,7 +399,10 @@ struct AndroidSDKVersionKeepTests {
         let home = try SDK.makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
         for file in ["native/app/build.gradle.kts", "native/lib/build.gradle", "native/.idea/build.gradle",
-                     "rn/android/app/build.gradle", "jvm/server/build.gradle"] {
+                     "native/feature/login/build.gradle.kts", "native/libs/core/data/build.gradle.kts",
+                     "native/libs/core/data/deeper/build.gradle", "native/app/build/generated/build.gradle",
+                     "native/app/src/main/build.gradle", "rn/android/app/build.gradle", "rn/node_modules/x/android/build.gradle",
+                     "jvm/server/build.gradle"] {
             try SDK.write("", home, file)
         }
         try FileManager.default.createDirectory(at: home.appendingPathComponent("native/docs"), withIntermediateDirectories: true)
@@ -384,6 +415,7 @@ struct AndroidSDKVersionKeepTests {
             .map { String($0.dropFirst(home.path.count + 1)) })
         #expect(files == [
             "native/build.gradle", "native/build.gradle.kts", "native/app/build.gradle.kts", "native/lib/build.gradle",
+            "native/feature/login/build.gradle.kts", "native/libs/core/data/build.gradle.kts",
             "native/android/build.gradle", "native/android/build.gradle.kts",
             "rn/build.gradle", "rn/build.gradle.kts", "rn/android/build.gradle", "rn/android/build.gradle.kts",
             "rn/android/app/build.gradle"
@@ -432,6 +464,67 @@ struct AndroidGradlePinsTests {
             platforms: ["android-28", "android-29", "android-30", "android-31", "android-32", "android-36"],
             buildTools: ["30.0.3", "31.0.0", "32.0.0"]
         ))
+    }
+
+    @Test
+    func setterSpellingsPin() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let pins = try SDK.pins(home, [
+            "a/build.gradle.kts": "android {\n    setCompileSdkVersion(33)\n    setBuildToolsVersion(\"30.0.3\")\n}\n"
+        ])
+        #expect(pins == Pins(platforms: ["android-33"], buildTools: ["30.0.3"]))
+    }
+
+    /// A convention plugin in `build-logic` sets `compileSdk`, which Purge
+    /// doesn't read, so every platform stays. A root that only declares the
+    /// plugin with `apply false` is not such a module.
+    @Test
+    func anAndroidModuleThatNamesNoCompileSdkKeepsEveryPlatform() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(try SDK.pins(home, [
+            "nia/feature/foryou/build.gradle.kts": """
+            plugins {
+                alias(libs.plugins.nowinandroid.android.feature)
+                alias(libs.plugins.nowinandroid.android.library)
+            }
+            android { namespace = "com.example.feature.foryou" }
+            """
+        ]) == Pins(platforms: nil, buildTools: []))
+        #expect(try SDK.pins(home, [
+            "old/app/build.gradle": "apply plugin: 'com.android.application'\n\ndependencies { }\n"
+        ]) == Pins(platforms: nil, buildTools: []))
+        #expect(try SDK.pins(home, [
+            "modern/build.gradle.kts": """
+            plugins {
+                alias(libs.plugins.android.application) apply false
+                id("com.android.library") version "8.7.3" apply false
+            }
+            """,
+            "modern/app/build.gradle.kts": "plugins { alias(libs.plugins.android.application) }\nandroid { compileSdk = 34 }\n",
+            "jvm/build.gradle.kts": "plugins { kotlin(\"jvm\") }\n"
+        ]) == Pins(platforms: ["android-34"], buildTools: []))
+    }
+
+    /// Every value a reference is given counts. One Purge can't read keeps its kind.
+    @Test
+    func aReferenceWithOneUnreadValueKeepsItsKind() throws {
+        let home = try SDK.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(try SDK.pins(home, [
+            "m/build.gradle": """
+            ext { androidCompileSdk = 34 }
+            ext.androidCompileSdk = findProperty("sdk") ?: 35
+            """,
+            "m/app/build.gradle": "android { compileSdk rootProject.ext.androidCompileSdk }\n"
+        ], read: ["m/app/build.gradle"]) == Pins(platforms: nil, buildTools: []))
+        // The same with the second value in gradle.properties as a reference to another property.
+        try SDK.write("tools = ${otherTools}\n", home, "n/gradle.properties")
+        #expect(try SDK.pins(home, [
+            "n/build.gradle": "ext { tools = \"34.0.0\" }\n",
+            "n/app/build.gradle": "android { compileSdk 34\n buildToolsVersion rootProject.ext.tools }\n"
+        ], read: ["n/app/build.gradle"]) == Pins(platforms: ["android-34"], buildTools: nil))
     }
 
     @Test
@@ -521,8 +614,8 @@ struct AndroidGradlePinsTests {
         defer { try? FileManager.default.removeItem(at: home) }
         #expect(try SDK.pins(home, ["a/build.gradle.kts": "android { compileSdk = if (ci) 34 else 35 }\n"])
             == Pins(platforms: nil, buildTools: []))
-        #expect(try SDK.pins(home, ["b/build.gradle": "android { buildToolsVersion versions.buildTools }\n"])
-            == Pins(platforms: [], buildTools: nil))
+        #expect(try SDK.pins(home, ["b/build.gradle": "android {\n compileSdk 34\n buildToolsVersion versions.buildTools\n}\n"])
+            == Pins(platforms: ["android-34"], buildTools: nil))
         // A value found by name that is itself not written out keeps its kind too.
         #expect(try SDK.pins(home, [
             "c/build.gradle": "ext { compileSdkVersion = computeSdk() }\n",

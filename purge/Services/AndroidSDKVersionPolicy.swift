@@ -212,18 +212,28 @@ nonisolated enum AndroidSDKVersionPolicy {
     /// The version folders a scan offers, as paths, lowest first. The Gradle
     /// files are read once.
     static func offeredFolders(home: String, context: Context) -> (buildTools: [String], platforms: [String]) {
-        guard let files = context.gradleFiles() else { return ([], []) }
-        let pins = AndroidGradlePins.pins(in: files, home: home, mayRead: context.mayRead)
-        func offered(in name: String, _ folder: Folder) -> [String] {
+        /// The finished versions below the newest one, lowest first: what the
+        /// Gradle files and links may still keep.
+        func candidates(in name: String, _ folder: Folder) -> [String] {
             let root = "\(sdkRoot(home: home))/\(name)"
-            let names = (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []
+            guard let newest = newestComplete(in: root, folder: folder),
+                  let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return [] }
             return names
-                .filter { hasShape($0, in: folder) }
+                .filter { hasShape($0, in: folder) && isLower($0, than: newest, in: folder) }
                 .sorted { isLower($0, than: $1, in: folder) }
                 .map { "\(root)/\($0)" }
-                .filter { isOffered($0, home: home, context: context, check: .scan, knownPins: pins) }
+                .filter { OldToolVersionScanPolicy.isCompleteSDKPackage($0) }
         }
-        return (offered(in: buildToolsFolder, .buildTools), offered(in: platformsFolder, .platform))
+        let buildTools = candidates(in: buildToolsFolder, .buildTools)
+        let platforms = candidates(in: platformsFolder, .platform)
+        // Most Macs have no SDK, or nothing old in it. The Gradle files, which
+        // may be thousands, are read only when there is something to judge.
+        guard !buildTools.isEmpty || !platforms.isEmpty, let files = context.gradleFiles() else { return ([], []) }
+        let pins = AndroidGradlePins.pins(in: files, home: home, mayRead: context.mayRead)
+        func offered(_ paths: [String]) -> [String] {
+            paths.filter { isOffered($0, home: home, context: context, check: .scan, knownPins: pins) }
+        }
+        return (offered(buildTools), offered(platforms))
     }
 
     /// `FileDeleter`'s last check before it moves a version: every rule again,
@@ -247,7 +257,8 @@ nonisolated enum AndroidSDKVersionPolicy {
     /// Native and Flutter keep their Gradle build there, and the walk never
     /// enters it), listed whether they are there now or not, so one added after
     /// the scan still counts at the move. Also the build file of each module
-    /// folder directly below either of them that has one now, such as `app/`.
+    /// folder up to `moduleDepth` folders below either of them that has one
+    /// now, such as `app/` or `feature/login/`.
     static func gradleFiles(inProjectRoots roots: [(URL, [ProjectType])], mayRead: (String) -> Bool) -> [String] {
         var seen = Set<String>()
         var paths: [String] = []
@@ -261,13 +272,23 @@ nonisolated enum AndroidSDKVersionPolicy {
         return paths.filter { seen.insert($0).inserted }
     }
 
-    /// The build files of each non-hidden folder directly in `folder` that has one now.
-    private static func moduleBuildFiles(in folder: String, mayRead: (String) -> Bool) -> [String] {
-        guard mayRead(folder), let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { return [] }
-        return names.filter { !$0.hasPrefix(".") }.sorted().flatMap { name in
-            gradleFileNames
-                .map { "\(folder)/\(name)/\($0)" }
-                .filter { OldToolVersionScanPolicy.isRegularFile($0) }
+    /// How many folders below a Gradle root a module may sit: `app`, `feature/login`,
+    /// `libs/core/data`.
+    static let moduleDepth = 3
+    /// Folders that hold no Gradle module: build output, sources, the wrapper,
+    /// and the other platforms of a React Native or Flutter project.
+    static let nonModuleFolders: Set<String> = ["build", "node_modules", "src", "gradle", "ios", "Pods", "macos", "web"]
+
+    /// The build files in the real, non-hidden folders below `folder`, down to
+    /// `depth` folders, that have one now.
+    private static func moduleBuildFiles(in folder: String, depth: Int = moduleDepth, mayRead: (String) -> Bool) -> [String] {
+        guard depth > 0, mayRead(folder),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { return [] }
+        return names.filter { !$0.hasPrefix(".") && !nonModuleFolders.contains($0) }.sorted().flatMap { name -> [String] in
+            let module = "\(folder)/\(name)"
+            guard OldToolVersionScanPolicy.isRealFolder(module) else { return [] }
+            return gradleFileNames.map { "\(module)/\($0)" }.filter { OldToolVersionScanPolicy.isRegularFile($0) }
+                + moduleBuildFiles(in: module, depth: depth - 1, mayRead: mayRead)
         }
     }
 }
@@ -287,7 +308,12 @@ nonisolated enum AndroidSDKVersionPolicy {
 /// anything else `gradle.properties`, `~/.gradle/gradle.properties`, and
 /// `key = value`, `extra["key"] = value` or `set("key", value)` in the build
 /// and settings files there. Every value found pins its version. When none is
-/// found, or a file can't be read, every version of that kind is kept.
+/// found, when any of them can't be read, or when a file can't be read, every
+/// version of that kind is kept.
+///
+/// A module that applies an Android plugin, or has an `android { }` block, and
+/// names no `compileSdk` keeps every platform: a convention plugin in
+/// `buildSrc` or `build-logic` sets it, and Purge doesn't read those.
 nonisolated enum AndroidGradlePins {
 
     /// The versions recorded build files name, by folder name. Nil keeps every
@@ -327,7 +353,8 @@ nonisolated enum AndroidGradlePins {
 
     static func pins(in files: [String], home: String, mayRead: @escaping (String) -> Bool) -> Pins {
         // The patterns are fixed, so they compile. If one ever didn't, no pin could be read.
-        guard compileSdkPattern != nil, releasePattern != nil, buildToolsPattern != nil else { return .unknown }
+        guard compileSdkPattern != nil, releasePattern != nil, buildToolsPattern != nil, previewPattern != nil,
+              androidBlockPattern != nil, androidPluginPattern != nil else { return .unknown }
         var result = Pins(platforms: [], buildTools: [])
         var reader = Reader(home: home, mayRead: mayRead)
         for file in files {
@@ -339,7 +366,11 @@ nonisolated enum AndroidGradlePins {
             case .text(let text):
                 let lines = codeLines(text)
                 let folder = (file as NSString).deletingLastPathComponent
-                for (kind, values) in [(AndroidSDKVersionPolicy.Folder.platform, platformValues(lines)),
+                let platforms = platformValues(lines)
+                if platforms.isEmpty, isAndroidModule(lines), !namesPreview(lines) {
+                    result.add(.unknown, for: .platform)
+                }
+                for (kind, values) in [(AndroidSDKVersionPolicy.Folder.platform, platforms),
                                        (.buildTools, buildToolsValues(lines))] {
                     for value in values {
                         let outcome = evaluate(value, as: kind, near: folder, reader: &reader, depth: 0)
@@ -445,8 +476,36 @@ nonisolated enum AndroidGradlePins {
         return try? NSRegularExpression(pattern: pattern)
     }
 
-    static let compileSdkPattern = assignmentPattern("compileSdk(?:Version)?")
-    static let buildToolsPattern = assignmentPattern("buildToolsVersion")
+    // `setCompileSdkVersion(33)` and `setBuildToolsVersion("30.0.3")` are the
+    // setter spellings older Kotlin scripts use.
+    static let compileSdkPattern = assignmentPattern("(?:setC|c)ompileSdk(?:Version)?")
+    static let buildToolsPattern = assignmentPattern("(?:setB|b)uildToolsVersion")
+    static let previewPattern = assignmentPattern("(?:setC|c)ompileSdkPreview")
+    /// `android {` at a word start, as a block opens it.
+    static let androidBlockPattern = try? NSRegularExpression(pattern: #"(?<![A-Za-z0-9_.$])android\s*\{"#)
+    /// An Android plugin by id, `com.android.library`, or by catalog alias,
+    /// `libs.plugins.android.library` or a convention one such as
+    /// `libs.plugins.nowinandroid.android.library`.
+    static let androidPluginPattern = try? NSRegularExpression(
+        pattern: #"(?:com\.android|\.android)[.\-](?:application|library|test|dynamic[.\-]?feature|dynamicFeature)(?![A-Za-z0-9_])"#
+    )
+
+    /// Whether a build file applies an Android plugin or configures one. A
+    /// plugin declared with `apply false`, as a root build does for its
+    /// modules, doesn't count.
+    static func isAndroidModule(_ lines: [String]) -> Bool {
+        lines.contains { line in
+            let range = NSRange(line.startIndex..., in: line)
+            if androidBlockPattern?.firstMatch(in: line, range: range) != nil { return true }
+            guard !line.contains("apply false") else { return false }
+            return androidPluginPattern?.firstMatch(in: line, range: range) != nil
+        }
+    }
+
+    /// Whether a build file compiles against a preview, which is never offered.
+    static func namesPreview(_ lines: [String]) -> Bool {
+        lines.contains { !values(of: previewPattern, in: $0).isEmpty }
+    }
     /// `compileSdk { version = release(36) { minorApiLevel = 1 } }`.
     static let releasePattern = try? NSRegularExpression(
         pattern: #"(?<![A-Za-z0-9_$])version\s*=\s*release\s*\(\s*([^)]*)\)"#
@@ -491,27 +550,38 @@ nonisolated enum AndroidGradlePins {
     // MARK: Values
 
     /// What `value` means for `kind`. A reference is looked up near `folder`.
+    ///
+    /// Every value a reference is given counts: one Purge can't read makes the
+    /// whole reference unknown, since the build may use that one. A value that
+    /// leads back to a reference already being resolved, such as the
+    /// `compileSdk = rootProject.extra["compileSdk"]` line itself, adds nothing.
     static func evaluate(
         _ value: String,
         as kind: AndroidSDKVersionPolicy.Folder,
         near folder: String,
         reader: inout Reader,
-        depth: Int
+        depth: Int,
+        resolving: Set<Reference> = []
     ) -> Outcome {
         let expression = stripConversions(value)
         if let literal = literalValue(expression) {
             return literalOutcome(literal, as: kind)
         }
-        guard depth < maximumReferenceDepth, let reference = reference(in: expression) else { return .unknown }
-        let found = lookUp(reference, near: folder, reader: &reader)
-        guard let found else { return .unknown }
+        guard let reference = reference(in: expression) else { return .unknown }
+        if resolving.contains(reference) { return .pins([]) }
+        guard depth < maximumReferenceDepth, let found = lookUp(reference, near: folder, reader: &reader) else {
+            return .unknown
+        }
         var pins: Set<String> = []
         var ignored = false
         for candidate in found {
-            switch evaluate(candidate.value, as: kind, near: candidate.folder, reader: &reader, depth: depth + 1) {
+            switch evaluate(
+                candidate.value, as: kind, near: candidate.folder, reader: &reader,
+                depth: depth + 1, resolving: resolving.union([reference])
+            ) {
             case .pins(let more): pins.formUnion(more)
             case .ignored: ignored = true
-            case .unknown: continue
+            case .unknown: return .unknown
             }
         }
         if !pins.isEmpty { return .pins(pins) }
@@ -580,7 +650,7 @@ nonisolated enum AndroidGradlePins {
         }
     }
 
-    nonisolated enum Reference: Equatable, Sendable {
+    nonisolated enum Reference: Hashable, Sendable {
         /// `libs.versions.compile.sdk`, by its path after `versions.`.
         case catalog(String)
         /// Any other name: the last part of `rootProject.ext.compileSdkVersion`,
