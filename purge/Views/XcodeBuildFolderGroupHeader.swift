@@ -17,7 +17,7 @@ enum XcodeBuildFolderTree {
     /// The header's title, summary and checkbox sit in a band this tall, the
     /// same as a child row, so the card's elbow matches a part's.
     static let headerContentHeight: CGFloat = 40
-    /// Above the header's band, and the height of the card's footer row.
+    /// Above the header's band, and the card's footer row while it is closed.
     static let headerPadding = AppStyle.Spacing.small
     static let childHeight: CGFloat = 40
     /// From the card's checkbox to a part's, centre to centre, both ways.
@@ -29,12 +29,6 @@ enum XcodeBuildFolderTree {
     static let lineCorner: CGFloat = 12
     /// Where the card's checkbox starts, as on every scan row.
     static let leading = AppStyle.Row.scanCardHorizontalPadding
-
-    /// The card's height from its top edge to its bottom edge with this many
-    /// rows between the header and the footer.
-    static func cardHeight(childRows: Int) -> CGFloat {
-        headerPadding + headerContentHeight + CGFloat(childRows) * childHeight + headerPadding
-    }
 }
 
 /// The lower part of an elbow, in the indent in front of a child's checkbox:
@@ -145,25 +139,6 @@ struct XcodeBuildFolderCardChrome: ViewModifier {
             // The gap other scan rows get from their insets.
             .padding(.top, slice.hasTop ? ScanListRowInsets.standard.top : 0)
             .padding(.bottom, slice.hasBottom ? ScanListRowInsets.standard.bottom : 0)
-    }
-}
-
-/// Behind the header row, the whole card's fill, as tall as the card is with
-/// the rows it holds now. The header is the card's first list row, so the
-/// rows after it draw over this. Opening a part grows this one box under its
-/// rows while the list slides the rows below the card down, and closing
-/// shrinks it, so the card reads as one box changing size rather than rows
-/// fading in over the list's background.
-struct XcodeBuildFolderCardBackdrop: View {
-    let childRows: Int
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-            .fill(AppColors.fillSecondary)
-            .frame(height: XcodeBuildFolderTree.cardHeight(childRows: childRows))
-            .padding(.top, ScanListRowInsets.standard.top)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }
 

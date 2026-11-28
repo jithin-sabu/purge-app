@@ -440,19 +440,22 @@ struct DevToolsView: View {
         for id in change.deselect { store.setDevToolSelected(id: id, isSelected: false) }
     }
 
-    /// A plain ease, not the cards' spring: the card's rows are list rows of
-    /// their own, and a spring's overshoot pushed a part's 25 rows past their
-    /// places for a frame before they settled.
-    private var buildFolderTreeAnimation: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.2)
+    /// The card opens and closes at once, with no animation. The list
+    /// animates inserted rows its own way, fading them in and sliding them up
+    /// from below, which read as a cut opening in the card rather than the box
+    /// growing, and SwiftUI offers no way to change it.
+    private func withoutAnimation(_ change: () -> Void) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction, change)
     }
 
     private func toggleBuildFoldersExpanded() {
-        withAnimation(buildFolderTreeAnimation) { buildFoldersExpanded.toggle() }
+        withoutAnimation { buildFoldersExpanded.toggle() }
     }
 
     private func toggleBuildFolderPartExpanded(_ part: XcodeBuildFolderGroup.Part) {
-        withAnimation(buildFolderTreeAnimation) {
+        withoutAnimation {
             if expandedBuildFolderParts.contains(part) {
                 expandedBuildFolderParts.remove(part)
             } else {
@@ -1191,16 +1194,11 @@ struct DevToolsView: View {
                         let slice = XcodeBuildFolderCardSlice.at(index, of: rows.count)
                         buildFolderListRowView(row, tools: tools)
                             .modifier(XcodeBuildFolderCardChrome(slice: slice))
-                            .background(alignment: .top) {
-                                if row.isHeader {
-                                    XcodeBuildFolderCardBackdrop(childRows: rows.count - 2)
-                                }
-                            }
                             .id(row.isHeader ? AnyHashable(DeveloperListRowID.buildFolders) : AnyHashable(row.id))
                             .listRowInsets(XcodeBuildFolderCardSlice.listInsets)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                            .transition(row.isHeader || row.isFooter ? rowInsertionTransition : expandCollapseTransition)
+                            .transition(row.isHeader || row.isFooter ? rowInsertionTransition : .identity)
                     }
                 case .savedBuildFolders:
                     lastScanBuildFolderCard
@@ -1904,8 +1902,10 @@ struct DevToolsView: View {
         case .folder(let tool):
             buildFolderRow(tool, isFirst: row.isFirstChild)
         case .footer:
+            // Closed, the space under the header. Open, the last row's own
+            // space is enough, so the bottom matches the top.
             Color.clear
-                .frame(height: XcodeBuildFolderTree.headerPadding)
+                .frame(height: buildFoldersExpanded ? 0 : XcodeBuildFolderTree.headerPadding)
                 .accessibilityHidden(true)
         }
     }
