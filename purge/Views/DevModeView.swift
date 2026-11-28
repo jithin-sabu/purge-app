@@ -22,6 +22,9 @@ struct DevToolsView: View {
 
     @State private var showsProjectScanIssues = false
     @State private var expandedProjectRoots = Set<String>()
+    /// Whether the Xcode build folders card is open, and which of its parts (#480).
+    @State private var buildFoldersExpanded = false
+    @State private var expandedBuildFolderParts = Set<XcodeBuildFolderGroup.Part>()
 
     /// The keyboard highlight and keys (#96). Held as a plain reference so this
     /// view never observes the highlight; only the rows do.
@@ -36,6 +39,10 @@ struct DevToolsView: View {
         case component(String)
         case project(String)
         case artifact(group: String, artifact: String)
+        /// The Xcode build folders card's header, and one of its parts (#480).
+        /// The folders themselves are `.tool` rows.
+        case buildFolders
+        case buildFolderPart(XcodeBuildFolderGroup.Part)
     }
 
     /// The project card's expand chevron, and the empty slot that stands in for it
@@ -78,10 +85,15 @@ struct DevToolsView: View {
         /// A tool from the last scan (#283), indexing the saved rows. Shares the live
         /// row's id, so it turns live in place.
         case savedTool(id: String, index: Int)
+        /// The Xcode build folders card, in place of their rows (#480).
+        case buildFolders
+        /// The same card from the last scan, read only, until the scan lands one.
+        case savedBuildFolders
 
         var id: String {
             switch self {
             case .tool(let id, _), .savedTool(let id, _): return "merged-tool-\(id)"
+            case .buildFolders, .savedBuildFolders: return "merged-build-folders"
             }
         }
     }
@@ -329,33 +341,47 @@ struct DevToolsView: View {
     }
 
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
-        let tools = sortedStandardToolIndices()
+        let tools = sortedStandardToolIndices().filter { !Self.isBuildFolder(store.devTools[$0]) }
         var rows: [MergedDevStandardRow] = tools.map { .tool(id: store.devTools[$0].id, index: $0) }
         let filter = currentSafetyFilter
         let saved = store.lastScanRows.devTools
         let liveIDs = Set(store.devTools.map(\.id))
         for index in saved.indices where saved[index].isDetected && !liveIDs.contains(saved[index].id)
-            && filter.matches(saved[index].safetyInfo) {
+            && filter.matches(saved[index].safetyInfo) && !Self.isBuildFolder(saved[index]) {
             rows.append(.savedTool(id: saved[index].id, index: index))
         }
+        // The build folders go in one card (#480): the live one once the scan
+        // has any, the last scan's until then.
+        let liveBuildFolders = visibleBuildFolderTools()
+        let savedBuildFolders = liveBuildFolders.isEmpty ? visibleSavedBuildFolderTools() : []
+        if !liveBuildFolders.isEmpty {
+            rows.append(.buildFolders)
+        } else if !savedBuildFolders.isEmpty {
+            rows.append(.savedBuildFolders)
+        }
 
-        func tool(_ e: MergedDevStandardRow) -> DevTool {
+        func members(_ e: MergedDevStandardRow) -> [DevTool] {
             switch e {
-            case .tool(_, let i): return store.devTools[i]
-            case .savedTool(_, let i): return saved[i]
+            case .tool(_, let i): return [store.devTools[i]]
+            case .savedTool(_, let i): return [saved[i]]
+            case .buildFolders: return liveBuildFolders
+            case .savedBuildFolders: return savedBuildFolders
             }
         }
 
         func entrySize(_ e: MergedDevStandardRow) -> Int64 {
-            tool(e).sizeBytes
+            members(e).reduce(0) { $0 + $1.sizeBytes }
         }
 
         func entryDate(_ e: MergedDevStandardRow) -> Date {
-            devToolModified(tool(e))
+            members(e).map(devToolModified).max() ?? .distantPast
         }
 
         func entryName(_ e: MergedDevStandardRow) -> String {
-            tool(e).safetyInfo.headline
+            switch e {
+            case .buildFolders, .savedBuildFolders: return String(localized: "Xcode build folders")
+            case .tool, .savedTool: return members(e).first?.safetyInfo.headline ?? ""
+            }
         }
 
         switch currentSort {
@@ -371,6 +397,61 @@ struct DevToolsView: View {
             rows.sort { entryName($0).localizedCaseInsensitiveCompare(entryName($1)) == .orderedAscending }
         }
         return rows
+    }
+
+    // MARK: Xcode build folders card (#480)
+
+    private static func isBuildFolder(_ tool: DevTool) -> Bool {
+        XcodeBuildFolderScanPolicy.folderPath(inLabel: tool.toolName) != nil
+    }
+
+    /// The live build folder rows the filter shows, in the list's order.
+    private func visibleBuildFolderTools() -> [DevTool] {
+        sortedStandardToolIndices().map { store.devTools[$0] }.filter(Self.isBuildFolder)
+    }
+
+    /// The last scan's build folder rows the live list doesn't have yet.
+    private func visibleSavedBuildFolderTools() -> [DevTool] {
+        let filter = currentSafetyFilter
+        return lastScanTools.filter { Self.isBuildFolder($0) && filter.matches($0.safetyInfo) }
+            .sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    private func buildFolderPart(of tool: DevTool) -> XcodeBuildFolderGroup.Part {
+        let gone = XcodeBuildFolderScanPolicy.folderPath(inLabel: tool.toolName)
+            .map(XcodeBuildFolderScanPolicy.isProjectGone) ?? false
+        return gone ? .projectGone : .projectHere
+    }
+
+    /// The card's model, read from the current selection.
+    private func buildFolderGroup() -> XcodeBuildFolderGroup? {
+        let selected = store.scanSelection.devToolIDs
+        return XcodeBuildFolderGroup(members: visibleBuildFolderTools().map {
+            .init(id: $0.id, bytes: $0.sizeBytes, isSelected: selected.contains($0.id), part: buildFolderPart(of: $0))
+        })
+    }
+
+    private func buildFolderTools(in part: XcodeBuildFolderGroup.Part) -> [DevTool] {
+        visibleBuildFolderTools().filter { buildFolderPart(of: $0) == part }
+    }
+
+    private func apply(_ change: XcodeBuildFolderGroup.Change) {
+        for id in change.select { store.setDevToolSelected(id: id, isSelected: true) }
+        for id in change.deselect { store.setDevToolSelected(id: id, isSelected: false) }
+    }
+
+    private func toggleBuildFoldersExpanded() {
+        withAnimation(expandCollapseAnimation) { buildFoldersExpanded.toggle() }
+    }
+
+    private func toggleBuildFolderPartExpanded(_ part: XcodeBuildFolderGroup.Part) {
+        withAnimation(expandCollapseAnimation) {
+            if expandedBuildFolderParts.contains(part) {
+                expandedBuildFolderParts.remove(part)
+            } else {
+                expandedBuildFolderParts.insert(part)
+            }
+        }
     }
 
     /// Resolves a group by identity rather than by position.
@@ -488,9 +569,7 @@ struct DevToolsView: View {
                 key: .tool(tool.id),
                 isSafe: tool.safetyInfo.level == .safe,
                 isSelected: sel.devToolIDs.contains(tool.id),
-                bytes: tool.sizeBytes,
-                isProjectGone: XcodeBuildFolderScanPolicy.folderPath(inLabel: tool.toolName)
-                    .map(XcodeBuildFolderScanPolicy.isProjectGone) ?? false
+                bytes: tool.sizeBytes
             ))
         }
         for (gi, ai) in eligibleProjectArtifactPairs() {
@@ -652,9 +731,22 @@ struct DevToolsView: View {
 
     /// The rows the keys walk, in the order the list draws them.
     private var keyboardRows: [[DevRowKey]] {
-        var keys: [DevRowKey] = mergedStandardRowEntries().map { entry in
+        var keys: [DevRowKey] = []
+        for entry in mergedStandardRowEntries() {
             switch entry {
-            case .tool(let id, _), .savedTool(let id, _): return .tool(id)
+            case .tool(let id, _), .savedTool(let id, _):
+                keys.append(.tool(id))
+            case .savedBuildFolders:
+                keys.append(.buildFolders)
+            case .buildFolders:
+                keys.append(.buildFolders)
+                guard buildFoldersExpanded, let group = buildFolderGroup() else { continue }
+                for part in group.parts {
+                    keys.append(.buildFolderPart(part))
+                    if expandedBuildFolderParts.contains(part) {
+                        keys += group.members(in: part).map { .tool($0.id) }
+                    }
+                }
             }
         }
         if simulatorSectionVisible {
@@ -729,6 +821,10 @@ struct DevToolsView: View {
             case .component(let id): return component(id).map { [$0.assetURL] } ?? []
             case .project(let id): return group(id).map { [$0.rootPath] } ?? []
             case .artifact(let groupID, let artifactID): return artifact(groupID, artifactID).map { [$0.path] } ?? []
+            case .buildFolders:
+                let live = visibleBuildFolderTools()
+                return (live.isEmpty ? visibleSavedBuildFolderTools() : live).flatMap(\.paths)
+            case .buildFolderPart(let part): return buildFolderTools(in: part).flatMap(\.paths)
             }
         }
 
@@ -754,6 +850,12 @@ struct DevToolsView: View {
                     guard artifact(groupID, artifactID) != nil else { return false }
                     store.setProjectArtifactSelected(groupID: groupID, artifactID: artifactID,
                         isSelected: !store.scanSelection.artifactIDs.contains(artifactID))
+                case .buildFolders:
+                    guard let group = buildFolderGroup() else { return false }
+                    apply(group.toggled())
+                case .buildFolderPart(let part):
+                    guard let group = buildFolderGroup(), !group.members(in: part).isEmpty else { return false }
+                    apply(group.toggled(part: part))
                 }
                 return true
             },
@@ -767,6 +869,8 @@ struct DevToolsView: View {
                     guard visible.count == 1 else { return false }
                     return store.presentKeyboardDeletionSheet(.artifact(id: store.projectGroups[gi].artifacts[visible[0]].id))
                 case .simulator, .runtime, .component: return false
+                // Several folders at once go through Clean Selected and its sheet.
+                case .buildFolders, .buildFolderPart: return false
                 }
             },
             previewURL: { locations($0).first },
@@ -781,22 +885,51 @@ struct DevToolsView: View {
                 case .component(let id): return component(id) != nil
                 case .project(let id): return group(id) != nil
                 case .artifact(let groupID, let artifactID): return artifact(groupID, artifactID) != nil
+                case .buildFolders: return !visibleBuildFolderTools().isEmpty || !visibleSavedBuildFolderTools().isEmpty
+                case .buildFolderPart(let part): return !buildFolderTools(in: part).isEmpty
                 }
             },
             parent: { key in
-                if case .artifact(let groupID, _) = key { return .project(groupID) }
-                return nil
+                switch key {
+                case .artifact(let groupID, _): return .project(groupID)
+                case .buildFolderPart: return .buildFolders
+                case .tool(let id):
+                    // A build folder's row sits in its part of the card.
+                    guard let tool = store.devTools.first(where: { $0.id == id }), Self.isBuildFolder(tool) else { return nil }
+                    return .buildFolderPart(buildFolderPart(of: tool))
+                case .simulator, .runtime, .component, .project, .buildFolders: return nil
+                }
             },
             expand: { key in
-                guard case .project(let id) = key, let gi = projectGroupIndex(forID: id),
-                      sortedVisibleArtifactIndices(forGroup: gi).count > 1, !expandedProjectRoots.contains(id)
-                else { return false }
-                toggleProjectExpanded(id)
+                switch key {
+                case .project(let id):
+                    guard let gi = projectGroupIndex(forID: id),
+                          sortedVisibleArtifactIndices(forGroup: gi).count > 1, !expandedProjectRoots.contains(id)
+                    else { return false }
+                    toggleProjectExpanded(id)
+                case .buildFolders:
+                    guard !buildFoldersExpanded, !visibleBuildFolderTools().isEmpty else { return false }
+                    toggleBuildFoldersExpanded()
+                case .buildFolderPart(let part):
+                    guard !expandedBuildFolderParts.contains(part) else { return false }
+                    toggleBuildFolderPartExpanded(part)
+                case .tool, .simulator, .runtime, .component, .artifact: return false
+                }
                 return true
             },
             collapse: { key in
-                guard case .project(let id) = key, expandedProjectRoots.contains(id) else { return false }
-                toggleProjectExpanded(id)
+                switch key {
+                case .project(let id):
+                    guard expandedProjectRoots.contains(id) else { return false }
+                    toggleProjectExpanded(id)
+                case .buildFolders:
+                    guard buildFoldersExpanded else { return false }
+                    toggleBuildFoldersExpanded()
+                case .buildFolderPart(let part):
+                    guard expandedBuildFolderParts.contains(part) else { return false }
+                    toggleBuildFolderPartExpanded(part)
+                case .tool, .simulator, .runtime, .component, .artifact: return false
+                }
                 return true
             }
         )
@@ -925,6 +1058,7 @@ struct DevToolsView: View {
 
     private enum DeveloperListRowID: Hashable {
         case tool(String)
+        case buildFolders
         case simulators
         case runtimes
         case xcodeComponents
@@ -933,8 +1067,11 @@ struct DevToolsView: View {
 
     /// Scroll to real content: even a zero-height anchor occupies a native List row.
     private var firstDeveloperListRowID: DeveloperListRowID? {
-        if case .tool(let id, _) = mergedStandardRowEntries().first {
-            return .tool(id)
+        switch mergedStandardRowEntries().first {
+        case .tool(let id, _): return .tool(id)
+        case .buildFolders, .savedBuildFolders: return .buildFolders
+        // A saved row is never scrolled to, as before.
+        case .savedTool, nil: break
         }
         if simulatorSectionVisible { return .simulators }
         if runtimeSectionVisible { return .runtimes }
@@ -1038,6 +1175,20 @@ struct DevToolsView: View {
                         .listRowSeparator(.hidden)
                         .transition(rowInsertionTransition)
                     }
+                case .buildFolders:
+                    buildFolderGroupCard
+                        .id(DeveloperListRowID.buildFolders)
+                        .listRowInsets(ScanListRowInsets.standard)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .transition(rowInsertionTransition)
+                case .savedBuildFolders:
+                    lastScanBuildFolderCard
+                        .id(DeveloperListRowID.buildFolders)
+                        .listRowInsets(ScanListRowInsets.standard)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .transition(rowInsertionTransition)
                 }
             }
 
@@ -1329,6 +1480,8 @@ struct DevToolsView: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: developerTotalRowCount)
         .animation(expandCollapseAnimation, value: expandedProjectRoots)
+        .animation(expandCollapseAnimation, value: buildFoldersExpanded)
+        .animation(expandCollapseAnimation, value: expandedBuildFolderParts)
     }
 
     private var rowInsertionAnimation: Animation? {
@@ -1624,6 +1777,160 @@ struct DevToolsView: View {
             .padding(.trailing, AppStyle.Spacing.xSmall)
             .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
             .transition(cleaningRowRemovalTransition)
+        }
+    }
+
+    /// The Xcode build folders card (#480): one header with a checkbox for every
+    /// folder, and, open, the folders whose project is gone and the rest as two
+    /// parts with a checkbox each. Every folder is still its own Dev Tools row.
+    @ViewBuilder
+    private var buildFolderGroupCard: some View {
+        let tools = visibleBuildFolderTools()
+        if let iconTool = tools.first {
+            VStack(alignment: .leading, spacing: 0) {
+                ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+                    XcodeBuildFolderGroupHeader(
+                        iconTool: iconTool,
+                        folderCount: tools.count,
+                        bytes: tools.reduce(0) { $0 + $1.sizeBytes },
+                        isExpanded: buildFoldersExpanded,
+                        selectionState: buildFolderGroup()?.state ?? .none,
+                        onToggleSelection: {
+                            keyboard.highlight(DevRowKey.buildFolders)
+                            if let group = buildFolderGroup() { apply(group.toggled()) }
+                        },
+                        onToggleExpanded: {
+                            keyboard.highlight(DevRowKey.buildFolders)
+                            toggleBuildFoldersExpanded()
+                        }
+                    )
+                }
+                .scanListRow(DevRowKey.buildFolders, in: keyboard, ring: .inside)
+
+                if buildFoldersExpanded {
+                    ForEach(XcodeBuildFolderGroup.Part.allCases, id: \.self) { part in
+                        let partTools = tools.filter { buildFolderPart(of: $0) == part }
+                        if !partTools.isEmpty {
+                            buildFolderPartSection(part, tools: partTools)
+                        }
+                    }
+                    .transition(expandCollapseTransition)
+                }
+            }
+            .padding(.bottom, buildFoldersExpanded ? AppStyle.Spacing.xSmall : 0)
+            .devToolsGroupCardChrome()
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("Xcode build folders"))
+        }
+    }
+
+    @ViewBuilder
+    private func buildFolderPartSection(_ part: XcodeBuildFolderGroup.Part, tools: [DevTool]) -> some View {
+        let isExpanded = expandedBuildFolderParts.contains(part)
+        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+            XcodeBuildFolderPartHeader(
+                part: part,
+                folderCount: tools.count,
+                bytes: tools.reduce(0) { $0 + $1.sizeBytes },
+                isExpanded: isExpanded,
+                selectionState: buildFolderGroup()?.state(in: part) ?? .none,
+                onToggleSelection: {
+                    keyboard.highlight(DevRowKey.buildFolderPart(part))
+                    if let group = buildFolderGroup() { apply(group.toggled(part: part)) }
+                },
+                onToggleExpanded: {
+                    keyboard.highlight(DevRowKey.buildFolderPart(part))
+                    toggleBuildFolderPartExpanded(part)
+                }
+            )
+        }
+        .scanListRow(DevRowKey.buildFolderPart(part), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
+
+        if isExpanded {
+            ForEach(tools, id: \.id) { tool in
+                buildFolderRow(tool)
+            }
+            .transition(expandCollapseTransition)
+        }
+    }
+
+    /// One folder inside an open part, drawn like a project's folder row.
+    private func buildFolderRow(_ tool: DevTool) -> some View {
+        let toolID = tool.id
+        return ScanSelectionScope(
+            selection: store.scanSelection,
+            isSelected: { $0.devToolIDs.contains(toolID) }
+        ) { selected in
+            ScanResultRow(
+                isSelected: selected,
+                onToggle: {
+                    store.setDevToolSelected(id: toolID, isSelected: !store.scanSelection.devToolIDs.contains(toolID))
+                },
+                primaryLabel: tool.safetyInfo.headline,
+                formattedSize: tool.formattedSize,
+                safetyInfo: tool.safetyInfo,
+                brandIcon: nil,
+                detailCaption: nil,
+                reinstallSafety: nil,
+                showUncommittedRepoChanges: false,
+                onExcludeFromScans: { store.excludeFromScans(tool) },
+                revealLocations: {
+                    tool.paths.map { ScanRowLocation(url: $0, sizeBytes: tool.sizeBytes) }
+                },
+                showsBulkCheckbox: true,
+                isMetadataPending: isDevToolMetadataPending(tool),
+                showsCardChrome: false,
+                showsLeadingIcon: false,
+                onHighlight: highlightAction(.tool(toolID))
+            )
+        }
+        .scanListRow(DevRowKey.tool(toolID), in: keyboard, cornerRadius: AppStyle.Radius.md, ring: .inside)
+        .padding(.trailing, AppStyle.Spacing.xSmall)
+        .padding(.leading, AppStyle.Row.projectArtifactLeadingInset + AppStyle.Row.projectArtifactLeadingInset)
+        .transition(cleaningRowRemovalTransition)
+    }
+
+    /// The card from the last scan (#283), read only, with the clock where its
+    /// checkbox goes, until the scan lands the live one.
+    @ViewBuilder
+    private var lastScanBuildFolderCard: some View {
+        let tools = visibleSavedBuildFolderTools()
+        if let iconTool = tools.first {
+            HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+                LastScanRowMarker()
+                    .frame(width: 24)
+                AdaptiveBrandIconImage(source: .devTool(iconTool), squareSize: AppStyle.Row.listIconFrameSize)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                    Text("Xcode build folders")
+                        .font(AppStyle.Typography.rowTitle)
+                    Text(String(localized: "\(tools.count) folders") + " · " + String(localized: "Built outside Xcode's own folder"))
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(formatBytes(tools.reduce(Int64(0)) { $0 + $1.sizeBytes }))
+                    .font(AppStyle.Typography.rowTitle.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .monospacedDigit()
+                projectBadge(level: .medium)
+                // Where the chevron sits, so sizes line up with the live cards.
+                Color.clear
+                    .frame(width: Self.chevronSize, height: Self.chevronSize)
+                    .padding(.trailing, AppStyle.Spacing.xSmall)
+            }
+            .padding(.vertical, AppStyle.Spacing.xSmall)
+            .padding(.horizontal, AppStyle.Spacing.xSmall)
+            .frame(minHeight: AppStyle.Row.parentHeight)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: highlightAction(.buildFolders))
+            .help(LastScanRowMarker.help)
+            .devToolsGroupCardChrome()
+            .scanListRow(DevRowKey.buildFolders, in: keyboard)
+            .opacity(0.55)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(LastScanRowMarker.help)
         }
     }
 

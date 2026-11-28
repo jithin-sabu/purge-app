@@ -1586,5 +1586,11 @@
 "Built from %@ on %@." = "Собрано из %@, дата: %@.";
 "Built from %@." = "Собрано из %@.";
 "That project is no longer on this Mac." = "Этого проекта больше нет на этом Mac.";
-"Select build folders whose project is gone (%@)" = "Выбрать папки сборки, чьего проекта больше нет (%@)";
-"Xcode build files from a project that is no longer on this Mac. Look them over before cleaning." = "Файлы сборки Xcode от проекта, которого больше нет на этом Mac. Просмотрите их перед очисткой.";
+"Xcode build folders" = "Папки сборки Xcode";
+"Built outside Xcode's own folder" = "Вне папки самого Xcode";
+"Select all Xcode build folders" = "Выбрать все папки сборки Xcode";
+"Show folders" = "Показать папки";
+"Hide folders" = "Скрыть папки";
+"Project no longer on this Mac" = "Проекта больше нет на этом Mac";
+"Project still on this Mac" = "Проект ещё на этом Mac";
+"Select %@" = "Выбрать: %@";
