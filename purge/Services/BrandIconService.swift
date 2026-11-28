@@ -166,7 +166,13 @@ final class BrandIconService {
     /// `NSWorkspace.shared.icon(forFile:)` in SwiftUI `body` — non-lazy uninstall
     /// rows re-evaluate often during size updates and sort.
     func installedAppIcon(at url: URL) -> NSImage {
-        let path = url.standardizedFileURL.path
+        installedAppIcon(standardizedPath: url.standardizedFileURL.path)
+    }
+
+    /// The same, for a path that is already standardized, such as
+    /// `InstalledApp.id`. Standardizing checks the disk, and the uninstaller
+    /// draws hundreds of these (#457).
+    func installedAppIcon(standardizedPath path: String) -> NSImage {
         let cacheKey = "p|\(path)"
         if let cached = installedAppIconCache[cacheKey], let image = cached {
             return image

@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -133,6 +134,12 @@ struct UninstallView: View {
     /// The keyboard highlight and keys (#96), one per section. Held as plain
     /// references so this view never observes a highlight; only the rows do.
     @State private var appsKeyboard = ScanListKeyboardController()
+    /// The one view that shows the app rows' right-click menus (#457).
+    @State private var appRowMenus = ScanRowMenuCenter()
+    /// The sorted lists, kept between renders (#457). Not observed state.
+    @State private var appListMemo = AppListMemo()
+    /// Each app row's own state, so a tick or a new size redraws that row only (#457).
+    @State private var appRowStates = AppRowStates()
     @State private var leftoversKeyboard = ScanListKeyboardController()
 
     /// A tile or row the keyboard can stand on: an app, or a vendor's group.
@@ -559,12 +566,30 @@ struct UninstallView: View {
     }
 
     private var filteredApps: [InstalledApp] {
-        sortedApps(Self.matchingApps(
-            store.installedApps + lastScanApps,
+        appListMemo.filteredApps(for: appListKey) {
+            sortedApps(Self.matchingApps(
+                store.installedApps + lastScanApps,
+                query: appSearchQuery,
+                focus: focusedSearch,
+                groups: store.appSuiteGroups
+            ))
+        }
+    }
+
+    /// Everything the sorted lists below are built from, so they are built once
+    /// per change instead of several times on every render (#457).
+    private var appListKey: AppListMemo.Key {
+        AppListMemo.Key(
+            installedApps: store.installedApps,
+            savedApps: store.lastScanRows.installedApps,
+            savedTotals: store.lastScanRows.removableBytesByAppPath,
+            totals: store.removableBytesByAppID,
+            groups: store.appSuiteGroups,
             query: appSearchQuery,
             focus: focusedSearch,
-            groups: store.appSuiteGroups
-        ))
+            sort: selectedSort,
+            measuredAll: store.hasMeasuredAllRemovableTotals
+        )
     }
 
     /// While the search has text, matching apps show on their own, as before #155.
@@ -576,7 +601,9 @@ struct UninstallView: View {
     /// (#155), each app still on its own while searching.
     private var filteredEntries: [AppListEntry] {
         if isSearching { return filteredApps.map { .app($0) } }
-        return sortedEntries(store.appListEntries(store.installedApps + lastScanApps))
+        return appListMemo.entries(for: appListKey) {
+            sortedEntries(store.appListEntries(store.installedApps + lastScanApps))
+        }
     }
 
     /// Groups sort with the apps: by folder name, by the members' total size,
@@ -674,14 +701,22 @@ struct UninstallView: View {
     private var lastScanApps: [InstalledApp] {
         let saved = store.lastScanRows.installedApps
         guard !saved.isEmpty else { return [] }
-        let live = Set(store.installedApps.map(\.bundleURL.path))
-        return saved.filter { !live.contains($0.bundleURL.path) }
+        return appListMemo.lastScanApps(installed: store.installedApps, saved: saved) {
+            let live = Set(store.installedApps.map(\.bundleURL.path))
+            return saved.filter { !live.contains($0.bundleURL.path) }
+        }
     }
 
     /// The size an app's row shows. A saved app shows its total from the last scan,
     /// and so does a live app until this session has measured it, dimmed in both
     /// cases, so the figure doesn't blank out and come back.
     private func displayedSize(for app: InstalledApp, isFromLastScan: Bool) -> AppRowSize {
+        displayedSize(for: app, isFromLastScan: isFromLastScan, measuredAll: store.hasMeasuredAllRemovableTotals)
+    }
+
+    /// `measuredAll` is `store.hasMeasuredAllRemovableTotals`, worked out once
+    /// by callers that size every app.
+    private func displayedSize(for app: InstalledApp, isFromLastScan: Bool, measuredAll: Bool) -> AppRowSize {
         let saved = store.lastScanRows.removableBytesByAppPath[app.bundleURL.path]
         if isFromLastScan {
             return AppRowSize(bytes: saved ?? app.bundleSizeBytes, isPending: false, isFromLastScan: true)
@@ -690,7 +725,7 @@ struct UninstallView: View {
             return AppRowSize(bytes: saved, isPending: false, isFromLastScan: true)
         }
         let bytes = store.removableBytes(for: app)
-        return AppRowSize(bytes: bytes, isPending: bytes == 0 && !store.hasMeasuredAllRemovableTotals, isFromLastScan: false)
+        return AppRowSize(bytes: bytes, isPending: bytes == 0 && !measuredAll, isFromLastScan: false)
     }
 
     /// Whether the search is someone looking for Purge itself: two letters or
@@ -944,13 +979,70 @@ struct UninstallView: View {
                 action: (String(localized: "Add folder\u{2026}"), addAppFolder)
             )
         } else {
+            // The collection has its own hosting view, so a change to the store
+            // stops here instead of reaching every row, and each app row redraws
+            // from its own state (#457).
             switch viewMode {
             case .list:
-                loadedList
+                AppCollectionHost(key: collectionKey, rowValues: appRowValues, rowStates: appRowStates) { loadedList }
             case .grid:
-                loadedGrid
+                AppCollectionHost(key: collectionKey, rowValues: appRowValues, rowStates: appRowStates) { loadedGrid }
             }
         }
+    }
+
+    /// What the grid and the list are built from, apart from each app row's
+    /// own values in `appRowValues`. Their taps only reach the store, the
+    /// keyboard controller and the ids drawn, which stay the same while this
+    /// does.
+    private var collectionKey: AppCollectionKey {
+        let entries = filteredEntries
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
+        var groups: [String: AppGroupRowValue] = [:]
+        for entry in entries {
+            guard case .group(let group, let apps) = entry else { continue }
+            let live = liveIDs(apps)
+            groups[group.id] = AppGroupRowValue(
+                group: group,
+                apps: apps,
+                size: displayedSize(for: apps, savedPaths: savedPaths),
+                activityLabel: activityLabel(for: apps),
+                selection: groupSelection(apps),
+                pickedCount: live.filter(store.selectedAppIDs.contains).count,
+                canSelect: !live.isEmpty
+            )
+        }
+        return AppCollectionKey(
+            entries: entries.map(AppCollectionKey.Entry.init),
+            groups: groups,
+            sort: currentSort,
+            openGridGroupID: openGridGroupID,
+            expandedListGroupIDs: expandedListGroupIDs,
+            reduceMotion: reduceMotion
+        )
+    }
+
+    /// What each app row draws. The rows read it from `appRowStates`, so only
+    /// the rows whose values changed redraw.
+    private var appRowValues: [String: AppRowValue] {
+        let saved = lastScanApps
+        let measuredAll = store.hasMeasuredAllRemovableTotals
+        let sort = currentSort
+        let now = Date()
+        var values: [String: AppRowValue] = [:]
+        values.reserveCapacity(store.installedApps.count + saved.count)
+        for (apps, isFromLastScan) in [(store.installedApps, false), (saved, true)] {
+            for app in apps {
+                values[app.id] = AppRowValue(
+                    app: app,
+                    size: displayedSize(for: app, isFromLastScan: isFromLastScan, measuredAll: measuredAll),
+                    activityLabel: sort.activityLabel(for: app, now: now),
+                    isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
+                    isFromLastScan: isFromLastScan
+                )
+            }
+        }
+        return values
     }
 
     private var loadedList: some View {
@@ -970,6 +1062,7 @@ struct UninstallView: View {
                     }
                 }
             }
+            .appRowMenus(appRowMenus)
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xxxSmall)
             .padding(.bottom, AppStyle.Spacing.large)
@@ -982,13 +1075,9 @@ struct UninstallView: View {
     }
 
     private func appListRow(_ app: InstalledApp, savedPaths: Set<String>) -> some View {
-        let isFromLastScan = savedPaths.contains(app.bundleURL.path)
-        return AppListRow(
-            app: app,
-            size: displayedSize(for: app, isFromLastScan: isFromLastScan),
-            activityLabel: activityLabel(for: app),
-            isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
-            isFromLastScan: isFromLastScan,
+        let store = store
+        return AppListRowCell(
+            state: appRowStates.state(for: app.id),
             onHighlight: { [appsKeyboard] in appsKeyboard.highlight(AppRowKey.app(app.id)) }
         ) {
             store.toggleAppSelected(id: app.id)
@@ -1070,6 +1159,7 @@ struct UninstallView: View {
                     }
                 }
             }
+            .appRowMenus(appRowMenus)
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xxxSmall)
             .padding(.bottom, AppStyle.Spacing.large)
@@ -1110,13 +1200,9 @@ struct UninstallView: View {
     }
 
     private func appTile(_ app: InstalledApp, savedPaths: Set<String>) -> some View {
-        let isFromLastScan = savedPaths.contains(app.bundleURL.path)
-        return AppTile(
-            app: app,
-            size: displayedSize(for: app, isFromLastScan: isFromLastScan),
-            activityLabel: activityLabel(for: app),
-            isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
-            isFromLastScan: isFromLastScan,
+        let store = store
+        return AppTileCell(
+            state: appRowStates.state(for: app.id),
             onHighlight: { [appsKeyboard] in appsKeyboard.highlight(AppRowKey.app(app.id)) }
         ) {
             store.toggleAppSelected(id: app.id)
@@ -1475,7 +1561,7 @@ private struct OptionalRowTap: ViewModifier {
 // MARK: - App list row
 
 /// What an app row shows for its size.
-struct AppRowSize {
+struct AppRowSize: Equatable {
     let bytes: Int64
     /// No size to show yet (Spotlight and `du` pending).
     let isPending: Bool
@@ -1525,7 +1611,7 @@ private struct AppListRow: View {
                     .accessibilityHidden(true)
             }
 
-            Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
+            Image(nsImage: BrandIconService.shared.installedAppIcon(standardizedPath: app.id))
                 .resizable()
                 .frame(width: 36, height: 36)
                 .accessibilityHidden(true)
@@ -1586,7 +1672,7 @@ private struct AppListRow: View {
         .accessibilityValue(isFromLastScan ? LocalizedStringKey(LastScanRowMarker.help) : isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default) { if !isFromLastScan { onToggle() } }
-        .finderRevealMenu(isMenuActive: $isContextMenuActive) {
+        .finderRevealMenu(isMenuActive: $isContextMenuActive, rowID: app.id) {
             [ScanRowLocation(url: app.bundleURL, sizeBytes: app.bundleSizeBytes)]
         }
         .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
@@ -1658,7 +1744,7 @@ private struct AppTile: View {
 
     var body: some View {
         VStack(spacing: AppStyle.Spacing.xSmall) {
-            Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
+            Image(nsImage: BrandIconService.shared.installedAppIcon(standardizedPath: app.id))
                 .resizable()
                 .frame(width: 56, height: 56)
                 // An app on a drive keeps the tile's height: the drive shows as a
@@ -1736,7 +1822,7 @@ private struct AppTile: View {
         .accessibilityValue(isFromLastScan ? LocalizedStringKey(LastScanRowMarker.help) : isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default) { if !isFromLastScan { onToggle() } }
-        .finderRevealMenu(isMenuActive: $isContextMenuActive) {
+        .finderRevealMenu(isMenuActive: $isContextMenuActive, rowID: app.id) {
             [ScanRowLocation(url: app.bundleURL, sizeBytes: app.bundleSizeBytes)]
         }
         .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
@@ -2120,5 +2206,293 @@ struct RemovedAppLeftoverSheet: View {
             onCancel: onCancel,
             onConfirm: { onConfirm(plan) }
         )
+    }
+}
+
+// MARK: - Render cost (#457)
+
+/// The sorted app lists, kept between renders. Sorting by name compares every
+/// pair with the user's locale, and the view asked for these lists several
+/// times on every render, so each store change cost far more than it needed
+/// to on a Mac with hundreds of apps (#457). A list is built again only when
+/// its key changes.
+@MainActor
+private final class AppListMemo {
+    struct Key: Equatable {
+        let installedApps: [InstalledApp]
+        let savedApps: [InstalledApp]
+        let savedTotals: [String: Int64]
+        let totals: [String: Int64]
+        let groups: [AppSuiteGroup]
+        let query: String
+        let focus: UninstallerFocus?
+        let sort: AppSortOption
+        let measuredAll: Bool
+    }
+
+    private var appsKey: Key?
+    private var apps: [InstalledApp] = []
+    private var entriesKey: Key?
+    private var entries: [AppListEntry] = []
+    private var savedKey: (installed: [InstalledApp], saved: [InstalledApp])?
+    private var saved: [InstalledApp] = []
+
+    func filteredApps(for key: Key, make: () -> [InstalledApp]) -> [InstalledApp] {
+        if key != appsKey {
+            apps = make()
+            appsKey = key
+        }
+        return apps
+    }
+
+    func entries(for key: Key, make: () -> [AppListEntry]) -> [AppListEntry] {
+        if key != entriesKey {
+            entries = make()
+            entriesKey = key
+        }
+        return entries
+    }
+
+    func lastScanApps(installed: [InstalledApp], saved: [InstalledApp], make: () -> [InstalledApp]) -> [InstalledApp] {
+        if savedKey?.installed != installed || savedKey?.saved != saved {
+            self.saved = make()
+            savedKey = (installed, saved)
+        }
+        return self.saved
+    }
+}
+
+/// What decides the app collection's layout: the order of entries, the
+/// groups and their own figures, and what is open. Each app row's own values
+/// live in `AppRowValue`, so they are not part of this.
+private struct AppCollectionKey: Equatable {
+    enum Entry: Equatable {
+        case app(String)
+        case group(String, [String])
+
+        init(_ entry: AppListEntry) {
+            switch entry {
+            case .app(let app): self = .app(app.id)
+            case .group(let group, let apps): self = .group(group.id, apps.map(\.id))
+            }
+        }
+    }
+
+    let entries: [Entry]
+    let groups: [String: AppGroupRowValue]
+    let sort: AppSortOption
+    let openGridGroupID: String?
+    let expandedListGroupIDs: Set<String>
+    let reduceMotion: Bool
+}
+
+/// What a group's tile or row draws.
+private struct AppGroupRowValue: Equatable {
+    let group: AppSuiteGroup
+    let apps: [InstalledApp]
+    let size: AppRowSize
+    let activityLabel: String?
+    let selection: SelectAllTriState
+    let pickedCount: Int
+    let canSelect: Bool
+}
+
+/// What one app's tile or row draws.
+struct AppRowValue: Equatable {
+    let app: InstalledApp
+    let size: AppRowSize
+    let activityLabel: String?
+    let isSelected: Bool
+    let isFromLastScan: Bool
+}
+
+/// One app row's values. The row observes this alone, so a change to another
+/// app, or to anything else in the store, does not redraw it.
+@MainActor
+final class AppRowState: ObservableObject {
+    @Published fileprivate(set) var value: AppRowValue
+
+    init(_ value: AppRowValue) {
+        self.value = value
+    }
+}
+
+/// The row states of the app collection, by app id.
+@MainActor
+final class AppRowStates {
+    private var states: [String: AppRowState] = [:]
+
+    /// Brings every row up to date, and publishes only for the rows that changed.
+    func apply(_ values: [String: AppRowValue]) {
+        for (id, value) in values {
+            if let state = states[id] {
+                if state.value != value { state.value = value }
+            } else {
+                states[id] = AppRowState(value)
+            }
+        }
+    }
+
+    /// The row's state. `apply` runs before the collection is drawn, so it has
+    /// one for every app the collection shows.
+    func state(for id: String) -> AppRowState {
+        if let state = states[id] { return state }
+        let state = AppRowState(AppRowValue(
+            app: InstalledApp(name: "", bundleURL: URL(fileURLWithPath: id), bundleID: nil, bundleSizeBytes: 0, isRunning: false),
+            size: AppRowSize(bytes: 0, isPending: true, isFromLastScan: false),
+            activityLabel: nil,
+            isSelected: false,
+            isFromLastScan: false
+        ))
+        states[id] = state
+        return state
+    }
+}
+
+/// An app tile drawn from its row state.
+private struct AppTileCell: View {
+    @ObservedObject var state: AppRowState
+    let onHighlight: () -> Void
+    let onToggle: () -> Void
+
+    var body: some View {
+        let value = state.value
+        AppTile(
+            app: value.app,
+            size: value.size,
+            activityLabel: value.activityLabel,
+            isSelected: value.isSelected,
+            isFromLastScan: value.isFromLastScan,
+            onHighlight: onHighlight,
+            onToggle: onToggle
+        )
+    }
+}
+
+/// An app list row drawn from its row state.
+private struct AppListRowCell: View {
+    @ObservedObject var state: AppRowState
+    let onHighlight: () -> Void
+    let onToggle: () -> Void
+
+    var body: some View {
+        let value = state.value
+        AppListRow(
+            app: value.app,
+            size: value.size,
+            activityLabel: value.activityLabel,
+            isSelected: value.isSelected,
+            isFromLastScan: value.isFromLastScan,
+            onHighlight: onHighlight,
+            onToggle: onToggle
+        )
+    }
+}
+
+/// Hosts the app collection in its own `NSHostingView`.
+///
+/// SwiftUI marks every view under a changed view as possibly changed before it
+/// checks any of them. The uninstaller observes the whole store, so any store
+/// change walked every row, even with nothing in it changed: about 55 ms with
+/// 423 apps on an M4, and seconds on an older Intel Mac (#457). In a hosting
+/// view of its own, the collection is rebuilt only when `key` changes, and an
+/// app row redraws only when its own value does.
+private struct AppCollectionHost<Content: View>: NSViewRepresentable {
+    let key: AppCollectionKey
+    let rowValues: [String: AppRowValue]
+    let rowStates: AppRowStates
+    let content: () -> Content
+
+    final class Coordinator {
+        var model: AppCollectionRootModel?
+        var key: AppCollectionKey?
+        var locale: Locale?
+        var layoutDirection: LayoutDirection?
+        var isEnabled = true
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSHostingView<AppCollectionRoot> {
+        rowStates.apply(rowValues)
+        let model = AppCollectionRootModel(root(context))
+        context.coordinator.model = model
+        let view = NSHostingView(rootView: AppCollectionRoot(model: model))
+        // The collection fills the space it is given and never sizes the window.
+        view.sizingOptions = []
+        remember(context)
+        return view
+    }
+
+    func updateNSView(_ view: NSHostingView<AppCollectionRoot>, context: Context) {
+        // Inside the parent's transaction, so a sort or a group opening
+        // animates as it did before. The new root goes through an observed
+        // model, not `rootView`: the hosting view redraws later in a pass of
+        // its own, which drops the transaction, while an observed change
+        // keeps the one it was made in.
+        withTransaction(context.transaction) {
+            rowStates.apply(rowValues)
+            let coordinator = context.coordinator
+            guard coordinator.key != key
+                || coordinator.locale != context.environment.locale
+                || coordinator.layoutDirection != context.environment.layoutDirection
+                || coordinator.isEnabled != context.environment.isEnabled
+            else { return }
+            remember(context)
+            coordinator.model?.root = root(context)
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<AppCollectionRoot>, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    private func remember(_ context: Context) {
+        context.coordinator.key = key
+        context.coordinator.locale = context.environment.locale
+        context.coordinator.layoutDirection = context.environment.layoutDirection
+        context.coordinator.isEnabled = context.environment.isEnabled
+    }
+
+    /// The parent's environment does not cross into a hosting view, so what
+    /// the rows depend on goes across by hand: the language, the text
+    /// direction, whether the window is disabled while a clean runs, and the
+    /// window's tint from `ContentView`. Light and dark mode need nothing: the
+    /// hosting view takes them from the window's appearance.
+    private func root(_ context: Context) -> AnyView {
+        AnyView(
+            content()
+                .environment(\.locale, context.environment.locale)
+                .environment(\.layoutDirection, context.environment.layoutDirection)
+                .environment(\.isEnabled, context.environment.isEnabled)
+                .tint(AppColors.textPrimary)
+        )
+    }
+}
+
+/// The collection host's root view. It is set once; each new collection
+/// arrives through the model.
+@MainActor private final class AppCollectionRootModel: ObservableObject {
+    @Published var root: AnyView
+
+    init(_ root: AnyView) {
+        self.root = root
+    }
+}
+
+private struct AppCollectionRoot: View {
+    @ObservedObject var model: AppCollectionRootModel
+
+    var body: some View {
+        model.root
+    }
+}
+
+private extension View {
+    /// Serves the app rows' right-click menus from one view (#457).
+    func appRowMenus(_ center: ScanRowMenuCenter) -> some View {
+        environment(\.scanRowMenuCenter, center)
+            .coordinateSpace(name: ScanRowMenuCenter.coordinateSpace)
+            .overlay(ScanRowMenuCenterLayer(center: center))
     }
 }

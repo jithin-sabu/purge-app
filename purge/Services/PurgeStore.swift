@@ -3069,9 +3069,9 @@ final class PurgeStore: ObservableObject {
     /// True once every listed app has a measured total, so the size sort can use
     /// the totals without reshuffling tiles while measurement is still in flight.
     var hasMeasuredAllRemovableTotals: Bool {
-        let ids = Set(installedApps.map(\.id))
-        guard !ids.isEmpty else { return false }
-        return ids.isSubset(of: removableBytesByAppID.keys)
+        // No set built per call: views ask this many times per render (#457).
+        guard !installedApps.isEmpty else { return false }
+        return installedApps.allSatisfy { removableBytesByAppID[$0.id] != nil }
     }
 
     /// Every app found has its full total, or there were none to measure. Stop can
