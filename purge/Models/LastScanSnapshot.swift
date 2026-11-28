@@ -287,6 +287,8 @@ nonisolated struct SavedSimulatorRuntime: Codable, Equatable, Sendable {
     var deviceCount: Int?
     var locationURL: URL
     var safety: SavedSafety
+    /// Optional, so a snapshot written before #473 still decodes.
+    var dyldCacheBytes: Int64?
 
     init(_ runtime: SimulatorRuntime) {
         id = runtime.id
@@ -301,6 +303,7 @@ nonisolated struct SavedSimulatorRuntime: Codable, Equatable, Sendable {
         deviceCount = runtime.deviceCount
         locationURL = runtime.locationURL
         safety = SavedSafety(runtime.safetyInfo)
+        dyldCacheBytes = runtime.dyldCacheBytes
     }
 
     var urls: [URL] { [locationURL] }
@@ -318,7 +321,8 @@ nonisolated struct SavedSimulatorRuntime: Codable, Equatable, Sendable {
             lastUsedAt: lastUsedAt,
             deviceCount: deviceCount,
             locationURL: locationURL,
-            safetyInfo: safety.info
+            safetyInfo: safety.info,
+            dyldCacheBytes: dyldCacheBytes
         )
     }
 }

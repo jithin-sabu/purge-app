@@ -274,6 +274,7 @@
 "Browser caches" = "ذاكرة المتصفحات المؤقتة";
 "Browser caches per profile" = "ذاكرة المتصفحات المؤقتة لكل ملف تعريف";
 "Build %@" = "الإصدار %@";
+"Build %@, plus %@ of cache" = "الإصدار %@، بالإضافة إلى %@ من ذاكرة التخزين المؤقت";
 "Built in" = "مدمج";
 "Busy right now, so it can't be removed. Scan again in a moment." = "قيد الاستخدام الآن، لذا لا يمكن إزالته. افحص مجددًا بعد لحظات.";
 "Buy me a coffee" = "ادعمني بفنجان قهوة";

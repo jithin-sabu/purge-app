@@ -30,8 +30,22 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// the row, the history entry and Reveal in Finder; nothing is deleted at it.
     let locationURL: URL
     let safetyInfo: SafetyInfo
+    /// The runtime's dyld shared cache for this macOS build, from
+    /// ``dyldCacheSizes(for:root:osBuild:)``. `simctl` leaves it out of `sizeBytes`.
+    /// CoreSimulator removes it with the runtime; Purge never deletes or offers it.
+    /// `nil` when there is none, or it could not be read.
+    var dyldCacheBytes: Int64? = nil
 
     var formattedSize: String { formatBytes(sizeBytes) }
+
+    /// The row's badge and the confirm sheet's line: the build, and the dyld cache
+    /// when there is one (#473).
+    var detailCaption: String {
+        guard let dyldCacheBytes, dyldCacheBytes > 0 else {
+            return String(localized: "Build \(build)")
+        }
+        return String(localized: "Build \(build), plus \(formatBytes(dyldCacheBytes)) of cache")
+    }
 
     /// The pre-Xcode 16 layout.
     var isLegacyImage: Bool { Self.isLegacyImage(kind: kind) }
@@ -233,6 +247,77 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         let tail = runtimeIdentifier.split(separator: ".").last.map(String.init) ?? runtimeIdentifier
         let name = tail.split(separator: "-").first.map(String.init) ?? tail
         return name == "xrOS" ? "visionOS" : name
+    }
+
+    // MARK: - dyld shared cache
+
+    /// Where CoreSimulator keeps each runtime's dyld shared cache, one folder per
+    /// macOS build. Owned by root. Purge only measures here: `simctl runtime delete`
+    /// removes a runtime's folder with it, and nothing else may.
+    static let dyldCacheRoot = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Caches/dyld", isDirectory: true)
+
+    /// This Mac's macOS build, like `26A428`. `nil` when it can't be read.
+    static func currentOSBuild() -> String? {
+        var size = 0
+        guard sysctlbyname("kern.osversion", nil, &size, nil, 0) == 0, size > 1 else { return nil }
+        var buffer = [CChar](repeating: 0, count: size)
+        guard sysctlbyname("kern.osversion", &buffer, &size, nil, 0) == 0 else { return nil }
+        let build = String(cString: buffer)
+        return build.isEmpty ? nil : build
+    }
+
+    /// The name of a runtime's dyld cache folder: `<runtime identifier>.<build>`,
+    /// like `com.apple.CoreSimulator.SimRuntime.iOS-18-4.22E238`.
+    static func dyldCacheFolderName(runtimeIdentifier: String, build: String) -> String {
+        "\(runtimeIdentifier).\(build)"
+    }
+
+    /// The size of each runtime's dyld cache, keyed by runtime ``id``. Only
+    /// `<root>/<osBuild>/<runtime identifier>.<build>` counts, matched against the
+    /// listing with the exact spelling, so a folder from another macOS build, another
+    /// runtime build, or another case never does. It must be a real folder, not a
+    /// link. A runtime whose folder is missing, unreadable or empty has no entry.
+    static func dyldCacheSizes(
+        for runtimes: [SimulatorRuntime],
+        root: URL = dyldCacheRoot,
+        osBuild: String? = currentOSBuild()
+    ) -> [String: Int64] {
+        guard let osBuild, !osBuild.isEmpty, !runtimes.isEmpty else { return [:] }
+        let buildFolder = root.appendingPathComponent(osBuild, isDirectory: true)
+        // The listing spells names as they are on disk. `fileExists` would also
+        // match another case on a case-insensitive volume.
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: buildFolder.path) else {
+            return [:]
+        }
+        let present = Set(names)
+
+        var folders: [String: URL] = [:]
+        for runtime in runtimes {
+            let name = dyldCacheFolderName(runtimeIdentifier: runtime.runtimeIdentifier, build: runtime.build)
+            guard !runtime.runtimeIdentifier.isEmpty, !runtime.build.isEmpty,
+                  !name.contains("/"), present.contains(name) else { continue }
+            let folder = buildFolder.appendingPathComponent(name, isDirectory: true)
+            var info = stat()
+            guard lstat(folder.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { continue }
+            folders[runtime.id] = folder
+        }
+        guard !folders.isEmpty else { return [:] }
+
+        let sizes = FolderSizing.walkedSizes(at: Array(folders.values))
+        var result: [String: Int64] = [:]
+        for (id, folder) in folders {
+            if let bytes = sizes[folder.standardizedFileURL.path], bytes > 0 {
+                result[id] = bytes
+            }
+        }
+        return result
+    }
+
+    /// This runtime with its dyld cache size set.
+    func withDyldCache(_ bytes: Int64?) -> SimulatorRuntime {
+        var copy = self
+        copy.dyldCacheBytes = bytes
+        return copy
     }
 
     // MARK: - Apple's downloads

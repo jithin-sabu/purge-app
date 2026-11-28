@@ -871,6 +871,7 @@
 ", syncs with iCloud" = "，与 iCloud 同步";
 "1 simulator uses it. %@" = "有 1 个模拟器在使用它。%@";
 "Build %@" = "构建版本 %@";
+"Build %@, plus %@ of cache" = "构建版本 %@，另有 %@ 缓存";
 "Choose an app to uninstall" = "请选择要卸载的应用";
 "Choose one app" = "请只选择一个应用";
 "Clean items marked Not Sure?" = "要清理标记为“无法确定”的项目吗？";
