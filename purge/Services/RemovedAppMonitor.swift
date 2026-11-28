@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import ServiceManagement
+import os
 
 /// Offers a leftovers review when an app leaves the Applications folders outside
 /// Purge, usually a Finder drag to the Trash (issue #65).
@@ -21,6 +22,11 @@ import ServiceManagement
 @MainActor
 final class RemovedAppMonitor: ObservableObject {
     static let shared = RemovedAppMonitor()
+
+    /// Each step of a review the watcher asked for, so a report of Purge
+    /// opening or staying open by itself can be traced (#464). Identifiers
+    /// are public; paths stay private.
+    private static let log = Logger(subsystem: "io.getpurge.app", category: "deleted-app-review")
 
     private enum UDKeys {
         static let isEnabled = "removedApps.offerLeftoverReview"
@@ -587,6 +593,7 @@ final class RemovedAppMonitor: ObservableObject {
                 // it must not open that review a second time.
                 let stillPending = Set(RemovedAppHandoff.pending().map(\.path))
                 for entry in checked where stillPending.contains(entry.record.path) {
+                    Self.log.notice("Record for \(entry.record.bundleID, privacy: .public): \(entry.stillRemoved ? "still removed" : "not a removal", privacy: .public)")
                     if entry.stillRemoved {
                         self.enqueue(entry.record)
                     } else {
@@ -626,16 +633,24 @@ final class RemovedAppMonitor: ObservableObject {
         }
         // Keep the queue. Onboarding finishing or Full Disk Access being granted
         // calls back into here.
-        guard FirstRunGate.hasCompletedOnboarding else { return }
+        guard FirstRunGate.hasCompletedOnboarding else {
+            Self.log.notice("Review waits for onboarding")
+            return
+        }
         // Closing it runs the queue again (see `attach`).
-        guard !store.isLookDeeperPresented else { return }
+        guard !store.isLookDeeperPresented else {
+            Self.log.notice("Review waits for the access sheet")
+            return
+        }
         guard !store.isShowingReviewOrCleaning else {
+            Self.log.notice("Review waits for the window to be free")
             waitForWindow(in: store)
             return
         }
         if !store.hasFullDiskAccess {
             store.refreshPermission()
             guard store.hasFullDiskAccess else {
+                Self.log.notice("Review waits for Full Disk Access")
                 showWindowForAccess()
                 return
             }
@@ -651,6 +666,7 @@ final class RemovedAppMonitor: ObservableObject {
         Task {
             let context = await RemovedAppPresence.reviewContext(for: next.app, fileNumber: next.fileNumber)
             guard phase == .preparing, current?.app.id == next.app.id else { return }
+            Self.log.notice("Preparing review of \(next.app.bundleID ?? "none", privacy: .public), still removed: \(context.stillRemoved, privacy: .public)")
             guard context.stillRemoved,
                   let plan = await store.removedAppLeftoverPlan(
                       for: next.app,
@@ -659,6 +675,7 @@ final class RemovedAppMonitor: ObservableObject {
                   )
             else {
                 guard phase == .preparing, current?.app.id == next.app.id else { return }
+                Self.log.notice("Nothing to review for \(next.app.bundleID ?? "none", privacy: .public)")
                 finishReview()
                 return
             }
@@ -692,6 +709,7 @@ final class RemovedAppMonitor: ObservableObject {
         }
         guard !revealedForBlockedReview, !store.isAnyCleanInProgress, !Self.appWindowIsOnScreen else { return }
         revealedForBlockedReview = true
+        Self.log.notice("Showing the window for what blocks the review")
         // Closed again with the review once it is over, like a window opened for
         // the review itself.
         openedWindowForReview = true
@@ -704,6 +722,7 @@ final class RemovedAppMonitor: ObservableObject {
     }
 
     private func present(_ plan: RemovedAppLeftoverPlan, in store: PurgeStore) {
+        Self.log.notice("Showing review of \(plan.app.bundleID ?? "none", privacy: .public)")
         if !openedWindowForReview {
             openedWindowForReview = !Self.appWindowIsOnScreen
         }
@@ -761,6 +780,7 @@ final class RemovedAppMonitor: ObservableObject {
                 installedBundleIDs: installedBundleIDs
             )
             guard !returned.isEmpty else { return }
+            Self.log.notice("Withdrew \(returned.count, privacy: .public) review(s): the app is back; phase \(String(describing: self.phase), privacy: .public)")
             queue.removeAll { returned.contains($0.app.id) }
             returned.forEach { RemovedAppHandoff.discard(path: $0) }
             if let current, returned.contains(current.app.id) {
@@ -772,6 +792,18 @@ final class RemovedAppMonitor: ObservableObject {
                     store?.removedAppLeftoverPlan = nil
                 case .idle, .cleaning:
                     break
+                }
+            } else if queue.isEmpty, phase == .idle {
+                // Every review still waiting in the queue was withdrawn before
+                // it could show. A Purge started for them goes away again, as
+                // when the drain finds nothing; this path used to leave it
+                // running with nothing to show (#464). Not while a drain is
+                // checking another record: it closes the launch itself if that
+                // one is no removal either. Not while a sheet that blocked the
+                // review is up: the window is in use, and stays as before.
+                stopWaitingForWindow()
+                if drainTask == nil, store?.isShowingReviewOrCleaning != true {
+                    closeWindowIfOpenedForReview()
                 }
             }
             updatePresenceWatch()
@@ -854,8 +886,12 @@ final class RemovedAppMonitor: ObservableObject {
         // setting was switched off must not quit under an open sheet.
         guard phase == .idle else { return }
         defer { openedWindowForReview = false }
-        guard openedWindowForReview, let store else { return }
+        guard openedWindowForReview, let store else {
+            Self.log.notice("Review over; the window was not opened for it, so it stays")
+            return
+        }
         guard store.errorMessage == nil else {
+            Self.log.notice("Review over; an alert keeps the window")
             // The alert needs the window, so both stay. The window is the user's
             // from here, as after `userOpenedWindow`: a quit kept for a later
             // review would end a Purge they went on using (#177).
@@ -874,12 +910,14 @@ final class RemovedAppMonitor: ObservableObject {
             cleanInProgress: store.isAnyCleanInProgress
         ) {
         case .quit:
+            Self.log.notice("Review over: quitting")
             quitsWhenDone = false
             NSApp.terminate(nil)
         case .quitAfterClean:
             quitsWhenDone = false
             quitsOnceCleanEnds = true
         case .hide:
+            Self.log.notice("Review over: hiding")
             NSApp.hide(nil)
         }
     }
