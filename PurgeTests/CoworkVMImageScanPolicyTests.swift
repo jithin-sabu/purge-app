@@ -85,6 +85,26 @@ struct CoworkVMImageScanPolicyTests {
         #expect(rows.first?.paths.map(\.path) == [Self.image(home), Self.origin(home)])
     }
 
+    /// The origin can be refused while the image is offered, as when it has a
+    /// second name. The scan then lists neither (review of #485).
+    @Test(arguments: ["hard link", "link"])
+    func theScanListsNothingWhenTheOriginIsRefused(kind: String) throws {
+        let fm = FileManager.default
+        let home = try Self.makeHome()
+        defer { try? fm.removeItem(at: home) }
+        let origin = URL(fileURLWithPath: Self.origin(home))
+        switch kind {
+        case "hard link":
+            #expect(link(origin.path, home.appendingPathComponent("second-origin").path) == 0)
+        default:
+            let elsewhere = home.appendingPathComponent("origin-elsewhere")
+            try fm.moveItem(at: origin, to: elsewhere)
+            try fm.createSymbolicLink(at: origin, withDestinationURL: elsewhere)
+        }
+        #expect(!Self.offered(Self.origin(home), home, Self.context(), .quick))
+        #expect(Policy.definitions(home: home.path, context: Self.context()).isEmpty)
+    }
+
     @Test
     func versionsMayDifferOnlyInSurroundingWhitespace() throws {
         let home = try Self.makeHome()

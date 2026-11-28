@@ -230,17 +230,15 @@ nonisolated enum CoworkVMImageScanPolicy {
     // MARK: Scan
 
     /// The row a scan offers: the image, then its origin file, in that order so
-    /// a clean moves the image first. Empty when the image isn't offered.
+    /// a clean moves the image first. Empty unless both are offered, so the
+    /// image is never listed without the file that names its version.
     static func definitions(home: String, context: Context) -> [(label: String, paths: [URL])] {
         let bundle = bundleFolder(home: home)
         let image = "\(bundle)/\(imageName)"
         let origin = "\(bundle)/\(imageOriginName)"
-        guard isOffered(image, home: home, context: context, check: .scan) else { return [] }
-        var paths = [URL(fileURLWithPath: image)]
-        // `.quick` for the origin: the image's `lsof` read just above covers it.
-        if isOffered(origin, home: home, context: context, check: .quick) {
-            paths.append(URL(fileURLWithPath: origin))
-        }
-        return [(label, paths)]
+        // `.quick` for the origin: the image's `lsof` read covers it.
+        guard isOffered(image, home: home, context: context, check: .scan),
+              isOffered(origin, home: home, context: context, check: .quick) else { return [] }
+        return [(label, [URL(fileURLWithPath: image), URL(fileURLWithPath: origin)])]
     }
 }
