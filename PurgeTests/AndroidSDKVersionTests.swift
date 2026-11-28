@@ -588,6 +588,11 @@ struct AndroidGradlePinsTests {
         #expect(try SDK.pins(home, app) == Pins(platforms: ["android-34", "android-35"], buildTools: []))
         try SDK.write("android.compile\\\n  Sdk 32\n", home, ".gradle/gradle.properties")
         #expect(try SDK.pins(home, app) == Pins(platforms: ["android-32", "android-35"], buildTools: []))
+        // An escaped key is decoded as Java decodes it, and a broken escape keeps everything.
+        try SDK.write("android.compile\\u0053dk 31\n", home, ".gradle/gradle.properties")
+        #expect(try SDK.pins(home, app) == Pins(platforms: ["android-31", "android-35"], buildTools: []))
+        try SDK.write("other\\u00zz = 1\n", home, ".gradle/gradle.properties")
+        #expect(try SDK.pins(home, app) == Pins(platforms: nil, buildTools: []))
         // An escape this reader doesn't follow keeps everything.
         try SDK.write("android.compileSdk = \\u0033\\u0031\n", home, ".gradle/gradle.properties")
         #expect(try SDK.pins(home, app) == Pins(platforms: nil, buildTools: []))

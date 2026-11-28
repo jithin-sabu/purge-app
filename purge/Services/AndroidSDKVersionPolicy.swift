@@ -894,8 +894,9 @@ nonisolated enum AndroidGradlePins {
     /// reads as a string. It reads the file the way Java properties do: a line
     /// ending in an odd number of `\` goes on with the next one, its leading
     /// spaces dropped, and a key ends at the first `=`, `:` or space not
-    /// escaped with `\`. Nil when the line for `key` holds another escape,
-    /// such as `\u0033`, or has no value.
+    /// escaped with `\`. Escapes in a key are decoded, `\u0053` included. Nil
+    /// when a key holds a broken `\u` escape, or the line for `key` has an
+    /// escape in its value, such as `\u0033`, or no value.
     static func propertyValues(_ text: String, key: String) -> [String]? {
         var logicalLines: [String] = []
         var pending: String?
@@ -916,16 +917,25 @@ nonisolated enum AndroidGradlePins {
         for line in logicalLines {
             var lineKey = ""
             var index = line.startIndex
-            var escaped = false
-            var otherEscape = false
             while index < line.endIndex {
                 let character = line[index]
-                if escaped {
-                    if !"=: #!\\".contains(character) { otherEscape = true }
-                    lineKey.append(character)
-                    escaped = false
-                } else if character == "\\" {
-                    escaped = true
+                if character == "\\" {
+                    // An escape in a key is decoded as Java decodes it.
+                    index = line.index(after: index)
+                    guard index < line.endIndex else { break }
+                    switch line[index] {
+                    case "t": lineKey.append("\t")
+                    case "n": lineKey.append("\n")
+                    case "r": lineKey.append("\r")
+                    case "f": lineKey.append("\u{0C}")
+                    case "u":
+                        let hex = line[line.index(after: index)...].prefix(4)
+                        guard hex.count == 4, let code = UInt32(hex, radix: 16),
+                              let scalar = Unicode.Scalar(code) else { return nil }
+                        lineKey.unicodeScalars.append(scalar)
+                        index = line.index(index, offsetBy: 4)
+                    default: lineKey.append(line[index])
+                    }
                 } else if "=: \t".contains(character) {
                     break
                 } else {
@@ -938,7 +948,7 @@ nonisolated enum AndroidGradlePins {
             if let first = rest.first, first == "=" || first == ":" {
                 rest = String(rest.dropFirst()).trimmingCharacters(in: .whitespaces)
             }
-            guard !otherEscape, !rest.isEmpty, !rest.contains("\\") else { return nil }
+            guard !rest.isEmpty, !rest.contains("\\") else { return nil }
             values.append("\"\(rest)\"")
         }
         return values
