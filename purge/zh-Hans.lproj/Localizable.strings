@@ -1627,3 +1627,5 @@
 "Built from %@ on %@." = "由 %@ 构建于 %@。";
 "Built from %@." = "由 %@ 构建。";
 "That project is no longer on this Mac." = "该项目已不在这台 Mac 上。";
+"Select build folders whose project is gone (%@)" = "选择所属项目已不在的构建文件夹（%@）";
+"Xcode build files from a project that is no longer on this Mac. Look them over before cleaning." = "来自已不在这台 Mac 上的项目的 Xcode 构建文件。清理前请先检查。";

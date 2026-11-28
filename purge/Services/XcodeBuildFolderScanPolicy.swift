@@ -156,6 +156,25 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         offered.withLock { $0.contains(path) }
     }
 
+    /// The offered folders whose project the last scan found gone, for the
+    /// "Select build folders whose project is gone" link. Read by the view on
+    /// every render, so it never touches the disk.
+    private static let projectGone = OSAllocatedUnfairLock<Set<String>>(initialState: [])
+
+    static func isProjectGone(_ path: String) -> Bool {
+        projectGone.withLock { $0.contains(path) }
+    }
+
+    static func recordProject(ofFolder path: String, exists: Bool?) {
+        projectGone.withLock { gone in
+            if exists == false {
+                gone.insert(path)
+            } else {
+                gone.remove(path)
+            }
+        }
+    }
+
     /// Recent answers for the on-screen list, which asks on the main thread
     /// for every row on every scan flush.
     private static let recentReads = OSAllocatedUnfairLock<[String: (Date, Bool)]>(initialState: [:])
@@ -423,6 +442,7 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         let projectExists: Bool? = ProtectedLocations.isReadable(workspace, access: access, home: home)
             ? FileManager.default.fileExists(atPath: mark.workspacePath)
             : nil
+        recordProject(ofFolder: path, exists: projectExists)
         return SafetyInfo(
             level: base.level,
             headline: String(localized: "Xcode Build Files in \(name)"),

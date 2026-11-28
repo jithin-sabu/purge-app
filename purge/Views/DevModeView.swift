@@ -488,7 +488,9 @@ struct DevToolsView: View {
                 key: .tool(tool.id),
                 isSafe: tool.safetyInfo.level == .safe,
                 isSelected: sel.devToolIDs.contains(tool.id),
-                bytes: tool.sizeBytes
+                bytes: tool.sizeBytes,
+                isProjectGone: XcodeBuildFolderScanPolicy.folderPath(inLabel: tool.toolName)
+                    .map(XcodeBuildFolderScanPolicy.isProjectGone) ?? false
             ))
         }
         for (gi, ai) in eligibleProjectArtifactPairs() {

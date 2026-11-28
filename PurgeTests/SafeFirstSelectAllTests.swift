@@ -37,6 +37,29 @@ struct SafeFirstSelectAllTests {
         #expect(link.change == Model.Change(select: ["b", "c"]))
     }
 
+    @Test func theProjectGoneLinkSelectsOnlyUnselectedBuildFoldersWhoseProjectIsGone() throws {
+        var gone = entry("gone", safe: false, bytes: 1_000_000_000)
+        gone.isProjectGone = true
+        var goneSelected = entry("gone-selected", safe: false, selected: true)
+        goneSelected.isProjectGone = true
+        let model = Model(
+            entries: [entry("safe", safe: true), gone, goneSelected, entry("here", safe: false)],
+            filter: .all
+        )
+        let link = try #require(model.projectGoneLink)
+        #expect(link.title == "Select build folders whose project is gone (\(formatBytes(1_000_000_000)))")
+        #expect(link.change == Model.Change(select: ["gone"]))
+        // The checkbox still takes only the safe row.
+        #expect(model.toggled() == Model.Change(select: ["safe"]))
+    }
+
+    @Test func theProjectGoneLinkHidesWhenNoneIsLeft() {
+        var gone = entry("gone", safe: false, selected: true)
+        gone.isProjectGone = true
+        #expect(Model(entries: [gone, entry("b", safe: false)], filter: .checkFirst).projectGoneLink == nil)
+        #expect(Model(entries: [entry("b", safe: false)], filter: .all).projectGoneLink == nil)
+    }
+
     @Test func theLinkCountsOnlyUnselectedCheckFirstRows() throws {
         let model = Model(
             entries: [

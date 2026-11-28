@@ -1586,3 +1586,5 @@
 "Built from %@ on %@." = "Собрано из %@, дата: %@.";
 "Built from %@." = "Собрано из %@.";
 "That project is no longer on this Mac." = "Этого проекта больше нет на этом Mac.";
+"Select build folders whose project is gone (%@)" = "Выбрать папки сборки, чьего проекта больше нет (%@)";
+"Xcode build files from a project that is no longer on this Mac. Look them over before cleaning." = "Файлы сборки Xcode от проекта, которого больше нет на этом Mac. Просмотрите их перед очисткой.";

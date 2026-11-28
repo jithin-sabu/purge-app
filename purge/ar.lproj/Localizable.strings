@@ -1561,3 +1561,5 @@
 "Built from %@ on %@." = "بُنيت من %@ في %@.";
 "Built from %@." = "بُنيت من %@.";
 "That project is no longer on this Mac." = "لم يعد هذا المشروع على جهاز Mac هذا.";
+"Select build folders whose project is gone (%@)" = "تحديد مجلدات البناء التي لم يعد مشروعها موجودًا (%@)";
+"Xcode build files from a project that is no longer on this Mac. Look them over before cleaning." = "ملفات بناء Xcode من مشروع لم يعد على جهاز Mac هذا. راجعها قبل التنظيف.";

@@ -549,6 +549,16 @@ struct XcodeBuildFolderTests {
         let goneText = Policy.safetyInfo(forFolder: gone.path, home: home, access: .full).explanation
         #expect(goneText.hasPrefix("Built from purge-324 on "))
         #expect(goneText.hasSuffix("That project is no longer on this Mac."))
+
+        // The rows' text and the "project is gone" link read the same answer.
+        #expect(Policy.isProjectGone(gone.path))
+        #expect(!Policy.isProjectGone(present.path))
+        // A project that comes back clears it on the next scan.
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent("Developer/purge-324/purge.xcodeproj"), withIntermediateDirectories: true
+        )
+        _ = Policy.safetyInfo(forFolder: gone.path, home: home, access: .full)
+        #expect(!Policy.isProjectGone(gone.path))
     }
 
     @Test("a project Purge may not look at is never called gone")

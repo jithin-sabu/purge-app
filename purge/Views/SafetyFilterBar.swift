@@ -172,6 +172,15 @@ struct SafeFirstSelectAllControl<Key: Hashable>: View {
                 .help("Check First items may hold something you'd miss. Look them over before cleaning.")
                 .transition(.opacity)
             }
+
+            if let link = model.projectGoneLink {
+                Button(link.title) {
+                    apply(link.change)
+                }
+                .buttonStyle(.purge(.quiet, size: .small))
+                .help("Xcode build files from a project that is no longer on this Mac. Look them over before cleaning.")
+                .transition(.opacity)
+            }
         }
         // As tall as the link's button, so the checkbox stays put as the link comes and goes.
         .frame(minHeight: 24)

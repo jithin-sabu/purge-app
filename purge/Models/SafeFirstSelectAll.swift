@@ -13,6 +13,8 @@ struct SafeFirstSelectAll<Key: Hashable> {
         let isSafe: Bool
         let isSelected: Bool
         let bytes: Int64
+        /// An Xcode build folder whose project is no longer on this Mac (#480).
+        var isProjectGone = false
     }
 
     /// The keys a click selects and clears.
@@ -77,6 +79,19 @@ struct SafeFirstSelectAll<Key: Hashable> {
         let verb = safeEntries.isEmpty ? String(localized: "Select") : String(localized: "Also select")
         return (
             String(localized: "\(verb) \(rows.count) Check First items (\(formatBytes(bytes)))"),
+            Change(select: rows.map(\.key))
+        )
+    }
+
+    /// The link that selects the Xcode build folders whose project is gone
+    /// (#480). They are Check First, so it is a separate click like the link
+    /// above, and it shows on any filter that lists one not yet selected.
+    var projectGoneLink: (title: String, change: Change)? {
+        let rows = entries.filter { $0.isProjectGone && !$0.isSelected }
+        guard !rows.isEmpty else { return nil }
+        let bytes = rows.reduce(Int64(0)) { $0 + $1.bytes }
+        return (
+            String(localized: "Select build folders whose project is gone (\(formatBytes(bytes)))"),
             Change(select: rows.map(\.key))
         )
     }
