@@ -1191,6 +1191,11 @@ struct DevToolsView: View {
                         let slice = XcodeBuildFolderCardSlice.at(index, of: rows.count)
                         buildFolderListRowView(row, tools: tools)
                             .modifier(XcodeBuildFolderCardChrome(slice: slice))
+                            .background(alignment: .top) {
+                                if row.isHeader {
+                                    XcodeBuildFolderCardBackdrop(childRows: rows.count - 2)
+                                }
+                            }
                             .id(row.isHeader ? AnyHashable(DeveloperListRowID.buildFolders) : AnyHashable(row.id))
                             .listRowInsets(XcodeBuildFolderCardSlice.listInsets)
                             .listRowBackground(Color.clear)
