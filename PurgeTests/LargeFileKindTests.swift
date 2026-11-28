@@ -201,7 +201,7 @@ struct LargeFileKindTests {
         let home = try Home()
         defer { home.remove() }
         try home.write("Downloads/Win.pvm/harddisk.hdd/disk.hds")
-        let parallels = VirtualMachineApp.parallels.bundleID
+        let parallels = try #require(VirtualMachineApp.parallels.bundleID)
 
         let found = await scan(home, runningApps: [parallels])
         #expect(found.isEmpty)

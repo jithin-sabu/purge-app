@@ -1301,6 +1301,8 @@
 "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "آلة افتراضية. كل ما بداخلها يُزال معها. أزلها من Parallels Desktop كي تبقى قائمة الآلات الافتراضية في التطبيق صحيحة.";
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "آلة افتراضية. كل ما بداخلها يُزال معها. أزلها من UTM كي تبقى قائمة الآلات الافتراضية في التطبيق صحيحة.";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "آلة افتراضية. كل ما بداخلها يُزال معها. أزلها من VMware Fusion كي تبقى قائمة الآلات الافتراضية في التطبيق صحيحة.";
+"Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "آلة افتراضية. كل ما بداخلها يُزال معها. أزلها من VirtualBox كي تبقى قائمة الآلات الافتراضية في التطبيق صحيحة.";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so moving it to the Trash keeps that list right, as tart delete does." = "آلة افتراضية. كل ما بداخلها يُزال معها. لا يعرض Tart إلا الآلات الافتراضية الموجودة في مجلده، لذا يُبقي نقلها إلى سلة المهملات قائمته صحيحة، كما يفعل tart delete.";
 "Visual Intelligence, Photos Clean Up and Spatial Photos" = "Visual Intelligence و Photos Clean Up و Spatial Photos";
 "Vite cache" = "ذاكرة التخزين المؤقت لـ Vite";
 "Waiting for %@" = "في انتظار %@";

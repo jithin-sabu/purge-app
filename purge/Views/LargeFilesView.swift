@@ -1352,9 +1352,13 @@ private struct LargeFileThumbnailIcon: View {
 
     /// Empty for a row the scanner named itself: a model folder like
     /// `models--mlx-community--Llama-3.2-3B` has no extension, only a dot in
-    /// its name, and a `.2-3B…` label over the icon would be nonsense.
+    /// its name, and a `.2-3B…` label over the icon would be nonsense. Empty
+    /// too for a VirtualBox or Tart VM, a folder named after the VM, where
+    /// `Ubuntu 24.04` would show `.04` (#475).
     private var fileExtension: String {
-        file.displayNameOverride == nil ? file.path.pathExtension.lowercased() : ""
+        if file.displayNameOverride != nil { return "" }
+        if case .virtualMachine(let app, _) = file.kind, app.bundleExtension == nil { return "" }
+        return file.path.pathExtension.lowercased()
     }
 
     var body: some View {
