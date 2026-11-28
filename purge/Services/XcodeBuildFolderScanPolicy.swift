@@ -8,7 +8,7 @@ import os
 /// told, and Xcode's Locations setting can move them too. Such a folder has any
 /// name, so it is known by what is inside it, never by its name: Xcode's
 /// `info.plist` naming the project it built (`WorkspacePath`), `Build` and
-/// `Logs` folders, and nothing Xcode does not make. A folder that also holds a
+/// `Logs` folders, and at its top nothing Xcode does not make. A folder that also holds a
 /// log, a result bundle or anything else someone put there is never offered.
 ///
 /// Each folder gets its own Check First row in Dev Tools. Xcode's own
@@ -288,7 +288,8 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         func mayEnter(_ path: String) -> Bool {
             guard PathContainment.isInside(path, homePath),
                   !PathContainment.isSameOrInside(path, libraryPath),
-                  !foreignMounts.contains(path) else { return false }
+                  // A root added in Settings may sit below a share, not only on it.
+                  !foreignMounts.contains(where: { PathContainment.isSameOrInside(path, $0) }) else { return false }
             guard access == .full || !ProtectedLocations.isPath(path, inAnyOf: protectedRoots) else { return false }
             return !ExcludedPathsStore.isExcluded(URL(fileURLWithPath: path, isDirectory: true))
         }

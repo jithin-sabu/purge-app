@@ -82,7 +82,7 @@
 一个视图中包含五个部分：
 
 - **全局开发工具缓存**：Xcode（Derived Data、Archives、DeviceSupport）、Homebrew、npm、pnpm、Yarn、CocoaPods、Gradle、Dart 和 Flutter 的 pub 缓存、Docker Desktop、VS Code、Cursor、JetBrains、Cargo、Terraform 等
-- **其他位置的 Xcode 构建文件夹**：`xcodebuild -derivedDataPath` 放在 Xcode 自己文件夹之外的构建文件。Purge 靠文件夹里 Xcode 的 `info.plist` 认出它们，从不靠名称。每个文件夹单独一行，标为“先检查”，并写明它是从哪个项目构建的。文件夹里有 Xcode 不会创建的东西、正被运行中的程序打开，或有 LaunchAgent 从中启动程序时，Purge 不会动它
+- **其他位置的 Xcode 构建文件夹**：`xcodebuild -derivedDataPath` 放在 Xcode 自己文件夹之外的构建文件。Purge 靠文件夹里 Xcode 的 `info.plist` 认出它们，从不靠名称。每个文件夹单独一行，标为“先检查”，并写明它是从哪个项目构建的。文件夹顶层有 Xcode 不会创建的东西、正被运行中的程序打开，或有 LaunchAgent 从中启动程序时，Purge 不会动它
 - **iOS 模拟器**：每个已关闭的模拟器各占一行。正在运行的模拟器也会列出，以便计入它占用的空间，但无法选中
 - **模拟器运行时**：`simctl` 标记为可删除的运行时，每个一行
 - **Xcode 组件**：Xcode 可选的 Metal 工具链（约 900 MB），在完整的 Xcode 列出它已安装时，通过 `xcodebuild -deleteComponent` 移除

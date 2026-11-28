@@ -426,6 +426,13 @@ struct XcodeBuildFolderTests {
             addedRoots: [], nonLocalMounts: [share]
         )
         #expect(found.map(\.path) == [local.path])
+        // A root added in Settings below the share is never read either.
+        try Fixture.buildFolder(home, "Developer/share/client/dd")
+        let belowShare = Policy.walk(
+            [home.appendingPathComponent("Developer/share/client")], home: home, access: .full,
+            addedRoots: [], nonLocalMounts: [share]
+        )
+        #expect(belowShare.isEmpty)
         #expect(!Policy.passesImmediateTrashBoundary(
             onShare, home: home.path, lister: Fixture.noOpenFiles, nonLocalMounts: [share]
         ))
