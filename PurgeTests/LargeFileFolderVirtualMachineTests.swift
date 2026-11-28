@@ -624,6 +624,25 @@ struct LargeFileFolderVirtualMachineTests {
         #expect(!isEligible(home.path("Documents/{1}.vdi"), home))
     }
 
+    /// A VM folder renamed in Finder keeps its `.vbox` under the old name. If
+    /// it also can't be listed, nothing finds the `.vbox` by name, so a folder
+    /// that can't be listed counts as holding a VM's files.
+    @Test
+    func renamedVMFolderThatCantBeListedStillMarksItsSnapshots() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("VirtualBox VMs/Win-old/Win.vbox", text: "<VirtualBox/>")
+        try home.write("VirtualBox VMs/Win-old/Snapshots/{1}.vdi", bytes: 8192)
+        try FileManager.default.removeItem(at: home.documents)
+        try home.link("Documents", to: "VirtualBox VMs/Win-old/Snapshots")
+        let vm = home.virtualBox.appendingPathComponent("Win-old")
+        try FileManager.default.setAttributes([.posixPermissions: 0o111], ofItemAtPath: vm.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: vm.path) }
+
+        #expect(await scan(home).isEmpty)
+        #expect(!isEligible(home.path("Documents/{1}.vdi"), home))
+    }
+
     /// A VirtualBox VM that starts while the clone search runs is caught by
     /// a second open-file check before the gate says yes.
     @Test

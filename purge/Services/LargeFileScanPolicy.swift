@@ -97,19 +97,6 @@ enum LargeFileScanPolicy {
         return holdsVirtualMachineFiles(entries)
     }
 
-    /// The markers a folder's own name points to, read with `stat` alone,
-    /// which works in a folder that can be searched but not listed:
-    /// `<name>.vbox`, or `config.json` and `disk.img`. A `.vbox` under another
-    /// name can't be found without a listing.
-    nonisolated static func hasVirtualMachineMarkersByName(_ folder: URL) -> Bool {
-        func isRegularFile(_ name: String) -> Bool {
-            var info = stat()
-            return stat(folder.appendingPathComponent(name).path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
-        }
-        return isRegularFile(folder.lastPathComponent + ".vbox")
-            || (isRegularFile("config.json") && isRegularFile("disk.img"))
-    }
-
     private nonisolated static func hasRegularFile(_ name: String, in entries: [ListingEntry]) -> Bool {
         entries.contains { $0.isRegularFile && $0.name.caseInsensitiveCompare(name) == .orderedSame }
     }
@@ -186,7 +173,7 @@ enum LargeFileScanPolicy {
             // A root that holds a VM's files, or sits inside a folder that
             // does, is not walked, so nothing in it is a VM to offer.
             let rootURL = URL(fileURLWithPath: rootPath, isDirectory: true)
-            if folderOrAboveHoldsVirtualMachineFiles(rootURL, home: home) { return nil }
+            if folderOrAboveHoldsVirtualMachineFiles(rootURL, home: home, volumes: volumes) { return nil }
             let between = real.path.dropFirst(rootPath.count).split(separator: "/").dropLast()
             switch root.app {
             case .tart:
@@ -206,15 +193,24 @@ enum LargeFileScanPolicy {
     }
 
     /// Where the check for VM files above a folder stops: the home folder
-    /// for a folder in it, the drive for a folder on one, else `/`. The stop
-    /// itself is never checked, so Tart's files left in the home folder don't
-    /// block every root.
-    nonisolated static func virtualMachineFilesBoundary(for path: String, home: URL) -> String {
+    /// for a folder in it, the drive for a folder on one under `volumes`. The
+    /// stop itself is never checked, so Tart's files left in the home folder
+    /// don't block every root. A folder in neither is never a Large Files root
+    /// on a real Mac (`walkedFolder` and the added-folder rules keep roots in
+    /// home or on a drive), so nothing above it is checked.
+    nonisolated static func virtualMachineFilesBoundary(
+        for path: String,
+        home: URL,
+        volumes: URL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+    ) -> String {
         let homePath = home.resolvingSymlinksInPath().standardizedFileURL.path
         if PathContainment.isSameOrInside(path, homePath) { return homePath }
-        let parts = path.split(separator: "/")
-        if parts.count >= 2, parts[0] == "Volumes" { return "/Volumes/" + parts[1] }
-        return "/"
+        let volumesPath = volumes.resolvingSymlinksInPath().standardizedFileURL.path
+        if let separator = PathContainment.separatorIndex(after: volumesPath, in: path) {
+            let drive = path[path.index(after: separator)...].split(separator: "/").first.map(String.init) ?? ""
+            return volumesPath + "/" + drive
+        }
+        return path
     }
 
     /// Whether `folder`, or any folder above it up to the boundary, holds a
@@ -222,18 +218,18 @@ enum LargeFileScanPolicy {
     /// folder is inside that VM even though it holds no `.vbox` itself, so the
     /// walk skips such a root and the gate refuses everything under it. The
     /// folder is spelled as `resolvingSymlinksInPath` spells it. A folder that
-    /// can be searched but not listed is asked by name instead
-    /// (`hasVirtualMachineMarkersByName`), so a VM folder that hides its
-    /// listing doesn't hide its `.vbox`.
-    nonisolated static func folderOrAboveHoldsVirtualMachineFiles(_ folder: URL, home: URL) -> Bool {
+    /// can't be listed counts as holding them: a VM folder renamed in Finder
+    /// keeps its `.vbox` under the old name, which no check by name finds.
+    nonisolated static func folderOrAboveHoldsVirtualMachineFiles(
+        _ folder: URL,
+        home: URL,
+        volumes: URL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+    ) -> Bool {
         var current = folder.standardizedFileURL
-        let boundary = virtualMachineFilesBoundary(for: current.path, home: home)
+        let boundary = virtualMachineFilesBoundary(for: current.path, home: home, volumes: volumes)
         while current.path != "/", PathContainment.isInside(current.path, boundary) {
-            if let entries = DirectoryListing.entries(of: current.path) {
-                if holdsVirtualMachineFiles(entries) { return true }
-            } else if hasVirtualMachineMarkersByName(current) {
-                return true
-            }
+            guard let entries = DirectoryListing.entries(of: current.path) else { return true }
+            if holdsVirtualMachineFiles(entries) { return true }
             current = current.deletingLastPathComponent()
         }
         return false
@@ -821,7 +817,9 @@ enum LargeFileScanPolicy {
         // files, up to the home folder or the drive: a disk trashed alone
         // breaks the VM (#475). The walk skips the same folders, a root
         // reached through a link into a VM's `Snapshots` included.
-        if folderOrAboveHoldsVirtualMachineFiles(real.deletingLastPathComponent(), home: home) { return false }
+        if folderOrAboveHoldsVirtualMachineFiles(real.deletingLastPathComponent(), home: home, volumes: volumes) {
+            return false
+        }
 
         guard isDir.boolValue else { return isUnder(scanRoots(home: home)) || isUnderAddedFolder() }
 
