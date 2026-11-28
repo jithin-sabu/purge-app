@@ -1559,3 +1559,15 @@
 "Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "يغيّر لغة Purge وحده. وهو الإعداد نفسه الموجود لـ Purge في إعدادات النظام ضمن «اللغة والمنطقة» > «التطبيقات». لا تنعكس واجهة Purge من اليمين إلى اليسار مع العربية إلا عندما تكون العربية لغة جهاز Mac نفسه.";
 "Relaunch Purge to switch to %@." = "أعد تشغيل Purge للتبديل إلى %@.";
 "Relaunch Now" = "إعادة التشغيل الآن";
+"Xcode Build Files in %@" = "ملفات بناء Xcode في %@";
+"Built from %@ on %@." = "بُنيت من %@ في %@.";
+"Built from %@." = "بُنيت من %@.";
+"That folder is no longer on this Mac." = "لم يعد هذا المجلد على جهاز Mac هذا.";
+"Xcode build folders" = "مجلدات بناء Xcode";
+"Built outside Xcode's own folder. %@" = "خارج مجلد Xcode نفسه. %@";
+"Select all Xcode build folders" = "تحديد كل مجلدات بناء Xcode";
+"Show folders" = "إظهار المجلدات";
+"Hide folders" = "إخفاء المجلدات";
+"Built from a folder that's gone" = "مبني من مجلد لم يعد موجودًا";
+"Built from a folder still here" = "مبني من مجلد لا يزال موجودًا";
+"Select %@" = "تحديد %@";

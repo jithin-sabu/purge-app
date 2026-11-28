@@ -934,3 +934,7 @@
 "An older uv Python patch. No environment, .python-version or setting Purge found uses it. Tools that call it by path break until uv python install restores it." = "Eski uv Python yaması. Purge onu kullanan ortam, .python-version ya da ayar bulamadı. Yoluyla çağıran araçlar uv python install'a dek bozulur.";
 "pyenv Python Version" = "pyenv Python Sürümü";
 "A Python from pyenv, not run for 90 days and not the newest of its minor. No pin, venv or config Purge found uses it. pyenv install brings it back." = "pyenv'den bir Python: 90 gündür çalışmadı, ara sürümünün en yenisi değil. Purge onu kullanan bir sabitleme, venv ya da ayar bulamadı. pyenv install geri getirir.";
+
+/* xcode-build-folder */
+"Xcode Build Files Elsewhere" = "Başka Yerdeki Xcode Derleme Dosyaları";
+"Xcode makes these files again the next time you build the project." = "Projeyi bir sonraki derlemenizde Xcode bu dosyaları yeniden oluşturur.";

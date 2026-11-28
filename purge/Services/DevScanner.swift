@@ -1038,6 +1038,7 @@ nonisolated final class DevScanner {
             + Self.oldCLIVersionDefinitions(home: home)
             + OldToolVersionScanPolicy.definitions(home: home)
             + PlaywrightBuildScanPolicy.definitions(home: home, access: access)
+            + XcodeBuildFolderScanPolicy.definitions(home: home, access: access)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
@@ -1069,7 +1070,11 @@ nonisolated final class DevScanner {
                 lastModified: .distantPast,
                 isSelected: false,
                 isDetected: true,
-                safetyInfo: safetyInfo(
+                // An Xcode build folder's row names its project and when it was
+                // last built, read here because it needs the scan's access (#480).
+                safetyInfo: XcodeBuildFolderScanPolicy.folderPath(inLabel: label).map {
+                    XcodeBuildFolderScanPolicy.safetyInfo(forFolder: $0, home: home, access: access)
+                } ?? safetyInfo(
                     forToolLabel: label,
                     primaryPath: existing.first
                 ),
