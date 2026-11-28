@@ -1031,6 +1031,22 @@ final class PurgeStore: ObservableObject {
         isDeleting || isManualCleaningInProgress
     }
 
+    /// `true` while any scan or measurement runs, in the queue or beside it.
+    /// Relaunch Now in Settings waits for it, because quitting throws the work
+    /// away (#465). `isScanningAll` alone missed Large Files and the others.
+    var isAnyScanRunning: Bool {
+        scanQueue.isRunning
+            || isScanningAll
+            || isScanningGeneral
+            || isScanningDeveloper
+            || isScanningProjects
+            || isScanningLargeFiles
+            || isScanningInstalledApps
+            || isScanningOrphans
+            || isScanningCommandLineTools
+            || isMeasuringEverythingElse
+    }
+
     /// `true` while a review sheet, confirmation, clean, or its summary owns the
     /// window. `ContentView` can present only one of these at a time, so an
     /// unprompted review waits until this clears.

@@ -1550,3 +1550,8 @@
 "Double-click it, then click Install." = "انقر عليه نقرًا مزدوجًا، ثم انقر على «تثبيت».";
 "Confirm with Install, and your password if asked." = "أكّد بالنقر على «تثبيت»، وأدخل كلمة السر إن طُلبت.";
 "Select it, click the minus button, then Remove." = "حدّده، وانقر على زر الطرح، ثم على «إزالة».";
+"Language" = "اللغة";
+"System default" = "افتراضي النظام";
+"Changes the language of Purge only. It's the same setting as Purge's entry under Language & Region > Applications in System Settings. Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic." = "يغيّر لغة Purge وحده. وهو الإعداد نفسه الموجود لـ Purge في إعدادات النظام ضمن «اللغة والمنطقة» > «التطبيقات». لا تنعكس واجهة Purge من اليمين إلى اليسار مع العربية إلا عندما تكون العربية لغة جهاز Mac نفسه.";
+"Relaunch Purge to switch to %@." = "أعد تشغيل Purge للتبديل إلى %@.";
+"Relaunch Now" = "إعادة التشغيل الآن";

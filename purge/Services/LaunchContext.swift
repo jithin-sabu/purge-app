@@ -68,7 +68,15 @@ enum LaunchContext {
     /// hidden the window opens behind the front app or stays off screen. That
     /// covers a launch from Finder or Spotlight and the relaunch after an
     /// update (#428). A windowless launch has no window to bring forward.
-    static func shouldRevealInitialWindow(hidesDockIcon: Bool, startsWindowless: Bool) -> Bool {
-        hidesDockIcon && !startsWindowless
+    ///
+    /// The Language row's relaunch (#465) needs it too, Dock icon or not: the
+    /// new copy is opened by a shell that is never in front, and macOS left it
+    /// inactive with its window off screen in on-demand mode.
+    static func shouldRevealInitialWindow(
+        hidesDockIcon: Bool,
+        relaunchedByPurge: Bool = false,
+        startsWindowless: Bool
+    ) -> Bool {
+        (hidesDockIcon || relaunchedByPurge) && !startsWindowless
     }
 }

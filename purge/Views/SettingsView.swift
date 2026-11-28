@@ -11,6 +11,7 @@ struct SettingsView: View {
     @ObservedObject private var history = CleanupHistoryStore.shared
     @ObservedObject private var removedApps = RemovedAppMonitor.shared
     @ObservedObject private var finderService = FinderServicePreference.shared
+    @ObservedObject private var language = AppLanguagePreference.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
     private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
     @AppStorage(AppearanceMode.userDefaultsKey)
@@ -79,6 +80,8 @@ struct SettingsView: View {
         .onAppear {
             startup.refreshLoginItemStatus()
             helper.refresh()
+            // Changed in System Settings while another page was open (#465).
+            language.refresh()
         }
         // The user can turn the login item off in System Settings without telling
         // us; re-read on the way back in so the switch isn't stale. The privileged
@@ -87,6 +90,8 @@ struct SettingsView: View {
             startup.refreshLoginItemStatus()
             clearLoginItemFailureIfResolved()
             helper.refresh()
+            // The language can be changed in System Settings too (#465).
+            language.refresh()
         }
         .sheet(isPresented: $showExcludedFoldersSheet) {
             excludedFoldersSheet
@@ -204,8 +209,41 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            settingsSectionDivider
+
+            // No caption: the text on screen already shows the language (#465).
+            settingsPickerRow(
+                title: String(localized: "Language"),
+                info: String(localized: """
+                    Changes the language of Purge only. It's the same setting as Purge's \
+                    entry under Language & Region > Applications in System Settings. \
+                    Purge's layout runs right to left for Arabic only when your Mac itself uses Arabic.
+                    """),
+                status: languageStatus,
+                selection: Binding(
+                    get: { language.choice },
+                    set: { language.select($0) }
+                ),
+                options: language.options,
+                optionLabel: language.label(for:)
+            )
         }
         .animation(scheduleLayoutAnimation, value: startup.showsMenuBarIcon)
+    }
+
+    /// Shows from picking a language until Purge relaunches in it. Relaunch Now
+    /// waits while a scan, clean, review or uninstall is running.
+    private var languageStatus: SettingsRowStatus? {
+        guard language.needsRelaunch else { return nil }
+        let name = AppLanguagePreference.nativeName(of: language.resolvedLanguage)
+        return SettingsRowStatus(
+            text: String(localized: "Relaunch Purge to switch to \(name)."),
+            tint: AppColors.statusCheckText,
+            actionTitle: String(localized: "Relaunch Now"),
+            isActionDisabled: store.isReviewingOrCleaning || store.isAnyScanRunning,
+            action: { AppRelauncher.relaunch() }
+        )
     }
 
     private var menuBarModeCaption: String {
@@ -1370,11 +1408,18 @@ struct SettingsView: View {
         title: String,
         caption: String? = nil,
         info: String? = nil,
+        status: SettingsRowStatus? = nil,
         animatesCaptionChanges: Bool = false,
         @ViewBuilder control: () -> Control
     ) -> some View {
         HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
-            settingsRowLabel(title: title, caption: caption, info: info, animatesCaptionChanges: animatesCaptionChanges)
+            settingsRowLabel(
+                title: title,
+                caption: caption,
+                info: info,
+                status: status,
+                animatesCaptionChanges: animatesCaptionChanges
+            )
 
             control()
         }
@@ -1386,11 +1431,12 @@ struct SettingsView: View {
         title: String,
         caption: String? = nil,
         info: String? = nil,
+        status: SettingsRowStatus? = nil,
         selection: Binding<Option>,
         options: [Option],
         optionLabel: @escaping (Option) -> String
     ) -> some View {
-        settingsControlRow(title: title, caption: caption, info: info) {
+        settingsControlRow(title: title, caption: caption, info: info, status: status) {
             SettingsMenuPicker(
                 selection: selection,
                 options: options,
