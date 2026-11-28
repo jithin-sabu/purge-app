@@ -349,6 +349,129 @@ struct XcodeBuildFolderTests {
         #expect(!Policy.passesImmediateTrashBoundary(folder, home: home.path, lister: Fixture.noOpenFiles))
     }
 
+    // MARK: Review of #482
+
+    @Test("a folder offered as a build folder that loses its mark stays, at the move and in the list")
+    func lostMarkIsRefused() throws {
+        let home = try Fixture.makeHome()
+        let folder = try Fixture.buildFolder(home, "Developer/dd")
+        Policy.recordOffered([folder])
+        #expect(Policy.passesImmediateTrashBoundary(folder, home: home.path, lister: Fixture.noOpenFiles))
+        #expect(!Policy.refusesDeletion(folder))
+
+        // Saved at the folder's top between the scan and the move.
+        try Data("notes".utf8).write(to: folder.appendingPathComponent("notes.txt"))
+        #expect(!Policy.passesImmediateTrashBoundary(folder, home: home.path, lister: Fixture.noOpenFiles))
+        #expect(Policy.refusesDeletion(folder))
+
+        // info.plist removed: no longer looks like a build folder at all, and still stays.
+        let other = try Fixture.buildFolder(home, "Developer/other")
+        Policy.recordOffered([other])
+        try FileManager.default.removeItem(at: other.appendingPathComponent("info.plist"))
+        #expect(!Policy.passesImmediateTrashBoundary(other, home: home.path, lister: Fixture.noOpenFiles))
+        #expect(Policy.refusesDeletion(other))
+
+        // A folder no scan offered, with no mark, is not this rule's.
+        let plain = home.appendingPathComponent("Developer/plain")
+        try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
+        #expect(Policy.passesImmediateTrashBoundary(plain, home: home.path, lister: { nil }))
+        #expect(!Policy.refusesDeletion(plain))
+    }
+
+    @Test("the list may reuse a read for two seconds; a move reads the folder again")
+    func listReusesRecentRead() throws {
+        let home = try Fixture.makeHome()
+        let folder = try Fixture.buildFolder(home, "Developer/dd")
+        Policy.recordOffered([folder])
+        let start = Date()
+        #expect(!Policy.refusesDeletion(folder, reuseRecentRead: true, now: start))
+        try Data("x".utf8).write(to: folder.appendingPathComponent("stray.txt"))
+        #expect(!Policy.refusesDeletion(folder, reuseRecentRead: true, now: start.addingTimeInterval(1)))
+        #expect(Policy.refusesDeletion(folder, reuseRecentRead: true, now: start.addingTimeInterval(3)))
+        #expect(Policy.refusesDeletion(folder, reuseRecentRead: false, now: start.addingTimeInterval(1)))
+    }
+
+    @Test("below a folder added in Settings, the walk skips another sync service's folder")
+    func walkSkipsOffLimitsBelowAddedFolders() throws {
+        let home = try Fixture.makeHome()
+        let added = home.appendingPathComponent("Clients")
+        try Fixture.buildFolder(home, "Clients/Shared/app/dd")
+        try Data().write(to: home.appendingPathComponent("Clients/Shared/.dropbox"))
+        let kept = try Fixture.buildFolder(home, "Clients/other/dd")
+        let found = Policy.walk([added], home: home, access: .full, addedRoots: [added.path], nonLocalMounts: [])
+        #expect(found.map(\.path) == [kept.path])
+    }
+
+    @Test("the move refuses a build folder below an off-limits folder in an added folder")
+    func moveRefusesBelowOffLimits() throws {
+        let home = try Fixture.makeHome()
+        let added = home.appendingPathComponent("Clients").path
+        let synced = try Fixture.buildFolder(home, "Clients/Shared/app/dd")
+        try Data().write(to: home.appendingPathComponent("Clients/Shared/.dropbox"))
+        let fine = try Fixture.buildFolder(home, "Clients/other/dd")
+        ScanFolders.$snapshotOverride.withValue(.init(walked: [added], saved: [added])) {
+            #expect(!Policy.passesImmediateTrashBoundary(synced, home: home.path, lister: Fixture.noOpenFiles))
+            #expect(Policy.passesImmediateTrashBoundary(fine, home: home.path, lister: Fixture.noOpenFiles))
+        }
+    }
+
+    @Test("the walk and the move stay off a mount that is not a local disk")
+    func nonLocalMountsAreSkipped() throws {
+        let home = try Fixture.makeHome()
+        let share = home.appendingPathComponent("Developer/share").path
+        let onShare = try Fixture.buildFolder(home, "Developer/share/dd")
+        let local = try Fixture.buildFolder(home, "Developer/dd")
+        let found = Policy.walk(
+            [home.appendingPathComponent("Developer")], home: home, access: .full,
+            addedRoots: [], nonLocalMounts: [share]
+        )
+        #expect(found.map(\.path) == [local.path])
+        #expect(!Policy.passesImmediateTrashBoundary(
+            onShare, home: home.path, lister: Fixture.noOpenFiles, nonLocalMounts: [share]
+        ))
+    }
+
+    @Test("a LaunchAgent whose program is a link into the folder, or spelled in another case, holds it")
+    func launchAgentLinksAndCaseCount() throws {
+        let home = try Fixture.makeHome()
+        let folder = try Fixture.buildFolder(home, "Developer/bench")
+        let agents = home.appendingPathComponent("Library/LaunchAgents")
+        let bin = home.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: bin.appendingPathComponent("agent"),
+            withDestinationURL: folder.appendingPathComponent("Build/Products/Debug/App")
+        )
+        let job: [String: Any] = ["Label": "linked", "Program": bin.appendingPathComponent("agent").path]
+        try PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0)
+            .write(to: agents.appendingPathComponent("linked.plist"))
+        #expect(Policy.launchAgentStartsProgram(from: folder, home: home))
+        #expect(!Policy.passesImmediateTrashBoundary(folder, home: home.path, lister: Fixture.noOpenFiles))
+        #expect(Policy.buildFolders(
+            in: [home.appendingPathComponent("Developer")], home: home, access: .full, lister: Fixture.noOpenFiles
+        ).isEmpty)
+
+        // The same folder named in upper case, where the volume ignores case.
+        try FileManager.default.removeItem(at: agents.appendingPathComponent("linked.plist"))
+        let upper = folder.path.replacingOccurrences(of: "/Developer/bench", with: "/DEVELOPER/BENCH")
+        guard FileManager.default.fileExists(atPath: upper) else { return }
+        let cased: [String: Any] = ["Label": "cased", "Program": upper + "/Build/Products/Debug/App"]
+        try PropertyListSerialization.data(fromPropertyList: cased, format: .xml, options: 0)
+            .write(to: agents.appendingPathComponent("cased.plist"))
+        #expect(Policy.launchAgentStartsProgram(from: folder, home: home))
+    }
+
+    @Test("a folder spelled in another case is checked against the never-delete lists by its path on disk")
+    func neverDeleteMatchesCaseOnDisk() throws {
+        let home = try Fixture.makeHome()
+        let folder = try Fixture.buildFolder(home, "Pictures/X/dd")
+        let lower = home.appendingPathComponent("pictures/X/dd").path
+        guard FileManager.default.fileExists(atPath: lower) else { return }
+        #expect(!Policy.isWhitelistedPath(lower, home: home.path))
+        #expect(!Policy.isWhitelistedPath(folder.path, home: home.path))
+    }
+
     // MARK: Rows
 
     @Test("rows are Check First, one per folder, labelled with the folder's path")

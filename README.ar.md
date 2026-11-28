@@ -80,6 +80,7 @@
 خمس مجموعات في عرض واحد:
 
 - **ذاكرة التخزين المؤقت العامة لأدوات المطوّرين**: Xcode (Derived Data وArchives وDeviceSupport)، وHomebrew، وnpm، وpnpm، وYarn، وCocoaPods، وGradle، وذاكرة pub المؤقتة لـ Dart وFlutter، وDocker Desktop، وVS Code، وCursor، وJetBrains، وCargo، وTerraform، وغيرها
+- **مجلدات بناء Xcode في أماكن أخرى**: ملفات البناء التي وضعها `xcodebuild -derivedDataPath` خارج مجلد Xcode نفسه. يتعرّف عليها Purge من ملف `info.plist` الخاص بـ Xcode داخلها، لا من اسمها أبدًا. لكل مجلد صف خاص به بعلامة «افحص أولًا» يذكر المشروع الذي بُني منه. لا يلمس Purge مجلدًا فيه شيء لا يصنعه Xcode، أو يفتحه برنامج قيد التشغيل، أو يشغّل منه LaunchAgent برنامجًا
 - **أجهزة محاكاة iOS**: كل جهاز محاكاة متوقف عن العمل، بصف لكل منها. يُدرج جهاز المحاكاة قيد التشغيل كي تُحسب مساحته، لكن لا يمكن تحديده
 - **بيئات تشغيل المحاكاة**: صف لكل بيئة تشغيل يعدّها `simctl` قابلة للحذف
 - **مكوّنات Xcode**: Metal Toolchain الاختياري في Xcode (نحو 900 MB)، ويُزال بالأمر `xcodebuild -deleteComponent` عندما يذكر Xcode كامل أنه مثبّت

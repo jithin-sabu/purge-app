@@ -517,6 +517,9 @@ enum DeletionSafetyPolicy {
         // The Go module cache is moved whole only while it still holds nothing
         // but modules. Same split as Playwright: a move reads the folder again.
         if GoModuleCacheScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // An Xcode build folder a scan offered must still have Xcode's mark
+        // (#480): a file saved at its top since then keeps it. Same split.
+        if XcodeBuildFolderScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         // An allowlisted folder, or a folder above the row, can become a link after
         // the scan (#420, #422). Same split as Playwright: the on-screen filter may
         // reuse a read from the last few seconds, and a move reads the disk again.

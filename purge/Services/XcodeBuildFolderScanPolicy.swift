@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 
 /// Xcode build folders outside `~/Library/Developer/Xcode/DerivedData` (#480).
 ///
@@ -103,11 +104,16 @@ nonisolated enum XcodeBuildFolderScanPolicy {
     ///
     /// The folder must be below home, outside `~/Library`, where Xcode's own
     /// DerivedData and the caches have rules of their own, and stay there with
-    /// every link resolved.
+    /// every link resolved. The never-delete lists are asked again with that
+    /// path: they compare text with case, and `realpath` gives the case on
+    /// disk, so `~/pictures/…` can't pass for a folder outside `~/Pictures`.
     static func isWhitelistedPath(_ path: String, home: String) -> Bool {
         guard isAllowedLocation(path, home: home), mark(at: path) != nil else { return false }
-        guard let realHome = realPath(home), let real = realPath(path) else { return false }
-        return isAllowedLocation(real, home: realHome)
+        guard let realHome = realPath(home), let real = realPath(path),
+              isAllowedLocation(real, home: realHome) else { return false }
+        return !DeletionSafetyPolicy.neverDeletePrefixes(home: realHome).contains {
+            PathContainment.isSameOrInside(real, $0)
+        } && !DeletionSafetyPolicy.neverDeleteExactPaths(home: realHome).contains(real)
     }
 
     static func isAllowedLocation(_ path: String, home: String) -> Bool {
@@ -127,10 +133,49 @@ nonisolated enum XcodeBuildFolderScanPolicy {
         return DevScanner.projectSearchRoots(home: home) + added
     }
 
-    /// One row per build folder found.
+    /// One row per build folder found. Each is remembered as offered, so the
+    /// move is refused if it loses Xcode's mark later.
     static func definitions(home: URL, access: ScanAccess) -> [(label: String, paths: [URL])] {
-        buildFolders(in: searchRoots(home: home), home: home, access: access)
-            .map { (labelPrefix + $0.path, [$0]) }
+        let folders = buildFolders(in: searchRoots(home: home), home: home, access: access)
+        recordOffered(folders)
+        return folders.map { (labelPrefix + $0.path, [$0]) }
+    }
+
+    // MARK: - Folders offered
+
+    /// Every build folder a scan offered since launch. Only grows: a folder
+    /// offered once must keep its mark to move, even after a later scan.
+    private static let offered = OSAllocatedUnfairLock<Set<String>>(initialState: [])
+
+    static func recordOffered(_ folders: [URL]) {
+        let paths = folders.map { $0.standardizedFileURL.path }
+        offered.withLock { $0.formUnion(paths) }
+    }
+
+    static func wasOffered(_ path: String) -> Bool {
+        offered.withLock { $0.contains(path) }
+    }
+
+    /// Recent answers for the on-screen list, which asks on the main thread
+    /// for every row on every scan flush.
+    private static let recentReads = OSAllocatedUnfairLock<[String: (Date, Bool)]>(initialState: [:])
+    static let recentReadLifetime: TimeInterval = 2
+
+    /// `isOfferedForCleanup`'s uncached refusal: a folder offered as a build
+    /// folder that no longer has Xcode's mark, because someone saved a file
+    /// at its top or removed `info.plist`. The list may reuse a read from the
+    /// last two seconds; a move always reads the folder again.
+    static func refusesDeletion(_ url: URL, reuseRecentRead: Bool = false, now: Date = Date()) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard wasOffered(path) else { return false }
+        if reuseRecentRead,
+           let (time, refused) = recentReads.withLock({ $0[path] }),
+           now.timeIntervalSince(time) < recentReadLifetime {
+            return refused
+        }
+        let refused = mark(at: path) == nil
+        recentReads.withLock { $0[path] = (now, refused) }
+        return refused
     }
 
     /// Build folders in `roots`, each once, leaving out any that a process has
@@ -182,18 +227,31 @@ nonisolated enum XcodeBuildFolderScanPolicy {
     }
 
     /// The programs the user's LaunchAgents start, as
-    /// `CommandLineToolScanPolicy.launchAgents` reads each job.
+    /// `CommandLineToolScanPolicy.launchAgents` reads each job: each as the
+    /// job names it and with every link resolved, so a program reached
+    /// through a link, or spelled in another case, still counts.
     static func launchAgentPrograms(home: URL) -> [String] {
         let root = home.appendingPathComponent("Library/LaunchAgents", isDirectory: true).path
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []
-        return names.filter { !$0.hasPrefix(".") && $0.hasSuffix(".plist") }.compactMap { name in
+        return names.filter { !$0.hasPrefix(".") && $0.hasSuffix(".plist") }.flatMap { name -> [String] in
             let plist = "\(root)/\(name)"
             guard isRegularFile(plist),
                   let contents = NSDictionary(contentsOfFile: plist) as? [String: Any],
                   let label = contents["Label"] as? String, !label.isEmpty,
                   let program = CommandLineToolScanPolicy.startedProgram(contents),
-                  program.hasPrefix("/") else { return nil }
-            return URL(fileURLWithPath: program).standardizedFileURL.path
+                  program.hasPrefix("/") else { return [] }
+            let named = URL(fileURLWithPath: program).standardizedFileURL.path
+            return [named] + (realPath(program).map { [$0] } ?? [])
+        }
+    }
+
+    /// Whether any LaunchAgent starts a program from `folder`, matched
+    /// against every spelling of the folder.
+    static func launchAgentStartsProgram(from folder: URL, home: URL) -> Bool {
+        var folderBySpelling: [String: String] = [:]
+        for spelling in OpenFileCheck.spellings(of: folder) { folderBySpelling[spelling] = folder.path }
+        return launchAgentPrograms(home: home).contains {
+            !foldersHolding($0, folderBySpelling: folderBySpelling).isEmpty
         }
     }
 
@@ -202,19 +260,37 @@ nonisolated enum XcodeBuildFolderScanPolicy {
     /// offers that), or a folder it found, so a build folder is never inside
     /// another one on the list. Without Full Disk Access it skips the
     /// protected folders, such as Documents, before reading them.
-    static func walk(_ roots: [URL], home: URL, access: ScanAccess, depth: Int = walkDepth) -> [URL] {
+    ///
+    /// Like the project walk, it never enters a network share or other
+    /// mount that is not a local disk, or a folder excluded from scans, and
+    /// below a folder added in Settings it skips a copy of a Mac or a home
+    /// folder, a backup, and a folder another sync service keeps
+    /// (`ScanFolders.isOffLimits`).
+    static func walk(
+        _ roots: [URL],
+        home: URL,
+        access: ScanAccess,
+        depth: Int = walkDepth,
+        addedRoots: [String]? = nil,
+        nonLocalMounts: Set<String>? = nil
+    ) -> [URL] {
         let fm = FileManager.default
         let homePath = home.standardizedFileURL.path
         let libraryPath = "\(homePath)/Library"
         let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
+        let added = addedRoots ?? ScanFolders.snapshot
+        // Both spellings, since a listing may spell `/var/…` as `/private/var/…`.
+        let foreignMounts = Set((nonLocalMounts ?? AppFolders.nonLocalMountPaths()).flatMap { [$0, "/private" + $0] })
         // The listing hands back each entry's type, so a file costs no `lstat`.
         let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
         let keySet = Set(keys)
 
         func mayEnter(_ path: String) -> Bool {
             guard PathContainment.isInside(path, homePath),
-                  !PathContainment.isSameOrInside(path, libraryPath) else { return false }
-            return access == .full || !ProtectedLocations.isPath(path, inAnyOf: protectedRoots)
+                  !PathContainment.isSameOrInside(path, libraryPath),
+                  !foreignMounts.contains(path) else { return false }
+            guard access == .full || !ProtectedLocations.isPath(path, inAnyOf: protectedRoots) else { return false }
+            return !ExcludedPathsStore.isExcluded(URL(fileURLWithPath: path, isDirectory: true))
         }
 
         // (folder, how many more levels below it may be looked at). Roots are
@@ -241,6 +317,14 @@ nonisolated enum XcodeBuildFolderScanPolicy {
                         includingPropertiesForKeys: keys
                       ),
                       entries.count <= maxEntriesPerFolder else { return ([], []) }
+                // Judged from the listing just read, as the project walk does.
+                if added.contains(where: { PathContainment.isInside(folder, $0) }),
+                   ScanFolders.isOffLimits(
+                    name: URL(fileURLWithPath: folder).lastPathComponent,
+                    childNames: Set(entries.map(\.lastPathComponent))
+                   ) {
+                    return ([], [])
+                }
                 var hits: [String] = []
                 var next: [(String, Int)] = []
                 for entry in entries {
@@ -368,23 +452,34 @@ nonisolated enum XcodeBuildFolderScanPolicy {
 
     // MARK: - Right before the move
 
-    /// `FileDeleter`'s last check. Any path that is not an Xcode build folder
-    /// outside `~/Library` passes untouched. A build folder passes only while
-    /// no process has a file open in it, works in it or runs from it, and no
-    /// LaunchAgent starts a program from it. When the open files can't be
-    /// listed it stays.
+    /// `FileDeleter`'s last check, run again right before the move. A folder
+    /// a scan offered must still have Xcode's mark: a file saved at its top
+    /// after the scan, or `info.plist` removed, keeps it where it is. Any
+    /// other path without the mark passes untouched. A build folder passes
+    /// only while it is on a local disk, not below an off-limits folder in a
+    /// folder added in Settings, no process has a file open in it, works in
+    /// it or runs from it, and no LaunchAgent starts a program from it. When
+    /// the open files can't be listed it stays.
     static func passesImmediateTrashBoundary(
         _ url: URL,
         home: String,
-        lister: OpenFileCheck.Lister = OpenFileCheck.liveListing
+        lister: OpenFileCheck.Lister = OpenFileCheck.liveListing,
+        nonLocalMounts: Set<String>? = nil
     ) -> Bool {
         let path = url.standardizedFileURL.path
-        guard isAllowedLocation(path, home: home), mark(at: path) != nil else { return true }
+        guard mark(at: path) != nil else { return !wasOffered(path) }
+        guard isAllowedLocation(path, home: home) else { return !wasOffered(path) }
+        let mounts = nonLocalMounts ?? AppFolders.nonLocalMountPaths()
+        let spellings = OpenFileCheck.spellings(of: url)
+        guard !spellings.contains(where: { spelling in
+            mounts.contains { PathContainment.isSameOrInside(spelling, $0) || PathContainment.isSameOrInside(spelling, "/private" + $0) }
+        }) else { return false }
+        if let root = ScanFolders.snapshot.first(where: { PathContainment.isInside(path, $0) }),
+           ScanFolders.crossesOffLimits(from: root, to: url) {
+            return false
+        }
         guard OpenFileCheck.check(folders: [url], lister: lister) == .free else { return false }
-        return CommandLineToolScanPolicy.launchAgents(
-            startingFrom: url,
-            home: URL(fileURLWithPath: home, isDirectory: true)
-        ).isEmpty
+        return !launchAgentStartsProgram(from: url, home: URL(fileURLWithPath: home, isDirectory: true))
     }
 
     // MARK: - Disk helpers
