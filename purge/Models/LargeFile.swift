@@ -64,12 +64,17 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
     }
 }
 
-/// The app that owns a virtual machine bundle. The app keeps its own list of
-/// VMs, so a VM trashed behind its back stays listed there as missing.
+/// The app that owns a virtual machine. Parallels, UTM and VMware Fusion keep
+/// each VM in a bundle and their own list of VMs, so a VM trashed behind their
+/// back stays listed there as missing. VirtualBox and Tart keep each VM in a
+/// plain folder, which `LargeFileScanPolicy.folderVirtualMachine` recognises
+/// by where it is and what it holds (#475).
 nonisolated enum VirtualMachineApp: String, CaseIterable, Hashable, Sendable {
     case parallels
     case utm
     case vmwareFusion
+    case virtualBox
+    case tart
 
     init?(bundleExtension ext: String) {
         let ext = ext.lowercased()
@@ -77,11 +82,14 @@ nonisolated enum VirtualMachineApp: String, CaseIterable, Hashable, Sendable {
         self = app
     }
 
-    var bundleExtension: String {
+    /// Nil for an app whose VMs are plain folders. Such a folder is never a
+    /// VM by its name alone.
+    var bundleExtension: String? {
         switch self {
         case .parallels: return "pvm"
         case .utm: return "utm"
         case .vmwareFusion: return "vmwarevm"
+        case .virtualBox, .tart: return nil
         }
     }
 
@@ -91,14 +99,20 @@ nonisolated enum VirtualMachineApp: String, CaseIterable, Hashable, Sendable {
         case .parallels: return "Parallels Desktop"
         case .utm: return "UTM"
         case .vmwareFusion: return "VMware Fusion"
+        case .virtualBox: return "VirtualBox"
+        case .tart: return "Tart"
         }
     }
 
-    var bundleID: String {
+    /// The app that, while open, may be running any of its VMs. Nil for Tart,
+    /// a command-line tool: a Tart VM in use is found by its open files.
+    var bundleID: String? {
         switch self {
         case .parallels: return "com.parallels.desktop.console"
         case .utm: return "com.utmapp.UTM"
         case .vmwareFusion: return "com.vmware.fusion"
+        case .virtualBox: return "org.virtualbox.app.VirtualBox"
+        case .tart: return nil
         }
     }
 }
@@ -119,7 +133,7 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
     /// Safari's `.download` bundle is one item too, but only where Safari puts
     /// it, so `LargeFileScanPolicy.isSafariDownloadBundle` decides that by
     /// location, not by extension.
-    static let virtualMachineExtensions: Set<String> = Set(VirtualMachineApp.allCases.map(\.bundleExtension))
+    static let virtualMachineExtensions: Set<String> = Set(VirtualMachineApp.allCases.compactMap(\.bundleExtension))
 
     /// VM kinds come back with `appInstalled: false`. The scanner fills it in.
     static func kind(forExtension ext: String) -> LargeFileKind? {
@@ -150,6 +164,12 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
         case .restoreImage:
             return String(localized: "macOS restore image. Only needed to set up a Mac, device or virtual machine. Safe to remove once setup is done.")
         case .virtualMachine(let app, let appInstalled):
+            // Tart's list is the folders in `~/.tart/vms`, and `tart delete`
+            // only removes the folder, so the Trash keeps its list right
+            // whether or not Tart is installed (probe for #475).
+            if app == .tart {
+                return String(localized: "Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right.")
+            }
             guard appInstalled else {
                 return String(localized: "Virtual machine. Everything inside it goes with it.")
             }
@@ -161,6 +181,10 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
                 return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right.")
             case .vmwareFusion:
                 return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right.")
+            case .virtualBox:
+                return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right.")
+            case .tart:
+                return String(localized: "Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right.")
             }
         case .unfinishedDownload:
             return String(localized: "Unfinished download. It can't be opened as it is. Remove it unless the download is still running.")

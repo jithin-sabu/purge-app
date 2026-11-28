@@ -16,7 +16,9 @@ nonisolated final class LargeFileScanner {
     /// `virtualMachineRoots` are walked for VM bundles only. They default to the
     /// policy's VM folders, but only when `roots` is also left to default: a
     /// caller that names its own roots never walks the real `~/Parallels` by
-    /// accident. `installedApps` defaults to a LaunchServices lookup, and
+    /// accident. `folderVirtualMachineRoots` are VirtualBox's and Tart's, whose
+    /// VMs are folders, with the same default (#475). `openFiles` lists open
+    /// files for their in-use check and defaults to `lsof`. `installedApps` defaults to a LaunchServices lookup, and
     /// `isAppRunning` to the running-apps list. `home` decides where a Safari
     /// download bundle may sit; tests pass a temporary one.
     ///
@@ -34,19 +36,22 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
+        folderVirtualMachineRoots: [LargeFileScanPolicy.FolderVirtualMachineRoot]? = nil,
         iCloudDriveRoots: [URL]? = nil,
         addedFolders: [ScanFolders.Entry]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
+        openFiles: OpenFileCheck.Lister? = nil,
         home: URL? = nil,
         exclusions: ScanExclusions? = nil,
         isExcluded: (@Sendable (URL) -> Bool)? = nil
     ) -> AsyncStream<LargeFile> {
         let events = scanEvents(
             minBytes: minBytes, staleDays: staleDays, roots: roots,
-            virtualMachineRoots: virtualMachineRoots, iCloudDriveRoots: iCloudDriveRoots,
-            addedFolders: addedFolders, installedApps: installedApps,
-            isAppRunning: isAppRunning, home: home, exclusions: exclusions, isExcluded: isExcluded
+            virtualMachineRoots: virtualMachineRoots, folderVirtualMachineRoots: folderVirtualMachineRoots,
+            iCloudDriveRoots: iCloudDriveRoots, addedFolders: addedFolders, installedApps: installedApps,
+            isAppRunning: isAppRunning, openFiles: openFiles, home: home, exclusions: exclusions,
+            isExcluded: isExcluded
         )
         return AsyncStream { continuation in
             let task = Task {
@@ -71,10 +76,12 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
+        folderVirtualMachineRoots: [LargeFileScanPolicy.FolderVirtualMachineRoot]? = nil,
         iCloudDriveRoots: [URL]? = nil,
         addedFolders: [ScanFolders.Entry]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
+        openFiles: OpenFileCheck.Lister? = nil,
         home: URL? = nil,
         exclusions: ScanExclusions? = nil,
         isExcluded: (@Sendable (URL) -> Bool)? = nil,
@@ -95,6 +102,11 @@ nonisolated final class LargeFileScanner {
                 let vmRoots = virtualMachineRoots
                     ?? (roots == nil ? LargeFileScanPolicy.virtualMachineRoots(home: home) : [])
                 walks += vmRoots.map { Walk(root: $0, bundlesOnly: true, downloadOnly: false) }
+                let folderVMRoots = folderVirtualMachineRoots
+                    ?? (roots == nil ? LargeFileScanPolicy.folderVirtualMachineRoots(home: home) : [])
+                walks += folderVMRoots.map {
+                    Walk(root: $0.url, bundlesOnly: true, downloadOnly: false, folderVirtualMachineApp: $0.app)
+                }
                 await Self.run(
                     minBytes: minBytes,
                     staleDays: staleDays,
@@ -103,6 +115,7 @@ nonisolated final class LargeFileScanner {
                     unwalkedAddedFolders: added.filter { !$0.isAvailable },
                     installedApps: installedApps ?? Self.installedVirtualMachineApps(),
                     isAppRunning: isAppRunning ?? { DeletionSafetyPolicy.isAppRunning(bundleID: $0) },
+                    openFiles: openFiles ?? OpenFileCheck.liveListing,
                     home: home,
                     exclusions: exclusions,
                     isExcluded: isExcluded ?? { ExcludedPathsStore.isExcluded($0) },
@@ -117,8 +130,8 @@ nonisolated final class LargeFileScanner {
     /// Asked once per scan, here off the main thread, so drawing a row never
     /// makes a LaunchServices call to decide what its explanation says.
     private static func installedVirtualMachineApps() -> Set<VirtualMachineApp> {
-        Set(VirtualMachineApp.allCases.filter {
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleID) != nil
+        Set(VirtualMachineApp.allCases.filter { app in
+            app.bundleID.map { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil } ?? false
         })
     }
 
@@ -133,6 +146,10 @@ nonisolated final class LargeFileScanner {
         /// of a backup below it, and folders another sync service keeps, are
         /// never entered (`ScanFolders.isOffLimits`).
         var skipsOffLimits = false
+        /// A VirtualBox or Tart root (#475): its VMs are folders, each listed
+        /// whole. A VirtualBox walk goes into group folders to find them; a
+        /// Tart walk reads only the root's own entries.
+        var folderVirtualMachineApp: VirtualMachineApp?
     }
 
     private static func run(
@@ -143,6 +160,7 @@ nonisolated final class LargeFileScanner {
         unwalkedAddedFolders: [ScanFolders.Entry],
         installedApps: Set<VirtualMachineApp>,
         isAppRunning: @Sendable (String) -> Bool,
+        openFiles: OpenFileCheck.Lister,
         home: URL,
         exclusions: ScanExclusions?,
         isExcluded: @Sendable (URL) -> Bool,
@@ -188,8 +206,13 @@ nonisolated final class LargeFileScanner {
         // link leads (#273). Nil for a missing root, and for a link Large Files
         // doesn't follow.
         let exists = walks.map { fm.fileExists(atPath: $0.root.path) }
-        let folders = walks.indices.map { index in
-            exists[index] ? LargeFileScanPolicy.walkedFolder(for: walks[index].root, home: home) : nil
+        let folders = walks.indices.map { index -> URL? in
+            guard exists[index] else { return nil }
+            // A VirtualBox or Tart root is not walked through a link above it.
+            if walks[index].folderVirtualMachineApp != nil {
+                return LargeFileScanPolicy.folderVirtualMachineWalkedFolder(for: walks[index].root, home: home)
+            }
+            return LargeFileScanPolicy.walkedFolder(for: walks[index].root, home: home)
         }
         // Two roots can lead to one folder, or one into the other's
         // (`~/Desktop -> ~/Documents/Desktop`). That folder is walked once, by
@@ -341,6 +364,40 @@ nonisolated final class LargeFileScanner {
                     if walk.skipsOffLimits,
                        fileURL.lastPathComponent.caseInsensitiveCompare("Library") == .orderedSame {
                         return ([], false)
+                    }
+                    // In a VirtualBox or Tart root, a VM is a folder, listed
+                    // whole by the rule the delete check uses, and never walked
+                    // into. Nothing else there is a row.
+                    if let app = walk.folderVirtualMachineApp {
+                        if isUserExcluded(fileURL) { return ([], false) }
+                        if LargeFileScanPolicy.hasVirtualMachineShape(fileURL, app: app) {
+                            guard LargeFileScanPolicy.folderVirtualMachine(
+                                at: fileURL, home: home,
+                                roots: [.init(url: root, app: app)]
+                            ) == app else { return ([], false) }
+                            if AIModelScanPolicy.isOllamaStore(fileURL) { return ([], false) }
+                            // A VM that may be running, or whose disk a linked
+                            // clone uses, is left off the list; the delete check
+                            // asks both again.
+                            if LargeFileScanPolicy.folderVirtualMachineIsInUse(
+                                fileURL, app: app, isAppRunning: isAppRunning, openFiles: openFiles
+                            ) {
+                                return ([], false)
+                            }
+                            if app == .virtualBox,
+                               LargeFileScanPolicy.virtualBoxDiskIsShared(fileURL, root: folder, home: home) {
+                                return ([], false)
+                            }
+                            let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false, staysOnVolume: false, isCancelled: isCancelled)
+                            guard let file = listed(
+                                fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
+                                minBytes: minBytes, staleDays: staleDays, now: now,
+                                installedApps: installedApps, isExcluded: isExcluded,
+                                home: home, downloadOnly: false, virtualMachineApp: app
+                            ) else { return ([], false) }
+                            return ([.file(file)], false)
+                        }
+                        return ([], app == .virtualBox && LargeFileScanPolicy.isVirtualBoxGroupFolder(fileURL))
                     }
                     // A VM or a Safari download bundle is one item. Never walk
                     // into it, whether or not macOS calls it a package: without
@@ -497,6 +554,12 @@ nonisolated final class LargeFileScanner {
                     ) {
                         return []
                     }
+                    // Nor is a folder shaped like a VirtualBox or Tart VM ever
+                    // walked for loose files, wherever it is: a disk trashed
+                    // alone breaks the VM. Only the VM walk lists it (#475).
+                    if LargeFileScanPolicy.hasVirtualMachineShape(folderName: folderURL.lastPathComponent, entries: children) {
+                        return []
+                    }
                     var steps: [TreeStep<[Finding], WalkFolder>] = []
                     for child in children where !child.isHidden {
                         // A file under the size floor that is not a cloud
@@ -647,7 +710,8 @@ nonisolated final class LargeFileScanner {
         installedApps: Set<VirtualMachineApp>,
         isExcluded: (URL) -> Bool,
         home: URL,
-        downloadOnly: Bool
+        downloadOnly: Bool,
+        virtualMachineApp: VirtualMachineApp? = nil
     ) -> LargeFile? {
         guard size >= minBytes else { return nil }
         guard passesStaleFilter(lastUsed: lastUsed, staleDays: staleDays, now: now) else { return nil }
@@ -683,7 +747,10 @@ nonisolated final class LargeFileScanner {
             && ICloudDownloadPolicy.evaluate(fileURL, home: home, now: now).decision == .removable
         if downloadOnly, !canRemoveDownload { return nil }
 
-        var kind = LargeFileKind.kind(forExtension: fileURL.pathExtension)
+        // A VirtualBox or Tart VM is a folder with no extension of its own,
+        // so the walk says whose it is.
+        var kind = virtualMachineApp.map { LargeFileKind.virtualMachine($0, appInstalled: false) }
+            ?? LargeFileKind.kind(forExtension: fileURL.pathExtension)
         if case .virtualMachine(let app, _) = kind {
             kind = .virtualMachine(app, appInstalled: installedApps.contains(app))
         }
@@ -692,7 +759,9 @@ nonisolated final class LargeFileScanner {
             path: fileURL.standardizedFileURL,
             sizeBytes: rowBytes ?? size,
             lastUsed: lastUsed,
-            category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
+            category: virtualMachineApp == nil
+                ? LargeFileCategory.category(forExtension: fileURL.pathExtension)
+                : .virtualMachine,
             syncsWithICloud: syncsWithICloud,
             canMoveToTrash: !downloadOnly,
             canRemoveDownload: canRemoveDownload,

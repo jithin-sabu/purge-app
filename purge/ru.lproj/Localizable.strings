@@ -1304,6 +1304,8 @@
 "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "Виртуальная машина. Всё внутри удаляется вместе с ней. Удалите её в Parallels Desktop, чтобы список виртуальных машин в приложении оставался верным.";
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "Виртуальная машина. Всё содержимое уйдёт вместе с ней. Удалите её в UTM, чтобы список виртуальных машин в приложении остался верным.";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "Виртуальная машина. Всё внутри удалится вместе с ней. Удалите её в VMware Fusion, чтобы список виртуальных машин в приложении оставался верным.";
+"Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "Виртуальная машина. Всё внутри удалится вместе с ней. Удалите её в VirtualBox, чтобы список виртуальных машин в приложении оставался верным.";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right." = "Виртуальная машина. Всё внутри удалится вместе с ней. Tart показывает только виртуальные машины из своей папки, поэтому его список останется верным.";
 "Visual Intelligence, Photos Clean Up and Spatial Photos" = "Visual Intelligence, «Очистка» в «Фото» и пространственные фото";
 "Vite cache" = "Кэш Vite";
 "Waiting for %@" = "Ожидание «%@»";

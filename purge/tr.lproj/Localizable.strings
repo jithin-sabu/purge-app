@@ -718,6 +718,8 @@
 "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için Parallels Desktop'ta kaldırın.";
 "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için UTM'de kaldırın.";
 "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için VMware Fusion'da kaldırın.";
+"Virtual machine. Everything inside it goes with it. Remove it in VirtualBox so the app's list of virtual machines stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Uygulamanın sanal makine listesinin doğru kalması için VirtualBox'ta kaldırın.";
+"Virtual machine. Everything inside it goes with it. Tart lists only the virtual machines in its folder, so its list stays right." = "Sanal makine. İçindeki her şey onunla birlikte gider. Tart yalnızca kendi klasöründeki sanal makineleri listeler, bu yüzden listesi doğru kalır.";
 "Virtual Machines" = "Sanal Makineler";
 "Vite cache" = "Vite önbelleği";
 "Waiting for App Caches and Dev Tools to finish scanning" = "Uygulama Önbellekleri ve Geliştirici Araçları'nın taramayı bitirmesi bekleniyor";
